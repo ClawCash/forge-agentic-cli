@@ -100,3 +100,16 @@ This file records that, phase by phase.
   unverified-account, replayed and mismatched paths, plus the real token checks against a local key set.
 - Claude drafted the integration debrief ([world-debrief.md](world-debrief.md)) for the team to complete after the
   live approval.
+- The first live approvals stalled inside World's sign-in (the browser never returned from World App, then World asked
+  to create a World IdP account). Claude traced this through Railway's request logs (the page and sign-in start were
+  reached, the callback never was), checked that World accepts the request, stopped the waiting CLI before it could
+  store the review as unverified, and added `reviews submit --approval <id>` so a review can resume an approval
+  requested earlier. The third attempt succeeded with the team's Orb-verified World ID.
+
+## Landing page
+
+- The team supplied the design and copy reference (screenshots of the Agent Reviews page). Claude rebuilt it in `app/`
+  on Forge's frontend stack, adjusted the copy to what was built (Hedera x402, ERC-8004, World ID per-review
+  approval), replaced the illustrative review card with the live World-approved review, and added a section linking
+  each step of the live run on HashScan. Claude checked the page at desktop and phone widths and ran a production
+  build.

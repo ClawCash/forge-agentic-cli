@@ -65,6 +65,7 @@ line items.
 | Agent B pays API B | 0.01 USDC; API B returns all 4 line items | [`0.0.9185802@1793999316.414749407`](https://hashscan.io/testnet/transaction/0.0.9185802@1793999316.414749407) |
 | Agent B reviews API B | success, 100/100, agent 170, feedback #1 | [`0xf009a2cf…8150`](https://hashscan.io/testnet/transaction/0xf009a2cff33c6853b64e5c3e8a6cb6bb406a2ba93e163ba5493e289916678150) |
 | Agent B checks again | A: avoid; B: recommended (100/100) | — |
+| Agent A pays API A again, then reviews it with a person's World ID approval (Orb) | failure, human-approved, agent 169, feedback #2 | [`0x20cf5f25…35bd`](https://hashscan.io/testnet/transaction/0x20cf5f25508148b65c67df4e2f44b439adb1b9f0b5be6412f85f4f3579a235bd) |
 
 Each review document ([A's](https://forge-agentic-cli-production.up.railway.app/reviews/rev_434281ae-e236-4b43-bedf-1b8efa8add81.json),
 [B's](https://forge-agentic-cli-production.up.railway.app/reviews/rev_0873f19a-b7e7-4978-a864-8826cc5fa73c.json))
@@ -198,6 +199,18 @@ Each wallet becomes a Hedera account when testnet HBAR is sent to its EVM addres
 ([Hedera faucet](https://portal.hedera.com/faucet)). Then get testnet USDC at https://faucet.circle.com (Hedera
 Testnet). `npm run hedera:status` shows each wallet's account, HBAR and USDC; add `-- --associate` to associate USDC
 where it is missing. Never send real funds to these wallets.
+
+## Landing page
+
+`app/` is the Agent Reviews landing page (Next 16, React 19, Tailwind 4, the same stack as Forge's frontend). It is
+fully static and links to the live run's records on HashScan and the reviews server.
+
+```bash
+npm run dev:app     # http://localhost:3000
+npm run build:app
+```
+
+Deploy on Vercel with the project's Root Directory set to `app` (framework: Next.js, no environment variables).
 
 ## Deployment
 
