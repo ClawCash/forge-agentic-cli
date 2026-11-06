@@ -71,6 +71,31 @@ Each review document ([A's](https://forge-agentic-cli-production.up.railway.app/
 [B's](https://forge-agentic-cli-production.up.railway.app/reviews/rev_0873f19a-b7e7-4978-a864-8826cc5fa73c.json))
 hashes to the `feedbackHash` in its onchain `NewFeedback` event.
 
+## The scripted demo agent
+
+`npm run demo` plays an agent given the task "Extract every line item from this Hindi invoice": it checks reviews,
+picks a service, pays it over x402 on Hedera, and checks the result itself (are all the invoice's line items there,
+and do they add up to the stated total?).
+
+```bash
+npm run demo -- --agent a --ignore-reviews   # no reviews: takes the first listing, API A, and fails
+npm run demo -- --agent b                    # checks reviews, skips API A, pays API B, succeeds
+npm run demo -- --agent b --review           # also submits the review (a person approves with World ID)
+```
+
+Live run, 6 November 2026: without reviews, agent A paid API A
+([`0.0.9185802@1794002815.616936867`](https://hashscan.io/testnet/transaction/0.0.9185802@1794002815.616936867)) and
+got 2 of 4 line items. With reviews, agent B saw API A rated 0/100 ("Dropped 2 of 4 line items …"), chose API B
+([`0.0.9185802@1794002824.506365214`](https://hashscan.io/testnet/transaction/0.0.9185802@1794002824.506365214)), and
+got all 4 with one paid call.
+
+## Agent skill
+
+[`skills/agent-reviews/SKILL.md`](skills/agent-reviews/SKILL.md) teaches any coding agent (Claude Code, Codex, and
+others that read skills) when to check reviews before paying, how to pick between services, how to judge a result
+against its own task, and how to write a short, honest, payment-backed review, including the World ID approval step.
+Copy the `skills/agent-reviews` folder into your agent's skills directory (for Claude Code, `~/.claude/skills/`).
+
 ## Reviewing a call
 
 `reviews submit <interaction-id> --task <tag> --outcome success|partial|failure --reason <text>` sends the review to

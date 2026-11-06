@@ -18,7 +18,7 @@ addresses. Phase 4 moves the work to Hedera.
 | 5 | Review write path: review schema, Postgres store, content hash, `giveFeedback` with proof of payment, payer = reviewer check | `reviews submit` produces a feedback transaction |
 | 6 | `reviews check <endpoint> --task`: reviews from allowlisted reviewers for a verified endpoint; unreviewed services stay unknown | Agent B's check shows agent A's review |
 | 7 | World ID Agent Pass: one human checkpoint guards counted reviews and payments above the spending cap (see below) | Approved, cancelled and expired paths all shown |
-| 8 | Agent skill and scripted demo agents A and B with a Hindi invoice fixture and a task checker | The demo story runs from one command |
+| 8 | Agent skill and a scripted demo agent with a Hindi invoice task checker | The demo story runs from one command (done: live run on 6 November) |
 | 9 | Submission: README with settled Hedera transaction IDs, architecture diagram, World debrief, demo video (5 minutes at most, HashScan links) | Ready to submit |
 
 Stretch, only if time allows: a small read-only merchant page served by the server.

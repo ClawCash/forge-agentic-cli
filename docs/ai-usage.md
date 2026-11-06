@@ -113,3 +113,12 @@ This file records that, phase by phase.
   approval), replaced the illustrative review card with the live World-approved review, and added a section linking
   each step of the live run on HashScan. Claude checked the page at desktop and phone widths and ran a production
   build.
+
+## Phase 8: agent skill and scripted demo
+
+- The team decided not to publish the CLI to npm before the submission (it needs bundling and a version cannot be
+  reused once published).
+- Claude wrote the invoice task checker (expected line items from the source, missing items, totals), the scripted
+  demo agent (`npm run demo`, with and without reviews, optionally submitting a World-approved review), the agent skill
+  (`skills/agent-reviews/SKILL.md`), and an in-process test of the whole story. Claude then ran both sides live on
+  Hedera testnet.
