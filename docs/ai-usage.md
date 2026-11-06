@@ -26,3 +26,16 @@ This file records that, phase by phase.
   test) and these docs, following the team's existing stack.
 - At the team's request, Claude added `npm start` for Railway and `scripts/new-wallet.ts`, a throwaway testnet wallet
   generator that can write the key straight into `.env`.
+- Claude dropped the separate merchant reply wallet (the service owner signs replies, which readers can check against
+  `ownerOf(agentId)`) and, at the team's request, created the Railway service, copied the `.env` values to it without
+  displaying them, and generated its domain.
+
+## Phase 1: demo seller APIs
+
+- Claude checked public x402 facilitators (x402.org, x402.rs) and found none supporting Arc testnet, so it proposed
+  settling payments in-process with the x402 SDK's own facilitator and the EVM `exact` scheme. x402.org does support
+  `hedera:testnet`, which Phase 9 will use.
+- Claude wrote the invoice extractor, the two demo APIs (A's ASCII-only item pattern is the deliberate limitation), the
+  x402 paywall, the ERC-8004 registration files, and their tests.
+- `npm audit` reports a moderate advisory in `@hono/node-server`'s `serveStatic`, which this server does not use. The
+  fix requires a major upgrade, so it was left as is.
