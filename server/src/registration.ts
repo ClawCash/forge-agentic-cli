@@ -1,10 +1,6 @@
+import { ARC_TESTNET_IDENTITY_REGISTRY } from "../../shared/src/erc8004.ts"
 import type { ServerConfig } from "./config.ts"
 import { DEMO_APIS, type DemoApi } from "./demo-apis.ts"
-
-// ERC-8004 identity registry on Arc testnet.
-// https://docs.arc.io/arc/references/contract-addresses#erc-8004
-export const ARC_TESTNET_IDENTITY_REGISTRY =
-  "eip155:5042002:0x8004A818BFB912233c491871b3d84c89A494BD9e"
 
 function registrations(config: ServerConfig, api: DemoApi) {
   const agentId = config.agentIds[api.id]
