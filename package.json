@@ -20,10 +20,12 @@
     "services:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-services.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"**/*.{ts,mjs}\"",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "db:generate": "drizzle-kit generate"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "drizzle-kit": "^0.31.11",
     "prettier": "^3.8.3",
     "typescript": "^5"
   },
