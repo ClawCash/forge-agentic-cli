@@ -121,7 +121,8 @@ sequenceDiagram
    World ID. Denied, cancelled or expired approvals leave the review unverified, off-chain and uncounted.
 3. The server checks the payment (reviewer = payer, paid the service's owner, confirmed on the mirror node),
    consumes the approval once, and stores the review document. One review per payment; one counted review per person,
-   service and task. The document records that a person approved it, never who.
+   service and task (for live demos, `ALLOW_REPEAT_HUMAN_REVIEWS=true` accepts extra ones, marked `repeat` in their
+   document). The document records that a person approved it, never who.
 4. The agent calls `giveFeedback` on the reputation registry from its own key (score 100/50/0, task, outcome,
    document URL and keccak256 hash); the server marks the review published once it finds that event.
 

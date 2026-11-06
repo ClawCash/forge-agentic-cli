@@ -34,6 +34,9 @@ export const reviews = pgTable(
     humanVerified: boolean("human_verified").notNull().default(false),
     humanSubject: text("human_subject"),
     approvalId: text("approval_id"),
+    // An extra review by a person who already has a counted one for this
+    // agent and task, accepted only while ALLOW_REPEAT_HUMAN_REVIEWS is on.
+    humanRepeat: boolean("human_repeat").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -41,10 +44,10 @@ export const reviews = pgTable(
   },
   (table) => [
     index("reviews_agent_task_idx").on(table.agentId, table.task),
-    // One counted review per person, agent and task.
+    // One counted review per person, agent and task (repeats aside).
     uniqueIndex("reviews_one_per_human_idx")
       .on(table.humanSubject, table.agentId, table.task)
-      .where(sql`${table.humanVerified}`),
+      .where(sql`${table.humanVerified} and not ${table.humanRepeat}`),
   ]
 )
 

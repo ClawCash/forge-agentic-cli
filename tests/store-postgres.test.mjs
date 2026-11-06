@@ -2,7 +2,11 @@ import assert from "node:assert/strict"
 import { randomUUID } from "node:crypto"
 import { test } from "node:test"
 import postgres from "postgres"
-import { DuplicateReviewError, postgresStore } from "../server/src/db/store.ts"
+import {
+  DuplicateHumanReviewError,
+  DuplicateReviewError,
+  postgresStore,
+} from "../server/src/db/store.ts"
 
 // Runs against a real database only when one is provided, e.g.
 // REVIEWS_TEST_DATABASE_URL=postgres://localhost:55432/postgres npm test
@@ -65,6 +69,32 @@ test(
       )
       assert.equal((await store.list({ agentId: "169" })).length, 2)
       assert.equal(await store.get("missing"), null)
+
+      // One counted review per person, agent and task; repeats aside.
+      const human = { humanVerified: true, humanSubject: "person-1" }
+      await store.insert({
+        ...base,
+        ...human,
+        id: "rev_h1",
+        paymentTransaction: "tx-h1",
+      })
+      await assert.rejects(
+        store.insert({
+          ...base,
+          ...human,
+          id: "rev_h2",
+          paymentTransaction: "tx-h2",
+        }),
+        DuplicateHumanReviewError
+      )
+      const repeat = await store.insert({
+        ...base,
+        ...human,
+        humanRepeat: true,
+        id: "rev_h3",
+        paymentTransaction: "tx-h3",
+      })
+      assert.equal(repeat.humanRepeat, true)
     } finally {
       await store?.close()
       await admin.unsafe(`drop database ${database} with (force)`)

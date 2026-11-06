@@ -190,7 +190,9 @@ export function memoryStore(): ReviewStore {
         }
         if (
           review.humanVerified &&
+          !review.humanRepeat &&
           row.humanVerified &&
+          !row.humanRepeat &&
           row.humanSubject === review.humanSubject &&
           row.agentId === review.agentId &&
           row.task === review.task
@@ -202,6 +204,7 @@ export function memoryStore(): ReviewStore {
         humanVerified: false,
         humanSubject: null,
         approvalId: null,
+        humanRepeat: false,
         ...review,
         status: "pending",
         feedbackTransaction: null,

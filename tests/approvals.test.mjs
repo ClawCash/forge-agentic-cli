@@ -141,6 +141,39 @@ test("one person gets one counted review per service and task", async () => {
   assert.equal(other.code, 0, other.stderr)
 })
 
+test("with the demo switch on, a person's extra reviews are accepted as repeats", async () => {
+  const w = await world({ allowRepeatHumanReviews: true })
+  const review = async () => {
+    await w.cli("pay", A, "--agent", "a", "--json", body)
+    return w.cli(
+      "submit",
+      w.lastInteractionId(),
+      "--task",
+      TASK,
+      "--outcome",
+      "failure",
+      "--reason",
+      "x"
+    )
+  }
+  for (let i = 0; i < 3; i++) {
+    const submitted = await review()
+    assert.equal(submitted.code, 0, submitted.stderr)
+  }
+  assert.equal(w.reputation.feedback.length, 3)
+  const rows = await w.store.list({ agentId: "7" })
+  assert.deepEqual(
+    rows.map((row) => row.humanRepeat).sort(),
+    [false, true, true],
+    "the first one counts as usual; the others are marked"
+  )
+  for (const row of rows) {
+    const { humanApproval } = JSON.parse(row.document).evidence
+    assert.equal(humanApproval.verified, true)
+    assert.equal(humanApproval.repeat === true, row.humanRepeat)
+  }
+})
+
 test("approvals expire, are used once, and only back what was approved", async () => {
   const w = await world({ approvalTtlMs: 50 })
   const request = {

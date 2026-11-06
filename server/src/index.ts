@@ -102,6 +102,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       mirror: { fetch },
       registry: hedera,
       receipts: hedera,
+      allowRepeatHumanReviews:
+        process.env.ALLOW_REPEAT_HUMAN_REVIEWS === "true",
     },
   })
   serve({ fetch: app.fetch, port })

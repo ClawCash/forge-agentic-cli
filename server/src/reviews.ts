@@ -40,6 +40,10 @@ export interface ReviewDeps {
       logs: Parameters<typeof parseEventLogs>[0]["logs"]
     }>
   }
+  // Demo switch (ALLOW_REPEAT_HUMAN_REVIEWS): accept further approved reviews
+  // from a person who already has a counted one for the agent and task,
+  // marked as repeats in the review document.
+  allowRepeatHumanReviews?: boolean
 }
 
 const TaskTag = z.string().regex(/^[a-z0-9][a-z0-9:._-]{0,63}$/, {
@@ -122,6 +126,7 @@ function publicReview(row: StoredReview, baseUrl: string) {
     },
     observed: doc.observed ?? null,
     humanVerified: row.humanVerified,
+    humanRepeat: row.humanRepeat,
   }
 }
 
@@ -197,6 +202,36 @@ export function reviewRoutes(deps: ReviewDeps) {
       return reject(`Payment not verified: ${evidence.reason}`)
     }
 
+    // One counted review per person, agent and task. Checked before the
+    // approval is consumed, so a refused review does not burn it.
+    let repeat = false
+    if (draft.approvalId) {
+      const decided = await deps.store.getApproval(draft.approvalId)
+      if (decided?.humanSubject) {
+        const earlier = await deps.store.list({
+          agentId: identity.agentId,
+          task: draft.task,
+        })
+        if (
+          earlier.some(
+            (row) => row.paymentTransaction === draft.payment.transactionId
+          )
+        ) {
+          return c.json({ error: new DuplicateReviewError().message }, 409)
+        }
+        const counted = earlier.some(
+          (row) =>
+            row.humanVerified &&
+            !row.humanRepeat &&
+            row.humanSubject === decided.humanSubject
+        )
+        if (counted && !deps.allowRepeatHumanReviews) {
+          return c.json({ error: new DuplicateHumanReviewError().message }, 409)
+        }
+        repeat = counted
+      }
+    }
+
     // Consumed only after every other check passed, so a refused review
     // does not burn the person's approval.
     let approval = null
@@ -261,6 +296,11 @@ export function reviewRoutes(deps: ReviewDeps) {
                 provider: "World ID Agent Pass",
                 acr: approval.acr,
                 approvedAt: approval.decidedAt?.toISOString() ?? null,
+                ...(repeat && {
+                  repeat: true,
+                  repeatNote:
+                    "This person already has a counted review for this service and task; extra reviews are allowed in the demo",
+                }),
               }
             : { verified: false },
         },
@@ -285,6 +325,7 @@ export function reviewRoutes(deps: ReviewDeps) {
         humanVerified: approval !== null,
         humanSubject: approval?.humanSubject ?? null,
         approvalId: approval?.id ?? null,
+        humanRepeat: repeat,
       })
       return c.json(
         {

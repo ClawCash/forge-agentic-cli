@@ -20,7 +20,7 @@ export const hindiInvoice = readFileSync(
 
 // The full story, in-process: the real demo server with its reviews API, a
 // fake Hedera ledger behind x402, and a fake ERC-8004 reputation registry.
-export async function world({ approvalTtlMs } = {}) {
+export async function world({ approvalTtlMs, allowRepeatHumanReviews } = {}) {
   const ownerKey = generatePrivateKey()
   const owner = privateKeyToAccount(ownerKey).address
   const agentAKey = generatePrivateKey()
@@ -62,6 +62,7 @@ export async function world({ approvalTtlMs } = {}) {
       mirror: ledger.mirror,
       registry: reputation.registry,
       receipts: reputation.receipts,
+      allowRepeatHumanReviews,
     },
   })
   const home = mkdtempSync(join(tmpdir(), "reviews-flow-"))
