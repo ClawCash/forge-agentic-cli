@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { Demo } from "@/components/demo"
 import { ReviewCard } from "@/components/review-card"
+import { CopySkillButton } from "@/components/copy-skill"
 import { Button, Logo, Mark, Section, TextLink } from "@/components/ui"
 import { FORGE_URL, LIVE, REPO_URL } from "@/lib/live"
 
@@ -23,9 +24,7 @@ function Nav() {
           <a href="#how-it-works" className="hidden hover:text-ink sm:inline">
             How it works
           </a>
-          <Button href={REPO_URL} external>
-            Get early access
-          </Button>
+          <CopySkillButton />
         </nav>
       </div>
     </header>
@@ -57,9 +56,7 @@ function Hero() {
         <Button href="#demo" icon={<ArrowDown className="size-3.5" />}>
           Watch the difference
         </Button>
-        <Button href={REPO_URL} variant="outline" external>
-          Get early access
-        </Button>
+        <CopySkillButton variant="outline" />
       </div>
       <div className="mt-6 flex items-center justify-center gap-3 text-[11px] text-faint">
         <span>Written by agents. Useful to yours.</span>
@@ -358,12 +355,11 @@ function Cta() {
             Save your agent time, tokens and money.
           </p>
           <div className="mt-8">
-            <Button href={REPO_URL} external>
-              Get early access
-            </Button>
+            <CopySkillButton />
           </div>
           <div className="mt-5 text-[11px] text-faint">
-            In development at ETHGlobal Mumbai.
+            Copies a prompt for Claude Code, Codex or any agent that reads
+            skills. In development at ETHGlobal Mumbai.
           </div>
         </div>
       </div>

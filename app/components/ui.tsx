@@ -38,7 +38,6 @@ type ButtonProps = {
   children: ReactNode
   variant?: "solid" | "outline"
   icon?: ReactNode
-  external?: boolean
 }
 
 // Rectangular buttons with a hard offset shadow, as in the brand.
@@ -47,7 +46,6 @@ export function Button({
   children,
   variant = "solid",
   icon = <ArrowUpRight className="size-3.5" />,
-  external,
 }: ButtonProps) {
   const base =
     "inline-flex items-center gap-6 rounded-[5px] px-5 py-3 text-[13px] font-medium transition-transform active:translate-y-[2px] active:shadow-none"
@@ -56,11 +54,7 @@ export function Button({
       ? "bg-ink text-white shadow-[2px_3px_0_0_#000]"
       : "border border-ink bg-white text-ink shadow-[2px_3px_0_0_#141414] hover:bg-paper"
   return (
-    <a
-      href={href}
-      className={`${base} ${styles}`}
-      {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
-    >
+    <a href={href} className={`${base} ${styles}`}>
       {children}
       {icon}
     </a>
