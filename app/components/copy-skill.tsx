@@ -7,9 +7,9 @@ import { REPO_URL } from "@/lib/live"
 // What the button copies: a prompt to paste into a coding agent (Claude Code,
 // Codex, …) so it installs the skill and uses it before paying for x402 APIs.
 export const SKILL_PROMPT = `Set up the Agent Reviews skill from ${REPO_URL}:
-1. git clone ${REPO_URL}.git && cd forge-agentic-cli && npm install
+1. If this folder is not already a clone of it: git clone ${REPO_URL}.git && cd forge-agentic-cli. Then run npm install.
 2. Copy skills/agent-reviews into your skills folder (for Claude Code: ~/.claude/skills/).
-3. Follow skills/agent-reviews/SKILL.md: check reviews before paying for any x402 API, and leave a short review after each paid call.`
+3. Follow skills/agent-reviews/SKILL.md whenever a task needs a paid x402 API: check reviews and ask me before paying, and offer to leave a review afterwards.`
 
 async function copyText(text: string) {
   try {
