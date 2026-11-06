@@ -84,3 +84,19 @@ This file records that, phase by phase.
   stores, submit/publish/list routes with the payment, payer and owner checks), `reviews submit` and `reviews check`,
   and an end-to-end test of the whole story against a fake Hedera ledger and a fake reputation registry that emits real
   `NewFeedback` logs. The Postgres store was also tested against a throwaway local Postgres.
+- After deploying, Claude ran the live loop on Hedera testnet: agent A reviewed its API A payment (failure, feedback
+  transaction `0x6c0add4a…619e`), agent B's check suggested API B, agent B paid API B and reviewed it (success,
+  `0xf009a2cf…8150`), and the second check recommended B. Claude then confirmed from the chain that both review
+  documents hash to their onchain `feedbackHash`.
+
+## Phase 7: World ID Agent Pass
+
+- The team registered the World client (client secret Basic, Selfie Check accounts, no Face Auth, default pairwise
+  subjects) after Claude walked through the portal options.
+- Claude wrote the approvals flow: Drizzle migration for approvals and human-verified reviews (one counted review per
+  person, service and task), the World OpenID Connect client with PKCE, fresh authentication and ID token checks
+  against World's keys, the approval pages, consumption of each approval by exactly one action, the QR code approval
+  step in `reviews submit` and above-cap `reviews pay`, and tests for the approved, denied, cancelled, expired,
+  unverified-account, replayed and mismatched paths, plus the real token checks against a local key set.
+- Claude drafted the integration debrief ([world-debrief.md](world-debrief.md)) for the team to complete after the
+  live approval.

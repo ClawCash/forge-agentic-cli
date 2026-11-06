@@ -9,8 +9,9 @@ Built at ETHGlobal Mumbai (5–7 November 2026) for the Hedera "AI Agents That P
 
 ## Status
 
-Phases 5–6: agents pay (`reviews pay`), review what they paid for (`reviews submit`, written to ERC-8004 on Hedera),
-and check reviews before buying (`reviews check`). Next: World ID Agent Pass.
+Phase 7: agents pay (`reviews pay`), review what they paid for (`reviews submit`, written to ERC-8004 on Hedera),
+and check reviews before buying (`reviews check`). A person approves each counted review, and any payment above the
+agent's spending cap, with World ID Agent Pass.
 
 ## The loop
 
@@ -54,6 +55,21 @@ by the x402.org facilitator `0.0.9185802`): Hedera transaction ID `0.0.9185802@1
 ([HashScan](https://hashscan.io/testnet/transaction/0.0.9185802@1793998039.399470887)). API A returned two of the four
 line items.
 
+### Live run on Hedera testnet (6–7 November 2026)
+
+| Step | What happened | Transaction |
+|---|---|---|
+| Agent A pays API A | 0.01 USDC; API A returns 2 of 4 line items | [`0.0.9185802@1793998039.399470887`](https://hashscan.io/testnet/transaction/0.0.9185802@1793998039.399470887) |
+| Agent A reviews API A | failure, 0/100, agent 169, feedback #1 | [`0x6c0add4a…619e`](https://hashscan.io/testnet/transaction/0x6c0add4a6b4636e792b5d83dfa139baf59b8156b844a762d90a651e7385c619e) |
+| Agent B checks A and B | A: avoid (0/100); B: unknown → suggests B | — |
+| Agent B pays API B | 0.01 USDC; API B returns all 4 line items | [`0.0.9185802@1793999316.414749407`](https://hashscan.io/testnet/transaction/0.0.9185802@1793999316.414749407) |
+| Agent B reviews API B | success, 100/100, agent 170, feedback #1 | [`0xf009a2cf…8150`](https://hashscan.io/testnet/transaction/0xf009a2cff33c6853b64e5c3e8a6cb6bb406a2ba93e163ba5493e289916678150) |
+| Agent B checks again | A: avoid; B: recommended (100/100) | — |
+
+Each review document ([A's](https://forge-agentic-cli-production.up.railway.app/reviews/rev_434281ae-e236-4b43-bedf-1b8efa8add81.json),
+[B's](https://forge-agentic-cli-production.up.railway.app/reviews/rev_0873f19a-b7e7-4978-a864-8826cc5fa73c.json))
+hashes to the `feedbackHash` in its onchain `NewFeedback` event.
+
 ## Reviewing a call
 
 `reviews submit <interaction-id> --task <tag> --outcome success|partial|failure --reason <text>` sends the review to
@@ -81,6 +97,29 @@ word for it), reads that agent's reviews for the task from the reputation regist
 the reviews server. Each endpoint gets a verdict: recommended (average ≥ 50), avoid, or unknown (no reviews). With
 several endpoints it suggests one. Trust is the reader's choice: only reviewers in `--reviewers` or
 `TRUSTED_REVIEWERS` count, or anyone when the list is empty. `--output json` is for agents.
+
+## Human approval with World ID Agent Pass
+
+Reviews and spending are only as trustworthy as the people behind the agents. Two actions need a person's fresh
+World ID sign-in:
+
+- **A counted review.** `reviews submit` shows a QR code for the approval page (scan it with the phone that has World
+  ID). Only after the person approves that exact review (endpoint, task and outcome) does the server accept it as
+  human-verified and the agent write it onchain. Each person gets one counted review per service and task. If the
+  person denies, cancels, or lets it expire, the review is stored as unverified, stays off-chain, and does not count.
+- **A payment above the spending cap.** When the price is above `--max-usd`, `reviews pay` waits for a person to
+  approve that payment (`--no-approval` refuses instead).
+
+The server runs World's OpenID Connect flow itself: authorization code with PKCE and `max_age=0`, the code exchanged
+with the client secret, and the ID token verified against World's published keys (issuer, audience, signature,
+nonce, a fresh `auth_time`, and an `acr` that marks a verified World ID). Each approval is bound to one agent, action
+and set of details, and is consumed atomically by the one action it allows. The public review document records that
+a person approved it (`evidence.humanApproval`), never who.
+
+Routes: `POST /approvals`, `GET /approvals/:id` (the page the QR code opens), `GET /approvals/:id/start`,
+`GET /approvals/callback`, `POST /approvals/:id/deny`, `GET /approvals/:id/status`, `POST /approvals/:id/consume`.
+Configure `WORLD_CLIENT_ID` and `WORLD_CLIENT_SECRET` (registered at auth.world.org/portal with the callback
+`<server>/approvals/callback`). See the [integration debrief](docs/world-debrief.md).
 
 ## Demo seller APIs
 
