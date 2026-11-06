@@ -12,7 +12,7 @@ export const HEDERA_TESTNET_REGISTRIES = {
 export const HEDERA_TESTNET_IDENTITY_REGISTRY = `eip155:${HEDERA_TESTNET_REGISTRIES.chainId}:${HEDERA_TESTNET_REGISTRIES.identity}`
 
 // Matches ReputationRegistryUpgradeable, the reference implementation (the same
-// implementation, 0x16e0…dA34, sits behind the proxy on Hedera and Arc).
+// implementation, 0x16e0…dA34, sits behind the proxy on Hedera testnet).
 export const reputationRegistryAbi = parseAbi([
   "function giveFeedback(uint256 agentId, int128 value, uint8 valueDecimals, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)",
   "function getSummary(uint256 agentId, address[] clientAddresses, string tag1, string tag2) view returns (uint64 count, int128 summaryValue, uint8 summaryValueDecimals)",

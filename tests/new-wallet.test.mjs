@@ -3,10 +3,10 @@ import { test } from "node:test"
 import { setEnvValue } from "../scripts/new-wallet.ts"
 
 test("fills an empty entry copied from .env.example", () => {
-  const content = "ARC_RPC_URL=x\nAGENT_A_PRIVATE_KEY=\nPORT=1\n"
+  const content = "HEDERA_RPC_URL=x\nAGENT_A_PRIVATE_KEY=\nPORT=1\n"
   assert.equal(
     setEnvValue(content, "AGENT_A_PRIVATE_KEY", "0xabc"),
-    "ARC_RPC_URL=x\nAGENT_A_PRIVATE_KEY=0xabc\nPORT=1\n"
+    "HEDERA_RPC_URL=x\nAGENT_A_PRIVATE_KEY=0xabc\nPORT=1\n"
   )
 })
 

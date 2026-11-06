@@ -110,7 +110,7 @@ export async function runDemoAgent(
     }
     chosen =
       report.suggestion ??
-      candidates.find((c, i) => report.reports[i].verdict !== "avoid") ??
+      candidates.find((_, i) => report.reports[i].verdict !== "avoid") ??
       candidates[0]
   }
   const chosenName =
