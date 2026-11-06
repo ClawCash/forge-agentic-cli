@@ -12,4 +12,9 @@ export interface CliDeps {
   mirror?: EvidenceDeps
   // ERC-8004 on Hedera testnet.
   reputation: ReputationChain
+  // Shows a human approval link (default: a QR code on stderr). Tests use it
+  // to play the person.
+  showApproval?: (approvalUrl: string) => void | Promise<void>
+  pollMs?: number
+  approvalTimeoutMs?: number
 }

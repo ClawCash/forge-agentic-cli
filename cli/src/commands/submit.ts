@@ -3,14 +3,17 @@ import type { Hex } from "viem"
 import { OUTCOME_VALUES } from "../../../shared/src/erc8004.ts"
 import { HEDERA_TESTNET } from "../../../shared/src/networks.ts"
 import { loadAgent } from "../agent.ts"
+import { requestApproval } from "../approval.ts"
 import type { CliDeps } from "../deps.ts"
 import { loadInteraction } from "../interactions.ts"
 
 export const SUBMIT_USAGE = `Usage: reviews submit <interaction-id> --task <tag> --outcome <outcome> --reason <text>
 
-Reviews a paid interaction. The reviews server checks that this agent's
-account made the payment, stores the review, and the agent writes the score
-to the ERC-8004 reputation registry on Hedera from its own key.
+Reviews a paid interaction. A person first approves it with World ID (scan
+the QR code). The reviews server checks that this agent's account made the
+payment and stores the review, and the agent writes the score to the ERC-8004
+reputation registry on Hedera from its own key. Without approval the review is
+stored as unverified and is not written onchain or counted.
 
 Options:
   --task <tag>         What the agent was trying to do, e.g. invoice-extraction:hi
@@ -18,6 +21,7 @@ Options:
   --reason <text>      What worked or failed (public; no secrets or payloads)
   --note <text>        Optional detail
   --server <url>       Reviews server (default: REVIEWS_SERVER or the demo server)
+  --unverified         Skip the human approval (stored, not counted)
 `
 
 export const DEFAULT_SERVER =
@@ -36,6 +40,7 @@ export async function runSubmit(
       reason: { type: "string" },
       note: { type: "string" },
       server: { type: "string" },
+      unverified: { type: "boolean", default: false },
     },
   })
   const [id] = positionals
@@ -69,6 +74,32 @@ export async function runSubmit(
     return { status: res.status, json }
   }
 
+  // A person approves this exact review (endpoint, task, outcome) first.
+  let approvalId: string | undefined
+  if (!values.unverified) {
+    const approval = await requestApproval(
+      server,
+      {
+        action: "review",
+        agent: agent.account.address,
+        details: {
+          endpoint: interaction.request.endpoint,
+          task: values.task,
+          outcome: values.outcome,
+        },
+      },
+      deps
+    )
+    if (approval.status === "approved") {
+      approvalId = approval.id
+      deps.stderr("Approved with World ID.\n")
+    } else {
+      deps.stderr(
+        `Not approved (${approval.status}${approval.reason ? `: ${approval.reason}` : ""}). The review will be stored as unverified.\n`
+      )
+    }
+  }
+
   const draft = await post("/reviews", {
     endpoint: interaction.request.endpoint,
     task: values.task,
@@ -90,6 +121,7 @@ export async function runSubmit(
       paidCallMs: interaction.timings.paidCallMs,
       responseBytes: interaction.response.bytes,
     },
+    approvalId,
     interaction: {
       id: interaction.id,
       requestSha256: interaction.request.bodySha256,
@@ -110,6 +142,18 @@ export async function runSubmit(
     endpoint: string
     feedbackURI: string
     feedbackHash: Hex
+    humanVerified: boolean
+  }
+  if (!review.humanVerified) {
+    deps.stderr(
+      [
+        `Stored review ${review.id} as unverified (no human approval).`,
+        "It is not written onchain and does not count.",
+        `Review: ${review.feedbackURI}`,
+        "",
+      ].join("\n")
+    )
+    return 1
   }
 
   const transaction = await deps.reputation.giveFeedback(agent.privateKey, {

@@ -5,10 +5,7 @@ import { x402Client, x402HTTPClient } from "@x402/core/client"
 import type { PaymentRequirements } from "@x402/core/types"
 import { createClientHederaSigner, PrivateKey } from "@x402/hedera"
 import { ExactHederaScheme } from "@x402/hedera/exact/client"
-import {
-  checkPayment,
-  type EvidenceDeps,
-} from "../../../shared/src/evidence.ts"
+import { checkPayment } from "../../../shared/src/evidence.ts"
 import { accountIdForAddress } from "../../../shared/src/hedera.ts"
 import {
   formatUsdc,
@@ -16,8 +13,10 @@ import {
   parseUsd,
 } from "../../../shared/src/networks.ts"
 import { loadAgent } from "../agent.ts"
+import { requestApproval } from "../approval.ts"
 import type { CliDeps } from "../deps.ts"
 import { type Interaction, saveInteraction } from "../interactions.ts"
+import { DEFAULT_SERVER } from "./submit.ts"
 
 export const PAY_USAGE = `Usage: reviews pay <endpoint> --agent <name> [options]
 
@@ -29,17 +28,19 @@ Options:
   --json <body>        JSON request body (sent as POST)
   --body-file <path>   Read the JSON request body from a file
   --method <method>    HTTP method (default: POST with a body, else GET)
-  --max-usd <amount>   Refuse to pay more than this (default: 0.10)
+  --max-usd <amount>   Spending cap per call (default: 0.10). Above it, a person
+                       must approve the payment with World ID (QR code)
+  --no-approval        Refuse prices above the cap instead of asking
   --output json        Print one JSON object with the receipt and body
+  --server <url>       Approvals server (default: REVIEWS_SERVER or the demo server)
 `
 
 const sha256 = (data: Uint8Array | string) =>
   createHash("sha256").update(data).digest("hex")
 
-function selectAccept(
-  accepts: PaymentRequirements[],
-  maxAtomic: (decimals: number) => bigint
-) {
+// The first USDC option on a supported network. Whether it is above the
+// spending cap is decided by the caller.
+function selectAccept(accepts: PaymentRequirements[]) {
   const rejected: string[] = []
   for (const accept of accepts) {
     const network = PAYMENT_NETWORKS[accept.network]
@@ -51,14 +52,7 @@ function selectAccept(
       rejected.push(`${accept.asset} on ${network.label} (not USDC)`)
       continue
     }
-    const amount = BigInt(accept.amount)
-    if (amount > maxAtomic(network.usdcDecimals)) {
-      rejected.push(
-        `$${formatUsdc(amount, network.usdcDecimals)} on ${network.label} (above --max-usd)`
-      )
-      continue
-    }
-    return { accept, network, amount }
+    return { accept, network, amount: BigInt(accept.amount) }
   }
   throw new Error(
     `No acceptable payment option: ${rejected.join("; ") || "none offered"}`
@@ -76,6 +70,8 @@ export async function runPay(argv: string[], deps: CliDeps): Promise<number> {
       method: { type: "string" },
       "max-usd": { type: "string", default: "0.10" },
       output: { type: "string" },
+      server: { type: "string" },
+      "no-approval": { type: "boolean", default: false },
     },
   })
   const [endpoint] = positionals
@@ -122,6 +118,7 @@ export async function runPay(argv: string[], deps: CliDeps): Promise<number> {
   let challengeMs: number | null = null
   let price: Interaction["price"] = null
   let paidStart = t0
+  let approvalId: string | null = null
 
   if (response.status === 402) {
     challengeMs = Math.round(performance.now() - t0)
@@ -130,15 +127,24 @@ export async function runPay(argv: string[], deps: CliDeps): Promise<number> {
       (name) => response.headers.get(name),
       challengeBody
     )
-    const { accept, network, amount } = selectAccept(
-      required.accepts,
-      (decimals) => parseUsd(maxUsd, decimals)
-    )
+    const { accept, network, amount } = selectAccept(required.accepts)
+    const amountUsd = formatUsdc(amount, network.usdcDecimals)
+    if (amount > parseUsd(maxUsd, network.usdcDecimals)) {
+      const over = `$${amountUsd} is above --max-usd ${maxUsd}`
+      if (values["no-approval"]) throw new Error(over)
+      approvalId = await approvePayment(
+        { endpoint: url.toString(), amountUsd, network: network.label },
+        agent.account.address,
+        values.server,
+        over,
+        deps
+      )
+    }
     price = {
       network: accept.network,
       asset: accept.asset,
       amount: accept.amount,
-      amountUsd: formatUsdc(amount, network.usdcDecimals),
+      amountUsd,
       payTo: accept.payTo,
       scheme: accept.scheme,
     }
@@ -208,6 +214,7 @@ export async function runPay(argv: string[], deps: CliDeps): Promise<number> {
     },
     settlement,
     evidence,
+    approvalId,
   }
   saveInteraction(interaction, responseBody, deps.env)
 
@@ -245,4 +252,49 @@ function summary(i: Interaction) {
   }
   lines.push(`Interaction: ${i.id}  →  reviews submit ${i.id}`)
   return `${lines.join("\n")}\n`
+}
+
+// A person approves one payment above the cap; the approval is consumed
+// before paying, so it cannot be reused.
+async function approvePayment(
+  details: Record<string, string>,
+  agent: string,
+  serverOption: string | undefined,
+  over: string,
+  deps: CliDeps
+) {
+  const server = (
+    serverOption ??
+    deps.env.REVIEWS_SERVER ??
+    DEFAULT_SERVER
+  ).replace(/[/]$/, "")
+  deps.stderr(`${over}.` + "\n")
+  let approval
+  try {
+    approval = await requestApproval(
+      server,
+      { action: "payment", agent, details },
+      deps
+    )
+  } catch (error) {
+    throw new Error(`${over}; ${(error as Error).message}`)
+  }
+  if (approval.status !== "approved") {
+    throw new Error(
+      `${over} and the payment was not approved (${approval.status}${approval.reason ? `: ${approval.reason}` : ""})`
+    )
+  }
+  const res = await deps.fetch(`${server}/approvals/${approval.id}/consume`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent, action: "payment" }),
+  })
+  if (!res.ok) {
+    const { error } = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(
+      `${over}; the approval could not be used: ${error ?? res.status}`
+    )
+  }
+  deps.stderr("Payment approved with World ID." + "\n")
+  return approval.id
 }

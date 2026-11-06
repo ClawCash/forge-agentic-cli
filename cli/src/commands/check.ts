@@ -33,6 +33,7 @@ interface ServerReview {
   feedbackIndex: string | null
   feedbackTransaction: string | null
   payment: { transactionId: string; evidence: string | null }
+  humanVerified?: boolean
 }
 
 export interface EndpointReport {
@@ -138,6 +139,7 @@ function render(report: EndpointReport, task: string) {
           : "✗"
     const proof = [
       review.payment.evidence ? "paid (verified)" : "payment unverified",
+      review.humanVerified ? "human-approved (World ID)" : "no human approval",
       review.onchain ? `onchain #${review.feedbackIndex}` : review.status,
     ].join(", ")
     lines.push(

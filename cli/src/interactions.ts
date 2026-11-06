@@ -38,6 +38,8 @@ export interface Interaction {
     explorerUrl: string | null
   } | null
   evidence: PaymentEvidence | null
+  // The World ID approval that allowed a payment above the spending cap.
+  approvalId?: string | null
 }
 
 export function reviewsHome(env = process.env) {
