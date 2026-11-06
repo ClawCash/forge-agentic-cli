@@ -49,3 +49,11 @@ This file records that, phase by phase.
   it against the chain: agent A's balance fell by exactly $0.01 and the service owner paid the gas. Arc emits two
   `Transfer` events per USDC transfer (a system event in 18-decimal native units and the standard 6-decimal one at
   `0x3600…`); the check matches the standard one.
+
+## Phase 3: service identities
+
+- Claude read the identity registry's verified ABI from Arc's explorer (an ERC-1967 proxy to
+  `IdentityRegistryUpgradeable`), wrote the registration and verification scripts and the two-way endpoint identity
+  check with tests, and moved the registry constants into `shared/`.
+- Claude registered both demo services on Arc testnet from the service owner wallet (agents 897804 and 897805),
+  saved the IDs to `.env`, and mirrored them to the Railway service as earlier `.env` values were.

@@ -9,8 +9,9 @@ Built at ETHGlobal Mumbai (5–7 November 2026). See [the spec](docs/spec.md), [
 
 ## Status
 
-Phase 2: `reviews pay` pays x402 endpoints from the agent's own wallet and records a verified receipt. `check` and
-`submit` are placeholders.
+Phase 3: both demo services have ERC-8004 identities on Arc testnet, and endpoints resolve to them through a
+two-way check. `reviews pay` pays from the agent's own wallet and records a verified receipt. `check` and `submit` are
+placeholders.
 
 ## Paying for a call
 
@@ -51,8 +52,29 @@ Unpaid calls get `402 Payment Required` with x402 v2 terms. No public facilitato
 settles payments itself: it verifies the buyer's signed EIP-3009 USDC authorization and submits it onchain from the
 service owner's wallet, which also receives the payment. Each paid call therefore has its own transaction hash.
 
-Set `DEMO_API_A_AGENT_ID` and `DEMO_API_B_AGENT_ID` after registering the services (Phase 3) to fill in their
-registrations. `PUBLIC_BASE_URL` overrides the public origin (on Railway it comes from `RAILWAY_PUBLIC_DOMAIN`).
+`PUBLIC_BASE_URL` overrides the public origin (on Railway it comes from `RAILWAY_PUBLIC_DOMAIN`).
+
+## Service identities (ERC-8004)
+
+Both services are registered on Arc testnet's ERC-8004 identity registry
+(`0x8004A818BFB912233c491871b3d84c89A494BD9e`), owned by the service owner wallet:
+
+| Service | Agent ID | Registration |
+|---|---|---|
+| Demo Invoice API A | 897804 | [0x13da835b…9053](https://explorer.testnet.arc.io/tx/0x13da835b657ff9d591b72d321a2b2cb2b1256f2f97b51fc25a5ec9c3c0439053) |
+| Demo Invoice API B | 897805 | [0x0cb19488…1f37](https://explorer.testnet.arc.io/tx/0x0cb194880fec61701c1e7d07ac9d5b1f67c33d78c88312afff20d8ce5e4b1f37) |
+
+```bash
+npm run services:register -- --save   # registers anything not yet registered, writes the IDs to .env
+npm run services:verify               # resolves each live endpoint to its identity
+```
+
+`DEMO_API_A_AGENT_ID` and `DEMO_API_B_AGENT_ID` tell the server which registrations to publish. Re-running the
+register script checks existing IDs instead of minting new ones (`--update` repoints a changed agentURI).
+
+An endpoint counts as verified only when both directions agree ([shared/src/identity.ts](shared/src/identity.ts)): its
+domain's `/.well-known/agent-registration.json` lists the agent, and the agent's onchain `agentURI` resolves to a
+registration file listing this exact endpoint and the same registration. Otherwise it stays unknown.
 
 ## Layout
 
