@@ -83,6 +83,23 @@ const ReviewDraft = z.object({
 const same = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && a.toLowerCase() === b.toLowerCase()
 
+export function isPublicHttpsUrl(value: string) {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return false
+  }
+  const host = url.hostname.toLowerCase()
+  return (
+    url.protocol === "https:" &&
+    !/^\d+\.\d+\.\d+\.\d+$/.test(host) &&
+    !host.startsWith("[") &&
+    host.includes(".") &&
+    !/(^|\.)(localhost|internal|local)$/.test(host)
+  )
+}
+
 function publicReview(row: StoredReview, baseUrl: string) {
   const doc = JSON.parse(row.document)
   return {
@@ -115,10 +132,24 @@ export function reviewRoutes(deps: ReviewDeps) {
     { at: number; identity: EndpointIdentity }
   >()
 
+  // Identity checks fetch URLs chosen by others (the endpoint's domain, and an
+  // agentURI anyone can register onchain), so only public HTTPS URLs are
+  // fetched and redirects are not followed: a review can't make the server
+  // probe its own private network.
+  const publicFetch: typeof fetch = (input, init) => {
+    const url = String(input instanceof Request ? input.url : input)
+    return isPublicHttpsUrl(url)
+      ? deps.fetch(input, { ...init, redirect: "error" })
+      : Promise.reject(new Error(`Only public HTTPS URLs are fetched: ${url}`))
+  }
+
   async function identityOf(endpoint: string) {
     const cached = identities.get(endpoint)
     if (cached && Date.now() - cached.at < 60_000) return cached.identity
-    const identity = await resolveEndpointIdentity(endpoint, deps)
+    const identity = await resolveEndpointIdentity(endpoint, {
+      fetch: publicFetch,
+      registry: deps.registry,
+    })
     if (identity.status === "verified") {
       identities.set(endpoint, { at: Date.now(), identity })
     }

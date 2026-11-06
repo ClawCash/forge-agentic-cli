@@ -254,3 +254,33 @@ test("check reports unknown endpoints without failing", async () => {
   assert.equal(checked.reports[0].identity.status, "unknown")
   assert.equal(checked.reports[0].verdict, "unknown")
 })
+
+test("the server only fetches public HTTPS URLs for identity checks", async () => {
+  const { isPublicHttpsUrl } = await import("../server/src/reviews.ts")
+  for (const url of [
+    "https://forge-agentic-cli-production.up.railway.app/a/invoices/extract",
+    "https://demo.example/x",
+  ]) {
+    assert.equal(isPublicHttpsUrl(url), true, url)
+  }
+  for (const url of [
+    "http://demo.example/x",
+    "https://localhost/x",
+    "https://postgres.railway.internal/x",
+    "https://printer.local/x",
+    "https://10.0.0.5/x",
+    "https://[::1]/x",
+    "https://intranet/x",
+    "not a url",
+  ]) {
+    assert.equal(isPublicHttpsUrl(url), false, url)
+  }
+
+  const w = await world()
+  const res = await w.app.request(
+    `/reviews?endpoint=${encodeURIComponent("https://postgres.railway.internal/x")}&task=${TASK}`
+  )
+  const body = await res.json()
+  assert.equal(body.identity.status, "unknown")
+  assert.match(body.identity.reason, /Only public HTTPS URLs are fetched/)
+})
