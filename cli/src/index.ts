@@ -1,48 +1,56 @@
 #!/usr/bin/env -S node --experimental-strip-types
 
-import { PAY_USAGE, type PayDeps, runPay } from "./commands/pay.ts"
+import { CHECK_USAGE, runCheck } from "./commands/check.ts"
+import { PAY_USAGE, runPay } from "./commands/pay.ts"
+import { runSubmit, SUBMIT_USAGE } from "./commands/submit.ts"
+import type { CliDeps } from "./deps.ts"
+import { hederaReputation } from "./reputation.ts"
 
 const USAGE = `reviews: agents read reviews before buying an API call and leave feedback after
 
 Usage:
-  reviews check <endpoint> --task <tag>   Reviews for an endpoint and task
-  reviews pay <endpoint> --agent <name>   Pay for one call and record the receipt
-  reviews submit <interaction-id>         Review a paid interaction
+  reviews check <endpoint>... --task <tag>  Reviews for endpoints and a task
+  reviews pay <endpoint> --agent <name>     Pay for one call and record the receipt
+  reviews submit <interaction-id> ...       Review a paid interaction
 
 Run "reviews <command> --help" for options.
 `
 
-const defaultDeps: PayDeps = {
-  fetch: globalThis.fetch,
-  env: process.env,
-  stdout: (text) => process.stdout.write(text),
-  stderr: (text) => process.stderr.write(text),
+const COMMANDS: Record<
+  string,
+  { usage: string; run: (argv: string[], deps: CliDeps) => Promise<number> }
+> = {
+  check: { usage: CHECK_USAGE, run: runCheck },
+  pay: { usage: PAY_USAGE, run: runPay },
+  submit: { usage: SUBMIT_USAGE, run: runSubmit },
 }
 
-export async function run(argv: string[], deps = defaultDeps): Promise<number> {
+export async function run(argv: string[], deps?: CliDeps): Promise<number> {
+  const io = deps ?? {
+    fetch: globalThis.fetch,
+    env: process.env,
+    stdout: (text: string) => process.stdout.write(text),
+    stderr: (text: string) => process.stderr.write(text),
+    reputation: hederaReputation(),
+  }
   const [command, ...rest] = argv
   if (!command || command === "help" || command === "--help") {
-    deps.stdout(USAGE)
+    io.stdout(USAGE)
+    return 0
+  }
+  const entry = COMMANDS[command]
+  if (!entry) {
+    io.stderr(`Unknown command: ${command}\n\n${USAGE}`)
+    return 1
+  }
+  if (rest.includes("--help")) {
+    io.stdout(entry.usage)
     return 0
   }
   try {
-    switch (command) {
-      case "pay":
-        if (rest.includes("--help")) {
-          deps.stdout(PAY_USAGE)
-          return 0
-        }
-        return await runPay(rest, deps)
-      case "check":
-      case "submit":
-        deps.stderr(`reviews ${command} is not built yet\n`)
-        return 1
-      default:
-        deps.stderr(`Unknown command: ${command}\n\n${USAGE}`)
-        return 1
-    }
+    return await entry.run(rest, io)
   } catch (error) {
-    deps.stderr(`reviews ${command}: ${(error as Error).message}\n`)
+    io.stderr(`reviews ${command}: ${(error as Error).message}\n`)
     return 1
   }
 }

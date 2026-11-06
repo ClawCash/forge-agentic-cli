@@ -16,6 +16,7 @@ import {
   parseUsd,
 } from "../../../shared/src/networks.ts"
 import { loadAgent } from "../agent.ts"
+import type { CliDeps } from "../deps.ts"
 import { type Interaction, saveInteraction } from "../interactions.ts"
 
 export const PAY_USAGE = `Usage: reviews pay <endpoint> --agent <name> [options]
@@ -34,15 +35,6 @@ Options:
 
 const sha256 = (data: Uint8Array | string) =>
   createHash("sha256").update(data).digest("hex")
-
-export interface PayDeps {
-  fetch: typeof fetch
-  env: NodeJS.ProcessEnv
-  stdout: (text: string) => void
-  stderr: (text: string) => void
-  // Hedera mirror node access, for account lookups and the payment check.
-  mirror?: EvidenceDeps
-}
 
 function selectAccept(
   accepts: PaymentRequirements[],
@@ -73,7 +65,7 @@ function selectAccept(
   )
 }
 
-export async function runPay(argv: string[], deps: PayDeps): Promise<number> {
+export async function runPay(argv: string[], deps: CliDeps): Promise<number> {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
