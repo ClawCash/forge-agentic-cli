@@ -15,6 +15,8 @@
     "start:server": "node --env-file-if-exists=.env --experimental-strip-types server/src/index.ts",
     "reviews": "node --env-file-if-exists=.env --experimental-strip-types cli/src/index.ts",
     "wallet:new": "node --experimental-strip-types scripts/new-wallet.ts",
+    "services:register": "node --env-file-if-exists=.env --experimental-strip-types scripts/register-services.ts",
+    "services:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-services.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"**/*.{ts,mjs}\"",
     "test": "node --experimental-strip-types --test tests/*.test.mjs"
