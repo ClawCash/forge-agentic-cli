@@ -7,7 +7,8 @@
   },
   "workspaces": [
     "cli",
-    "server"
+    "server",
+    "app"
   ],
   "scripts": {
     "start": "node --env-file-if-exists=.env --experimental-strip-types server/src/index.ts",
@@ -19,9 +20,11 @@
     "services:register": "node --env-file-if-exists=.env --experimental-strip-types scripts/register-services.ts",
     "services:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-services.ts",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write \"**/*.{ts,mjs}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,mjs}\"",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "dev:app": "npm run dev -w app",
+    "build:app": "npm run build -w app"
   },
   "devDependencies": {
     "@types/node": "^22",
