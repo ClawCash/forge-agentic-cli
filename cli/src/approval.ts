@@ -17,8 +17,18 @@ export async function requestApproval(
     agent: string
     details: Record<string, string>
   },
-  deps: CliDeps
+  deps: CliDeps,
+  // Resume waiting on an approval requested earlier (for example after the
+  // CLI was interrupted) instead of requesting a new one.
+  existingId?: string
 ): Promise<ApprovalResult> {
+  if (existingId) {
+    if (!/^apr_[0-9a-f-]{36}$/.test(existingId)) {
+      throw new Error(`Invalid approval id: ${existingId}`)
+    }
+    deps.stderr(`Waiting for approval ${server}/approvals/${existingId}\n`)
+    return waitFor(existingId, `${server}/approvals/${existingId}/status`, deps)
+  }
   const res = await deps.fetch(`${server}/approvals`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -47,20 +57,23 @@ export async function requestApproval(
     )
     deps.stderr(`${created.approvalUrl}\nWaiting for approval…\n`)
   }
+  return waitFor(created.id, created.statusUrl, deps)
+}
 
+async function waitFor(
+  id: string,
+  statusUrl: string,
+  deps: CliDeps
+): Promise<ApprovalResult> {
   const deadline = Date.now() + (deps.approvalTimeoutMs ?? 11 * 60_000)
   while (true) {
-    const poll = await deps.fetch(created.statusUrl)
+    const poll = await deps.fetch(statusUrl)
     const status = (await poll.json().catch(() => ({}))) as ApprovalResult
     if (status.status && status.status !== "pending") {
-      return {
-        id: created.id,
-        status: status.status,
-        reason: status.reason ?? null,
-      }
+      return { id, status: status.status, reason: status.reason ?? null }
     }
     if (Date.now() > deadline) {
-      return { id: created.id, status: "expired", reason: "Timed out waiting" }
+      return { id, status: "expired", reason: "Timed out waiting" }
     }
     await new Promise((resolve) => setTimeout(resolve, deps.pollMs ?? 2000))
   }

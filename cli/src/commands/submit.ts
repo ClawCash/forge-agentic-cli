@@ -22,6 +22,7 @@ Options:
   --note <text>        Optional detail
   --server <url>       Reviews server (default: REVIEWS_SERVER or the demo server)
   --unverified         Skip the human approval (stored, not counted)
+  --approval <id>      Resume waiting on an approval requested earlier
 `
 
 export const DEFAULT_SERVER =
@@ -41,6 +42,7 @@ export async function runSubmit(
       note: { type: "string" },
       server: { type: "string" },
       unverified: { type: "boolean", default: false },
+      approval: { type: "string" },
     },
   })
   const [id] = positionals
@@ -88,7 +90,8 @@ export async function runSubmit(
           outcome: values.outcome,
         },
       },
-      deps
+      deps,
+      values.approval
     )
     if (approval.status === "approved") {
       approvalId = approval.id
