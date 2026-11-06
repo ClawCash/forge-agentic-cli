@@ -304,8 +304,16 @@ test("agents can request an approval, hand over the link, and finish later", asy
   )
   assert.equal(w.reputation.feedback.length, 0)
 
-  // The person approves; then the agent finishes the review.
+  // The agent shows the link as a QR code in the person's terminal, which
+  // waits until they approve; then the agent finishes the review.
+  assert.match(requested.stdout, new RegExp(`reviews qr ${approvalId}`))
+  const qr = w.cli("qr", approvalId)
   await actOnApproval(w.app, w.world, link, { person: "person-9" })
+  const shown = await qr
+  assert.equal(shown.code, 0, shown.stderr)
+  assert.ok(shown.stdout.includes(link), "the link is printed under the QR")
+  assert.match(shown.stdout, /[▀▄█]/, "a QR code is drawn")
+  assert.match(shown.stdout, /Approved with World ID/)
   const finished = await w.cli("submit", id, ...args, "--approval", approvalId)
   assert.equal(finished.code, 0, finished.stderr)
   assert.match(finished.stderr, /Approved with World ID/)

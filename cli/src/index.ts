@@ -2,6 +2,7 @@
 
 import { CHECK_USAGE, runCheck } from "./commands/check.ts"
 import { PAY_USAGE, runPay } from "./commands/pay.ts"
+import { QR_USAGE, runQr } from "./commands/qr.ts"
 import { runSubmit, SUBMIT_USAGE } from "./commands/submit.ts"
 import type { CliDeps } from "./deps.ts"
 import { hederaReputation } from "./reputation.ts"
@@ -12,6 +13,7 @@ Usage:
   reviews check <endpoint>... --task <tag>  Reviews for endpoints and a task
   reviews pay <endpoint> --agent <name>     Pay for one call and record the receipt
   reviews submit <interaction-id> ...       Review a paid interaction
+  reviews qr <approval-id>                  Show a World ID approval as a QR code
 
 Run "reviews <command> --help" for options.
 `
@@ -23,6 +25,7 @@ const COMMANDS: Record<
   check: { usage: CHECK_USAGE, run: runCheck },
   pay: { usage: PAY_USAGE, run: runPay },
   submit: { usage: SUBMIT_USAGE, run: runSubmit },
+  qr: { usage: QR_USAGE, run: runQr },
 }
 
 export async function run(argv: string[], deps?: CliDeps): Promise<number> {

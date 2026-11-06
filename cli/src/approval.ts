@@ -64,15 +64,20 @@ export async function requestApproval(
     deps.stderr(
       `\nA person must approve this with World ID. Scan to open the approval page:\n`
     )
-    qrcode.generate(created.approvalUrl!, { small: true }, (qr) =>
-      deps.stderr(`${qr}\n`)
-    )
+    deps.stderr(qrFor(created.approvalUrl!))
     deps.stderr(`${created.approvalUrl}\nWaiting for approval…\n`)
   }
   return waitFor(created.id, created.statusUrl, deps)
 }
 
-async function waitFor(
+// The link as a QR code drawn with terminal characters.
+export function qrFor(url: string): string {
+  let out = ""
+  qrcode.generate(url, { small: true }, (qr) => (out = `${qr}\n`))
+  return out
+}
+
+export async function waitFor(
   id: string,
   statusUrl: string,
   deps: CliDeps

@@ -114,6 +114,8 @@ export async function runSubmit(
       [
         "Approval requested. Ask the person to open this link and approve with World ID:",
         `  ${requested.approvalUrl}`,
+        "To show it as a QR code in a terminal, run:",
+        `  reviews qr ${requested.id}`,
         "When they have approved, finish the review with:",
         `  ${resume}`,
         "",
