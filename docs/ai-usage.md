@@ -70,3 +70,17 @@ This file records that, phase by phase.
   (`0.0.11345199` owner, `0.0.11345215` agent A, `0.0.11345228` agent B), registered both services on Hedera's
   ERC-8004 registry (agents 169 and 170), checked the live 402 terms against x402.org, and updated the Railway
   variables (new agent IDs, `ARC_RPC_URL` removed).
+- At the team's request, Claude moved 10 testnet USDC from the service owner to agent A (the faucet had funded the
+  owner instead), then ran the first settled Hedera payment: agent A → deployed demo API A, transaction
+  `0.0.9185802@1793998039.399470887`. The mirror node shows 0.01 USDC moving from agent A to the owner and the fee paid
+  by the x402.org facilitator.
+
+## Phases 5–6: writing and checking reviews
+
+- At the team's request, Claude added a Postgres database to the Railway project and pointed the service at it
+  through a private reference variable (the password never left Railway).
+- Claude read the reputation registry's ABI from the verified implementation (the same one, `0x16e0…dA34`, sits
+  behind the proxy on Hedera), then wrote the reviews API (Drizzle schema and migration, Postgres and in-memory
+  stores, submit/publish/list routes with the payment, payer and owner checks), `reviews submit` and `reviews check`,
+  and an end-to-end test of the whole story against a fake Hedera ledger and a fake reputation registry that emits real
+  `NewFeedback` logs. The Postgres store was also tested against a throwaway local Postgres.

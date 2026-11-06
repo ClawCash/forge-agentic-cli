@@ -9,9 +9,24 @@ Built at ETHGlobal Mumbai (5–7 November 2026) for the Hedera "AI Agents That P
 
 ## Status
 
-Phase 4: moved to Hedera. The demo APIs take USDC on Hedera testnet through the x402.org facilitator, and
-`reviews pay` pays from the agent's own Hedera account and checks the payment on the mirror node. `check` and `submit`
-are placeholders.
+Phases 5–6: agents pay (`reviews pay`), review what they paid for (`reviews submit`, written to ERC-8004 on Hedera),
+and check reviews before buying (`reviews check`). Next: World ID Agent Pass.
+
+## The loop
+
+```bash
+# 1. Before buying: what did earlier agents experience with these endpoints for this task?
+npm run reviews -- check https://forge-agentic-cli-production.up.railway.app/a/invoices/extract \
+  https://forge-agentic-cli-production.up.railway.app/b/invoices/extract --task invoice-extraction:hi
+
+# 2. Buy one call from the agent's own Hedera account.
+npm run reviews -- pay https://forge-agentic-cli-production.up.railway.app/b/invoices/extract \
+  --agent b --json "$(jq -Rs '{text: .}' tests/fixtures/hindi-invoice.txt)"
+
+# 3. Review it.
+npm run reviews -- submit <interaction-id> --task invoice-extraction:hi --outcome success \
+  --reason "All 4 line items, totals match"
+```
 
 ## Paying for a call
 
@@ -33,6 +48,39 @@ as one object).
 Each call is recorded as an interaction in `~/.config/forge-agentic-cli/interactions/` (override with `REVIEWS_HOME`):
 endpoint, method, request and response hashes, price, timings, HTTP status, settlement transaction, and the mirror
 node check. The response body is kept locally for the agent and never published.
+
+First settled Hedera payment (agent A `0.0.11345215` → demo API A, Hindi invoice, 0.01 USDC to `0.0.11345199`, fee paid
+by the x402.org facilitator `0.0.9185802`): Hedera transaction ID `0.0.9185802@1793998039.399470887`
+([HashScan](https://hashscan.io/testnet/transaction/0.0.9185802@1793998039.399470887)). API A returned two of the four
+line items.
+
+## Reviewing a call
+
+`reviews submit <interaction-id> --task <tag> --outcome success|partial|failure --reason <text>` sends the review to
+the reviews server, which accepts it only if:
+
+- the endpoint resolves to a verified ERC-8004 agent on Hedera,
+- the account that paid is the reviewer (its EVM address is the reviewing key's address),
+- the payment went to the agent's ERC-8004 owner, and
+- the Hedera mirror node confirms the transfer.
+
+One payment backs at most one review. The server stores the review document and returns its URL and keccak256 hash;
+the agent then calls `giveFeedback` on the ERC-8004 reputation registry from its own key, with the score (success
+100, partial 50, failure 0), the task as `tag1`, the outcome as `tag2`, and the URL and hash. The server marks the
+review published once it finds that `NewFeedback` event onchain. The document separates what the agent reported
+(outcome, reason) from what its CLI measured (status, latency, size) and what the server verified (the payment).
+
+Reviews API: `POST /reviews`, `POST /reviews/:id/publish`, `GET /reviews/:id.json` (the feedbackURI),
+`GET /reviews?endpoint=<url>&task=<tag>`. Reviews are stored in Postgres (`DATABASE_URL`; schema in
+[server/src/db/schema.ts](server/src/db/schema.ts), migrations in `drizzle/`).
+
+## Checking before buying
+
+`reviews check <endpoint>... --task <tag>` resolves each endpoint's identity itself (it does not take the server's
+word for it), reads that agent's reviews for the task from the reputation registry onchain, and joins the details from
+the reviews server. Each endpoint gets a verdict: recommended (average ≥ 50), avoid, or unknown (no reviews). With
+several endpoints it suggests one. Trust is the reader's choice: only reviewers in `--reviewers` or
+`TRUSTED_REVIEWERS` count, or anyone when the list is empty. `--output json` is for agents.
 
 ## Demo seller APIs
 
