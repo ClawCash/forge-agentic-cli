@@ -65,25 +65,27 @@ export async function world({ approvalTtlMs } = {}) {
     },
   })
   const home = mkdtempSync(join(tmpdir(), "reviews-flow-"))
+  // CLI dependencies wired to this in-process world; output goes to `out`.
+  const deps = (out = { stdout: "", stderr: "" }) => ({
+    fetch: fetchApp,
+    env: {
+      AGENT_A_PRIVATE_KEY: agentAKey,
+      AGENT_B_PRIVATE_KEY: agentBKey,
+      REVIEWS_HOME: home,
+      REVIEWS_SERVER: BASE,
+    },
+    stdout: (t) => (out.stdout += t),
+    stderr: (t) => (out.stderr += t),
+    mirror: ledger.mirror,
+    reputation,
+    pollMs: 1,
+    showApproval: async (url) => {
+      await actOnApproval(app, world, url, human)
+    },
+  })
   async function cli(...argv) {
     const out = { stdout: "", stderr: "" }
-    const code = await run(argv, {
-      fetch: fetchApp,
-      env: {
-        AGENT_A_PRIVATE_KEY: agentAKey,
-        AGENT_B_PRIVATE_KEY: agentBKey,
-        REVIEWS_HOME: home,
-        REVIEWS_SERVER: BASE,
-      },
-      stdout: (t) => (out.stdout += t),
-      stderr: (t) => (out.stderr += t),
-      mirror: ledger.mirror,
-      reputation,
-      pollMs: 1,
-      showApproval: async (url) => {
-        await actOnApproval(app, world, url, human)
-      },
-    })
+    const code = await run(argv, deps(out))
     return { code, ...out }
   }
   const lastInteractionId = () =>
@@ -97,6 +99,7 @@ export async function world({ approvalTtlMs } = {}) {
   return {
     app,
     cli,
+    deps,
     human,
     world,
     store,
