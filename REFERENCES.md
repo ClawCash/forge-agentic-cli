@@ -20,8 +20,8 @@ These were read as references only. Their ideas shaped this project; their code 
 
 - [x402](https://github.com/x402-foundation/x402): HTTP payment protocol
 - [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004): trustless agents (identity, reputation, validation registries)
-- [Arc](https://docs.arc.io): ERC-8004 registry deployments and USDC on Arc testnet
-- [Circle Agent Marketplace Discovery API](https://developers.circle.com/agent-stack/agent-marketplace/discovery-api)
+- [Hedera](https://docs.hedera.com) and [`@x402/hedera`](https://www.npmjs.com/package/@x402/hedera): x402 payments in
+  USDC on Hedera testnet, settled through the [x402.org facilitator](https://x402.org/facilitator)
 - [Hono](https://hono.dev), [viem](https://viem.sh)
 
 ## AI assistance

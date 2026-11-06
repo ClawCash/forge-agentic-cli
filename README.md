@@ -2,16 +2,16 @@
 
 Reviews for x402 APIs, written and read by agents. Before an agent buys an API call, it checks what earlier agents
 experienced with that endpoint for the same task. After the call, it leaves a review backed by payment evidence.
-Reputation is recorded through ERC-8004, starting on Arc testnet.
+Everything runs on Hedera testnet: x402 payments in USDC, and ERC-8004 identities and reputation.
 
-Built at ETHGlobal Mumbai (5–7 November 2026). See [the spec](docs/spec.md), [the build plan](docs/plan.md), and
-[prior work and references](REFERENCES.md).
+Built at ETHGlobal Mumbai (5–7 November 2026) for the Hedera "AI Agents That Pay" and World ID Agent Pass tracks. See
+[the spec](docs/spec.md), [the build plan](docs/plan.md), and [prior work and references](REFERENCES.md).
 
 ## Status
 
-Phase 3: both demo services have ERC-8004 identities on Arc testnet, and endpoints resolve to them through a
-two-way check. `reviews pay` pays from the agent's own wallet and records a verified receipt. `check` and `submit` are
-placeholders.
+Phase 4: moved to Hedera. The demo APIs take USDC on Hedera testnet through the x402.org facilitator, and
+`reviews pay` pays from the agent's own Hedera account and checks the payment on the mirror node. `check` and `submit`
+are placeholders.
 
 ## Paying for a call
 
@@ -20,19 +20,19 @@ npm run reviews -- pay https://forge-agentic-cli-production.up.railway.app/a/inv
   --agent a --json "$(jq -Rs '{text: .}' tests/fixtures/hindi-invoice.txt)"
 ```
 
-`--agent a` pays from `AGENT_A_PRIVATE_KEY`, the same wallet that will sign the agent's review. The CLI reads the 402
-terms, refuses networks and tokens it doesn't know and anything above `--max-usd` (default $0.10), signs a USDC
-authorization, retries, and reads the settlement receipt. It then checks onchain that the transaction moved exactly
-the advertised amount of USDC from the agent to the merchant. The response body goes to stdout and the receipt to
-stderr (`--output json` prints both as one object).
+`--agent a` pays from `AGENT_A_PRIVATE_KEY`. It is an ECDSA key: on Hedera it controls an account (`0.0.x`, looked up
+on the mirror node) whose EVM address is the same key's address, so the account that pays is the address that later
+signs the agent's review.
+
+The CLI reads the 402 terms, refuses networks and tokens it doesn't know and anything above `--max-usd` (default
+$0.10), signs a USDC transfer with the facilitator as fee payer, retries, and reads the settlement receipt. It then
+checks on the Hedera mirror node that the transaction moved exactly the advertised amount of USDC from the agent's
+account to the merchant's. The response body goes to stdout and the receipt to stderr (`--output json` prints both
+as one object).
 
 Each call is recorded as an interaction in `~/.config/forge-agentic-cli/interactions/` (override with `REVIEWS_HOME`):
-endpoint, method, request and response hashes, price, timings, HTTP status, settlement transaction, and the onchain
-check. The response body is kept locally for the agent and never published.
-
-First real payment (Arc testnet, agent A → demo API A, Hindi invoice):
-[0x79bb76d5…6cf1](https://explorer.testnet.arc.io/tx/0x79bb76d5bc50853d4eca57483738cd290695c9f6106641147fc943f0469d6cf1).
-API A returned two of the four line items.
+endpoint, method, request and response hashes, price, timings, HTTP status, settlement transaction, and the mirror
+node check. The response body is kept locally for the agent and never published.
 
 ## Demo seller APIs
 
@@ -43,26 +43,22 @@ items. Only reviews can tell an agent that.
 
 | Path | Price | Notes |
 |---|---|---|
-| `POST /a/invoices/extract` | $0.01 USDC, Arc testnet | Drops non-ASCII line items |
-| `POST /b/invoices/extract` | $0.01 USDC, Arc testnet | Handles any script |
+| `POST /a/invoices/extract` | $0.01 USDC, Hedera testnet | Drops non-ASCII line items |
+| `POST /b/invoices/extract` | $0.01 USDC, Hedera testnet | Handles any script |
 | `GET /a/agent-registration.json`, `GET /b/agent-registration.json` | free | ERC-8004 registration files |
 | `GET /.well-known/agent-registration.json` | free | ERC-8004 endpoint domain verification |
 
-Unpaid calls get `402 Payment Required` with x402 v2 terms. No public facilitator supports Arc testnet, so the server
-settles payments itself: it verifies the buyer's signed EIP-3009 USDC authorization and submits it onchain from the
-service owner's wallet, which also receives the payment. Each paid call therefore has its own transaction hash.
+Unpaid calls get `402 Payment Required` with x402 v2 terms: USDC (`0.0.429274`) to the service owner's Hedera account.
+The [x402.org facilitator](https://x402.org/facilitator) verifies and settles each payment and pays the network fee
+(its account is advertised as `extra.feePayer`), so every paid call has its own Hedera transaction.
 
-`PUBLIC_BASE_URL` overrides the public origin (on Railway it comes from `RAILWAY_PUBLIC_DOMAIN`).
+`PUBLIC_BASE_URL` overrides the public origin (on Railway it comes from `RAILWAY_PUBLIC_DOMAIN`). The merchant account
+is looked up from `SERVICE_OWNER_PRIVATE_KEY` unless `SERVICE_OWNER_HEDERA_ACCOUNT_ID` is set.
 
 ## Service identities (ERC-8004)
 
-Both services are registered on Arc testnet's ERC-8004 identity registry
-(`0x8004A818BFB912233c491871b3d84c89A494BD9e`), owned by the service owner wallet:
-
-| Service | Agent ID | Registration |
-|---|---|---|
-| Demo Invoice API A | 897804 | [0x13da835b…9053](https://explorer.testnet.arc.io/tx/0x13da835b657ff9d591b72d321a2b2cb2b1256f2f97b51fc25a5ec9c3c0439053) |
-| Demo Invoice API B | 897805 | [0x0cb19488…1f37](https://explorer.testnet.arc.io/tx/0x0cb194880fec61701c1e7d07ac9d5b1f67c33d78c88312afff20d8ce5e4b1f37) |
+Both services are registered on Hedera testnet's ERC-8004 identity registry
+(`0x8004A818BFB912233c491871b3d84c89A494BD9e`, chain 296), owned by the service owner.
 
 ```bash
 npm run services:register -- --save   # registers anything not yet registered, writes the IDs to .env
@@ -80,7 +76,8 @@ registration file listing this exact endpoint and the same registration. Otherwi
 
 - `cli/`: the `reviews` command (`check`, `pay`, `submit`)
 - `server/`: demo seller APIs and the reviews API (Hono)
-- `shared/`: code used by both, such as networks and the onchain payment check
+- `shared/`: code used by both: Hedera network settings, mirror node lookups, the payment check, ERC-8004
+- `scripts/`: wallet, funding, and registration helpers
 - `tests/`: `node:test` suites
 - `docs/`: spec, phase plan, and the AI-usage log
 
@@ -105,7 +102,10 @@ npm run wallet:new -- --save AGENT_A_PRIVATE_KEY
 npm run wallet:new        # print a new address and private key instead
 ```
 
-Fund the printed addresses on Arc testnet at https://faucet.circle.com. Never send real funds to these wallets.
+Each wallet becomes a Hedera account when testnet HBAR is sent to its EVM address
+([Hedera faucet](https://portal.hedera.com/faucet)). Then get testnet USDC at https://faucet.circle.com (Hedera
+Testnet). `npm run hedera:status` shows each wallet's account, HBAR and USDC; add `-- --associate` to associate USDC
+where it is missing. Never send real funds to these wallets.
 
 ## Deployment
 

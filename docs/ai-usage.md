@@ -7,7 +7,6 @@ This file records that, phase by phase.
 
 - **Claude Code** (Claude Opus 5.5): research, planning, and writing code under the team's direction. The team reviews
   every change and makes every commit.
-- **Arc Studio**: used for the Arc-specific app pieces (from Phase 8).
 
 ## Planning (5–6 November 2026)
 
@@ -57,3 +56,13 @@ This file records that, phase by phase.
   check with tests, and moved the registry constants into `shared/`.
 - Claude registered both demo services on Arc testnet from the service owner wallet (agents 897804 and 897805),
   saved the IDs to `.env`, and mirrored them to the Railway service as earlier `.env` values were.
+
+## Phase 4: moving to Hedera
+
+- The team dropped Arc: without a mobile consumer app no Arc prize track fit. Claude checked the alternatives:
+  World Chain has no ERC-8004 registries and no x402 USDC defaults, while Hedera testnet has the registries at the
+  same addresses and x402.org settles `hedera:testnet` payments and pays the fees. The team chose Hedera and World ID.
+- Claude rewrote the payment path for Hedera with `@x402/hedera` (the server delegates settlement to x402.org; the CLI
+  signs a USDC transfer from the agent's Hedera account, found on the mirror node from its key's EVM address),
+  replaced the EVM receipt check with a mirror node check, pointed the ERC-8004 code at Hedera, removed the Arc code,
+  and added `hedera:status` for funding and USDC association. The Arc-era entries above are kept as history.
