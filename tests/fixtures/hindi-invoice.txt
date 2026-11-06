@@ -1,0 +1,9 @@
+Invoice INV-2026-0042
+Vendor: Sharma Traders, Mumbai
+Currency: INR
+Items:
+Basmati rice 5kg | 2 | 650.00
+चाय पत्ती 1kg | 3 | 420.00
+Toor dal 1kg | 4 | 140.00
+हल्दी पाउडर 200g | 2 | 85.50
+Total: 3291.00
