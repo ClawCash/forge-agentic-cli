@@ -4,6 +4,7 @@ import { Hono } from "hono"
 import { createPublicClient, http } from "viem"
 import { z } from "zod"
 import { HEDERA_TESTNET } from "../../shared/src/networks.ts"
+import { approvalRoutes } from "./approvals.ts"
 import { loadConfig, type ServerConfig } from "./config.ts"
 import { memoryStore, postgresStore } from "./db/store.ts"
 import { DEMO_APIS } from "./demo-apis.ts"
@@ -16,6 +17,7 @@ import {
   wellKnownRegistration,
 } from "./registration.ts"
 import { type ReviewDeps, reviewRoutes } from "./reviews.ts"
+import { type WorldSignIn, worldSignIn } from "./world.ts"
 
 const InvoiceRequest = z.object({ text: z.string().min(1).max(20_000) })
 
@@ -24,6 +26,8 @@ export function createApp(
   deps: {
     facilitator?: FacilitatorClient
     reviews?: Omit<ReviewDeps, "baseUrl">
+    world?: WorldSignIn | null
+    approvalTtlMs?: number
   } = {}
 ) {
   const app = new Hono()
@@ -54,6 +58,15 @@ export function createApp(
   }
 
   if (deps.reviews) {
+    app.route(
+      "/",
+      approvalRoutes({
+        store: deps.reviews.store,
+        baseUrl: config.baseUrl,
+        world: deps.world ?? null,
+        ttlMs: deps.approvalTtlMs,
+      })
+    )
     app.route("/", reviewRoutes({ ...deps.reviews, baseUrl: config.baseUrl }))
   }
 
@@ -71,7 +84,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     chain: HEDERA_TESTNET.evmChain,
     transport: http(process.env.HEDERA_RPC_URL ?? HEDERA_TESTNET.evmRpcUrl),
   })
+  const world =
+    process.env.WORLD_CLIENT_ID && process.env.WORLD_CLIENT_SECRET
+      ? worldSignIn({
+          issuer: process.env.WORLD_ISSUER ?? "https://auth.world.org",
+          clientId: process.env.WORLD_CLIENT_ID,
+          clientSecret: process.env.WORLD_CLIENT_SECRET,
+          redirectUri: `${config.baseUrl}/approvals/callback`,
+        })
+      : (console.warn("WORLD_CLIENT_ID is not set; human approvals are off"),
+        null)
   const app = createApp(config, {
+    world,
     reviews: {
       store,
       fetch,

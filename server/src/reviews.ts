@@ -14,7 +14,9 @@ import {
   resolveEndpointIdentity,
 } from "../../shared/src/identity.ts"
 import { HEDERA_TESTNET } from "../../shared/src/networks.ts"
+import { consumeApproval } from "./approvals.ts"
 import {
+  DuplicateHumanReviewError,
   DuplicateReviewError,
   type ReviewStore,
   type StoredReview,
@@ -70,6 +72,12 @@ const ReviewDraft = z.object({
     requestSha256: z.string().max(64).nullable(),
     responseSha256: z.string().max(64),
   }),
+  // A World ID approval for this review; without one the review is stored as
+  // not human-verified and is not counted.
+  approvalId: z
+    .string()
+    .regex(/^apr_[0-9a-f-]{36}$/)
+    .optional(),
 })
 
 const same = (a: string | null | undefined, b: string | null | undefined) =>
@@ -96,6 +104,7 @@ function publicReview(row: StoredReview, baseUrl: string) {
       evidence: doc.evidence?.payment ?? null,
     },
     observed: doc.observed ?? null,
+    humanVerified: row.humanVerified,
   }
 }
 
@@ -157,6 +166,28 @@ export function reviewRoutes(deps: ReviewDeps) {
       return reject(`Payment not verified: ${evidence.reason}`)
     }
 
+    // Consumed only after every other check passed, so a refused review
+    // does not burn the person's approval.
+    let approval = null
+    if (draft.approvalId) {
+      const result = await consumeApproval(
+        deps.store,
+        draft.approvalId,
+        {
+          agent: draft.reviewer,
+          action: "review",
+          details: {
+            endpoint: draft.endpoint,
+            task: draft.task,
+            outcome: draft.outcome,
+          },
+        },
+        new Date()
+      )
+      if ("error" in result) return reject(`Approval refused: ${result.error}`)
+      approval = result
+    }
+
     const id = `rev_${randomUUID()}`
     const value = OUTCOME_VALUES[draft.outcome]
     // The offchain feedback file (ERC-8004 recommended fields first). What the
@@ -193,6 +224,14 @@ export function reviewRoutes(deps: ReviewDeps) {
           consensusTimestamp: evidence.consensusTimestamp,
           reviewerIsPayer: true,
           paidServiceOwner: true,
+          humanApproval: approval
+            ? {
+                verified: true,
+                provider: "World ID Agent Pass",
+                acr: approval.acr,
+                approvedAt: approval.decidedAt?.toISOString() ?? null,
+              }
+            : { verified: false },
         },
         interaction: draft.interaction,
       },
@@ -212,6 +251,9 @@ export function reviewRoutes(deps: ReviewDeps) {
         paymentTransaction: draft.payment.transactionId,
         document,
         documentHash: keccak256(stringToBytes(document)),
+        humanVerified: approval !== null,
+        humanSubject: approval?.humanSubject ?? null,
+        approvalId: approval?.id ?? null,
       })
       return c.json(
         {
@@ -223,11 +265,15 @@ export function reviewRoutes(deps: ReviewDeps) {
           endpoint: row.endpoint,
           feedbackURI: `${deps.baseUrl}/reviews/${row.id}.json`,
           feedbackHash: row.documentHash,
+          humanVerified: row.humanVerified,
         },
         201
       )
     } catch (error) {
-      if (error instanceof DuplicateReviewError) {
+      if (
+        error instanceof DuplicateReviewError ||
+        error instanceof DuplicateHumanReviewError
+      ) {
         return c.json({ error: error.message }, 409)
       }
       throw error
