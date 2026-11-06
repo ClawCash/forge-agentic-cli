@@ -5,6 +5,7 @@ export interface ApprovalResult {
   id: string
   status: "approved" | "denied" | "expired" | "consumed" | "pending"
   reason: string | null
+  approvalUrl?: string
 }
 
 // Asks the reviews server for a person's approval of one agent action, shows
@@ -20,7 +21,10 @@ export async function requestApproval(
   deps: CliDeps,
   // Resume waiting on an approval requested earlier (for example after the
   // CLI was interrupted) instead of requesting a new one.
-  existingId?: string
+  existingId?: string,
+  // false: request the approval and return at once (status "pending"), for
+  // agents whose tools only show output when a command finishes.
+  wait = true
 ): Promise<ApprovalResult> {
   if (existingId) {
     if (!/^apr_[0-9a-f-]{36}$/.test(existingId)) {
@@ -46,6 +50,14 @@ export async function requestApproval(
     )
   }
 
+  if (!wait) {
+    return {
+      id: created.id,
+      status: "pending",
+      reason: null,
+      approvalUrl: created.approvalUrl,
+    }
+  }
   if (deps.showApproval) {
     await deps.showApproval(created.approvalUrl!)
   } else {

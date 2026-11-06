@@ -23,6 +23,8 @@ Options:
   --server <url>       Reviews server (default: REVIEWS_SERVER or the demo server)
   --unverified         Skip the human approval (stored, not counted)
   --approval <id>      Resume waiting on an approval requested earlier
+  --no-wait            Request the approval, print its link and exit; finish
+                       later with --approval <id> (for agents)
 `
 
 export const DEFAULT_SERVER =
@@ -43,6 +45,7 @@ export async function runSubmit(
       server: { type: "string" },
       unverified: { type: "boolean", default: false },
       approval: { type: "string" },
+      "no-wait": { type: "boolean", default: false },
     },
   })
   const [id] = positionals
@@ -78,6 +81,46 @@ export async function runSubmit(
 
   // A person approves this exact review (endpoint, task, outcome) first.
   let approvalId: string | undefined
+  if (!values.unverified && values["no-wait"] && !values.approval) {
+    const requested = await requestApproval(
+      server,
+      {
+        action: "review",
+        agent: agent.account.address,
+        details: {
+          endpoint: interaction.request.endpoint,
+          task: values.task,
+          outcome: values.outcome,
+        },
+      },
+      deps,
+      undefined,
+      false
+    )
+    const resume = [
+      "reviews submit",
+      id,
+      "--task",
+      values.task,
+      "--outcome",
+      values.outcome,
+      "--reason",
+      JSON.stringify(values.reason),
+      ...(values.note ? ["--note", JSON.stringify(values.note)] : []),
+      "--approval",
+      requested.id,
+    ].join(" ")
+    deps.stdout(
+      [
+        "Approval requested. Ask the person to open this link and approve with World ID:",
+        `  ${requested.approvalUrl}`,
+        "When they have approved, finish the review with:",
+        `  ${resume}`,
+        "",
+      ].join("\n")
+    )
+    return 0
+  }
   if (!values.unverified) {
     const approval = await requestApproval(
       server,

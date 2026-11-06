@@ -269,3 +269,47 @@ test("a payment above the cap waits for a person's approval", async () => {
   assert.equal(noAsk.code, 1)
   assert.match(noAsk.stderr, /above --max-usd 0\.005\n/)
 })
+
+test("agents can request an approval, hand over the link, and finish later", async () => {
+  const w = await world()
+  await w.cli("pay", B, "--agent", "b", "--json", body)
+  const id = w.lastInteractionId()
+  const args = [
+    "--task",
+    TASK,
+    "--outcome",
+    "success",
+    "--reason",
+    "All 4 line items",
+  ]
+
+  // Step 1 returns at once with the link and the command that finishes it.
+  const requested = await w.cli("submit", id, ...args, "--no-wait")
+  assert.equal(requested.code, 0, requested.stderr)
+  const link = /(https:\/\/\S+\/approvals\/apr_[0-9a-f-]{36})/.exec(
+    requested.stdout
+  )?.[1]
+  const approvalId = /--approval (apr_[0-9a-f-]{36})/.exec(
+    requested.stdout
+  )?.[1]
+  assert.ok(link && approvalId, requested.stdout)
+  assert.match(
+    requested.stdout,
+    new RegExp(`reviews submit ${id} --task ${TASK}`)
+  )
+  assert.equal(
+    (await w.store.list({ agentId: "8" })).length,
+    0,
+    "nothing stored yet"
+  )
+  assert.equal(w.reputation.feedback.length, 0)
+
+  // The person approves; then the agent finishes the review.
+  await actOnApproval(w.app, w.world, link, { person: "person-9" })
+  const finished = await w.cli("submit", id, ...args, "--approval", approvalId)
+  assert.equal(finished.code, 0, finished.stderr)
+  assert.match(finished.stderr, /Approved with World ID/)
+  assert.equal(w.reputation.feedback.length, 1)
+  const [review] = await w.store.list({ agentId: "8" })
+  assert.equal(review.humanVerified, true)
+})

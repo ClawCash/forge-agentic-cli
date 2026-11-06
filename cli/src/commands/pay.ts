@@ -25,6 +25,7 @@ The response body goes to stdout; the receipt summary goes to stderr.
 
 Options:
   --agent <name>       Wallet to pay from: AGENT_<NAME>_PRIVATE_KEY
+                       (default: REVIEWS_AGENT)
   --json <body>        JSON request body (sent as POST)
   --body-file <path>   Read the JSON request body from a file
   --method <method>    HTTP method (default: POST with a body, else GET)
@@ -75,12 +76,13 @@ export async function runPay(argv: string[], deps: CliDeps): Promise<number> {
     },
   })
   const [endpoint] = positionals
-  if (!endpoint || !values.agent) {
+  const agentName = values.agent ?? deps.env.REVIEWS_AGENT
+  if (!endpoint || !agentName) {
     deps.stderr(PAY_USAGE)
     return 1
   }
   const url = new URL(endpoint)
-  const agent = loadAgent(values.agent, deps.env)
+  const agent = loadAgent(agentName, deps.env)
   const body =
     values.json ??
     (values["body-file"]
