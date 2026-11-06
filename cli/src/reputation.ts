@@ -1,8 +1,10 @@
 import {
   createPublicClient,
   createWalletClient,
+  encodeFunctionData,
   type Hex,
   http,
+  keccak256,
   type PublicClient,
 } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
@@ -21,24 +23,49 @@ export interface FeedbackEntry {
   revoked: boolean
 }
 
+export interface FeedbackArgs {
+  agentId: bigint
+  value: number
+  tag1: string
+  tag2: string
+  endpoint: string
+  feedbackURI: string
+  feedbackHash: Hex
+}
+
+export interface SignedFeedback {
+  hash: Hex
+  raw: Hex
+  from: Hex
+  nonce: number
+}
+
+export class FeedbackDroppedError extends Error {
+  constructor(hash: Hex) {
+    super(
+      `Feedback transaction ${hash} was replaced by another and never landed`
+    )
+  }
+}
+
+// How long to look for a transaction that may already have reached the
+// network when sending it reported an error (Hedera's RPC relay can time out
+// while the transaction still goes through).
+const LANDING_GRACE_MS = 60_000
+
 // The ERC-8004 calls the CLI makes on Hedera testnet, behind one interface so
 // tests can swap in a fake chain.
 export interface ReputationChain {
   // Identity registry reads, for resolving an endpoint to its agent.
   registry: PublicClient | { readContract: PublicClient["readContract"] }
-  // Sends giveFeedback from the reviewer's key and waits for it to succeed.
-  giveFeedback(
-    privateKey: Hex,
-    args: {
-      agentId: bigint
-      value: number
-      tag1: string
-      tag2: string
-      endpoint: string
-      feedbackURI: string
-      feedbackHash: Hex
-    }
-  ): Promise<Hex>
+  // Signs a giveFeedback transaction from the reviewer's key without sending
+  // it, so the caller can keep it before it reaches the network.
+  signFeedback(privateKey: Hex, args: FeedbackArgs): Promise<SignedFeedback>
+  // Sends a signed giveFeedback transaction and waits for it to succeed.
+  // Safe to call again with the same transaction (after a timeout, say): its
+  // nonce lets it land at most once. Throws FeedbackDroppedError when another
+  // transaction from the reviewer took that nonce, so it can never land.
+  sendFeedback(signed: SignedFeedback): Promise<Hex>
   // Non-revoked feedback for an agent and task; all reviewers when
   // `clients` is empty.
   readFeedback(
@@ -55,28 +82,57 @@ export function hederaReputation(env = process.env): ReputationChain {
   const registry = HEDERA_TESTNET_REGISTRIES.reputation
   return {
     registry: client,
-    async giveFeedback(privateKey, args) {
-      const wallet = createWalletClient({
-        account: privateKeyToAccount(privateKey),
-        chain,
-        transport,
+    async signFeedback(privateKey, args) {
+      const account = privateKeyToAccount(privateKey)
+      const wallet = createWalletClient({ account, chain, transport })
+      const request = await wallet.prepareTransactionRequest({
+        to: registry,
+        data: encodeFunctionData({
+          abi: reputationRegistryAbi,
+          functionName: "giveFeedback",
+          args: [
+            args.agentId,
+            BigInt(args.value),
+            0,
+            args.tag1,
+            args.tag2,
+            args.endpoint,
+            args.feedbackURI,
+            args.feedbackHash,
+          ],
+        }),
       })
-      const hash = await wallet.writeContract({
-        address: registry,
-        abi: reputationRegistryAbi,
-        functionName: "giveFeedback",
-        args: [
-          args.agentId,
-          BigInt(args.value),
-          0,
-          args.tag1,
-          args.tag2,
-          args.endpoint,
-          args.feedbackURI,
-          args.feedbackHash,
-        ],
-      })
-      const receipt = await client.waitForTransactionReceipt({ hash })
+      const raw = await wallet.signTransaction(request)
+      return {
+        hash: keccak256(raw),
+        raw,
+        from: account.address,
+        nonce: request.nonce,
+      }
+    },
+    async sendFeedback(signed) {
+      const { hash } = signed
+      let receipt = await client
+        .getTransactionReceipt({ hash })
+        .catch(() => null)
+      if (!receipt) {
+        try {
+          await client.sendRawTransaction({ serializedTransaction: signed.raw })
+        } catch (error) {
+          // The send may have failed only on the way back: look for it.
+          receipt = await client
+            .waitForTransactionReceipt({ hash, timeout: LANDING_GRACE_MS })
+            .catch(() => null)
+          if (!receipt) {
+            const used = await client.getTransactionCount({
+              address: signed.from,
+            })
+            if (used > signed.nonce) throw new FeedbackDroppedError(hash)
+            throw error
+          }
+        }
+      }
+      receipt ??= await client.waitForTransactionReceipt({ hash })
       if (receipt.status !== "success") {
         throw new Error(`giveFeedback reverted: ${hash}`)
       }

@@ -1,15 +1,11 @@
 import { inspectHederaTransaction } from "@x402/hedera"
-import {
-  encodeAbiParameters,
-  encodeEventTopics,
-  keccak256,
-  stringToBytes,
-} from "viem"
+import { encodeAbiParameters, encodeEventTopics, keccak256 } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
 import {
   HEDERA_TESTNET_REGISTRIES,
   reputationRegistryAbi,
 } from "../../shared/src/erc8004.ts"
+import { FeedbackDroppedError } from "../../cli/src/reputation.ts"
 import { mirrorTransactionId } from "../../shared/src/hedera.ts"
 import { FEE_PAYER, HEDERA } from "./payments.mjs"
 
@@ -89,6 +85,60 @@ export function fakeLedger({ accounts }) {
 export function fakeReputation({ agentURIs, owner }) {
   const feedback = []
   const receipts = new Map()
+  // Signed giveFeedback transactions by hash, and each sender's next nonce.
+  const signed = new Map()
+  const nonces = new Map()
+  function land(hash, { args, from: client, nonce }) {
+    nonces.set(client, nonce + 1)
+    const index =
+      BigInt(
+        feedback.filter(
+          (f) => f.agentId === args.agentId && f.client === client
+        ).length
+      ) + 1n
+    const log = {
+      address: HEDERA_TESTNET_REGISTRIES.reputation,
+      topics: encodeEventTopics({
+        abi: reputationRegistryAbi,
+        eventName: "NewFeedback",
+        args: {
+          agentId: args.agentId,
+          clientAddress: client,
+          indexedTag1: args.tag1,
+        },
+      }),
+      data: encodeAbiParameters(
+        [
+          { type: "uint64" },
+          { type: "int128" },
+          { type: "uint8" },
+          { type: "string" },
+          { type: "string" },
+          { type: "string" },
+          { type: "string" },
+          { type: "bytes32" },
+        ],
+        [
+          index,
+          BigInt(args.value),
+          0,
+          args.tag1,
+          args.tag2,
+          args.endpoint,
+          args.feedbackURI,
+          args.feedbackHash,
+        ]
+      ),
+      blockNumber: 1n,
+      transactionHash: hash,
+      logIndex: 0,
+      blockHash: `0x${"cd".repeat(32)}`,
+      transactionIndex: 0,
+      removed: false,
+    }
+    receipts.set(hash, { status: "success", logs: [log] })
+    feedback.push({ ...args, client, index, hash })
+  }
   return {
     feedback,
     registry: {
@@ -104,57 +154,37 @@ export function fakeReputation({ agentURIs, owner }) {
         return receipts.get(hash)
       },
     },
-    async giveFeedback(privateKey, args) {
-      const client = privateKeyToAccount(privateKey).address
-      const index =
-        BigInt(
-          feedback.filter(
-            (f) => f.agentId === args.agentId && f.client === client
-          ).length
-        ) + 1n
-      const hash = keccak256(stringToBytes(`tx-${feedback.length}-${client}`))
-      const log = {
-        address: HEDERA_TESTNET_REGISTRIES.reputation,
-        topics: encodeEventTopics({
-          abi: reputationRegistryAbi,
-          eventName: "NewFeedback",
-          args: {
-            agentId: args.agentId,
-            clientAddress: client,
-            indexedTag1: args.tag1,
-          },
-        }),
-        data: encodeAbiParameters(
-          [
-            { type: "uint64" },
-            { type: "int128" },
-            { type: "uint8" },
-            { type: "string" },
-            { type: "string" },
-            { type: "string" },
-            { type: "string" },
-            { type: "bytes32" },
-          ],
-          [
-            index,
-            BigInt(args.value),
-            0,
-            args.tag1,
-            args.tag2,
-            args.endpoint,
-            args.feedbackURI,
-            args.feedbackHash,
-          ]
-        ),
-        blockNumber: 1n,
-        transactionHash: hash,
-        logIndex: 0,
-        blockHash: `0x${"cd".repeat(32)}`,
-        transactionIndex: 0,
-        removed: false,
+    // Makes the next sendFeedback fail like Hedera's RPC relay can:
+    // "timeout-before" (never reached the network), "timeout-after" (landed,
+    // but the reply was lost) or "dropped" (another transaction took the
+    // nonce first).
+    failNextSend: null,
+    async signFeedback(privateKey, args) {
+      const from = privateKeyToAccount(privateKey).address
+      const nonce = nonces.get(from) ?? 0
+      const raw = `0x${Buffer.from(
+        JSON.stringify({ ...args, agentId: String(args.agentId), from, nonce })
+      ).toString("hex")}`
+      const hash = keccak256(raw)
+      signed.set(hash, { args, from, nonce })
+      return { hash, raw, from, nonce }
+    },
+    async sendFeedback({ hash }) {
+      if (receipts.has(hash)) return hash
+      const tx = signed.get(hash)
+      const failure = this.failNextSend
+      this.failNextSend = null
+      if (failure === "timeout-before") {
+        throw new Error("The request took too long to respond.")
       }
-      receipts.set(hash, { status: "success", logs: [log] })
-      feedback.push({ ...args, client, index, hash })
+      if (failure === "dropped") nonces.set(tx.from, tx.nonce + 1)
+      if ((nonces.get(tx.from) ?? 0) > tx.nonce) {
+        throw new FeedbackDroppedError(hash)
+      }
+      land(hash, tx)
+      if (failure === "timeout-after") {
+        throw new Error("The request took too long to respond.")
+      }
       return hash
     },
     async readFeedback(agentId, clients, tag1) {

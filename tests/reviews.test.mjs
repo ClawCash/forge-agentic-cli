@@ -127,6 +127,115 @@ test("only trusted reviewers count when a list is given", async () => {
   assert.equal(checked.reports[0].reviews[0].trusted, false)
 })
 
+// Pays API B as agent B and returns a function that runs the matching
+// `reviews submit` (the same command each time, as a person would rerun it).
+async function paidReview(w) {
+  await w.cli(
+    "pay",
+    B,
+    "--agent",
+    "b",
+    "--json",
+    JSON.stringify({ text: hindiInvoice })
+  )
+  const id = w.lastInteractionId()
+  return () =>
+    w.cli(
+      "submit",
+      id,
+      "--task",
+      TASK,
+      "--outcome",
+      "success",
+      "--reason",
+      "All 4 line items, totals match"
+    )
+}
+
+test("submit resumes when the feedback transaction landed but the reply was lost", async () => {
+  const w = await world()
+  const submit = await paidReview(w)
+
+  w.reputation.failNextSend = "timeout-after"
+  const first = await submit()
+  assert.equal(first.code, 1)
+  assert.match(first.stderr, /The request took too long to respond/)
+  assert.match(first.stderr, /Run the same command again/)
+  assert.equal(w.reputation.feedback.length, 1)
+  const [row] = await w.store.list({ agentId: "8", task: TASK })
+  assert.equal(row.status, "pending")
+
+  // The rerun finds the stored review and the landed transaction: no new
+  // approval, nothing written twice.
+  const second = await submit()
+  assert.equal(second.code, 0, second.stderr)
+  assert.match(second.stderr, new RegExp(`Resuming review ${row.id}`))
+  assert.match(second.stderr, /Published as feedback #1/)
+  assert.equal(w.reputation.feedback.length, 1)
+  assert.equal((await w.store.get(row.id)).status, "published")
+
+  // Once published, a rerun only reports it.
+  const third = await submit()
+  assert.equal(third.code, 0, third.stderr)
+  assert.match(third.stderr, /Already published as feedback #1/)
+  assert.equal(w.reputation.feedback.length, 1)
+})
+
+test("submit resends the same transaction when the first send never arrived", async () => {
+  const w = await world()
+  const submit = await paidReview(w)
+
+  w.reputation.failNextSend = "timeout-before"
+  const first = await submit()
+  assert.equal(first.code, 1)
+  assert.equal(w.reputation.feedback.length, 0)
+  const [row] = await w.store.list({ agentId: "8", task: TASK })
+  const saved = JSON.parse(
+    readFileSync(join(w.home, "feedback", `${row.id}.json`), "utf8")
+  )
+
+  const second = await submit()
+  assert.equal(second.code, 0, second.stderr)
+  assert.match(second.stderr, /Published as feedback #1/)
+  assert.equal(w.reputation.feedback.length, 1)
+  assert.equal(w.reputation.feedback[0].hash, saved.hash)
+})
+
+test("submit signs a new transaction when another one took the nonce", async () => {
+  const w = await world()
+  const submit = await paidReview(w)
+
+  w.reputation.failNextSend = "dropped"
+  const result = await submit()
+  assert.equal(result.code, 0, result.stderr)
+  assert.match(result.stderr, /Published as feedback #1/)
+  assert.equal(w.reputation.feedback.length, 1)
+})
+
+test("a rerun with a different outcome does not resume the stored review", async () => {
+  const w = await world()
+  const submit = await paidReview(w)
+  w.reputation.failNextSend = "timeout-before"
+  await submit()
+
+  const other = await w.cli(
+    "submit",
+    w.lastInteractionId(),
+    "--task",
+    TASK,
+    "--outcome",
+    "failure",
+    "--reason",
+    "x"
+  )
+  assert.equal(other.code, 1)
+  assert.match(
+    other.stderr,
+    /already backs a review: rev_.+ \(invoice-extraction:hi: success\)/
+  )
+  assert.equal(w.reputation.feedback.length, 0)
+})
+
 test("the server refuses reviews it cannot back with a payment", async () => {
   const w = await world()
   const body = JSON.stringify({ text: hindiInvoice })

@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import type { PaymentEvidence } from "../../shared/src/evidence.ts"
+import type { SignedFeedback } from "./reputation.ts"
 
 // One paid (or attempted) call, recorded by `reviews pay` and reviewed later
 // with `reviews submit <id>`. Everything here was measured by the CLI, never
@@ -76,4 +77,34 @@ export function loadInteraction(id: string, env = process.env): Interaction {
   return JSON.parse(
     readFileSync(join(interactionsDir(env), `${id}.json`), "utf8")
   )
+}
+
+// The signed giveFeedback transaction for a review, kept before it is sent so
+// an interrupted `reviews submit` resumes with the same transaction instead of
+// signing a second one that could publish the review twice.
+function feedbackPath(reviewId: string, env = process.env) {
+  if (!/^rev_[0-9a-f-]{36}$/.test(reviewId))
+    throw new Error(`Invalid review id: ${reviewId}`)
+  const dir = join(reviewsHome(env), "feedback")
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  return join(dir, `${reviewId}.json`)
+}
+
+export function saveSignedFeedback(
+  reviewId: string,
+  signed: SignedFeedback,
+  env = process.env
+) {
+  writeFileSync(
+    feedbackPath(reviewId, env),
+    `${JSON.stringify(signed, null, 2)}\n`
+  )
+}
+
+export function loadSignedFeedback(
+  reviewId: string,
+  env = process.env
+): SignedFeedback | null {
+  const path = feedbackPath(reviewId, env)
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null
 }

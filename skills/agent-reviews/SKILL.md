@@ -84,6 +84,8 @@ npm run -s reviews -- submit <interaction-id> --task <tag> --outcome <outcome> -
   then shows "Approved". On the computer: open the link, and World shows its own QR code for World App.
 - Step 2 publishes the review onchain from your key and prints the HashScan link; share it. If it says the review
   was stored as unverified, the user denied or the approval expired: nothing was published.
+- If step 2 fails after approval (for example the Hedera RPC times out), run the same step 2 command again. It
+  finds the stored review and finishes publishing it, without a new approval and without publishing it twice.
 - One review per payment, and one counted review per person, service and task. If the server says the person already
   has a counted review, tell the user; don't retry with a different task tag.
 
