@@ -14,7 +14,7 @@
     "start": "node --env-file-if-exists=.env --experimental-strip-types server/src/index.ts",
     "dev:server": "node --env-file-if-exists=.env --experimental-strip-types --watch server/src/index.ts",
     "start:server": "node --env-file-if-exists=.env --experimental-strip-types server/src/index.ts",
-    "reviews": "node --env-file-if-exists=.env --experimental-strip-types cli/src/index.ts",
+    "reviews": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --experimental-strip-types cli/src/index.ts",
     "wallet:new": "node --experimental-strip-types scripts/new-wallet.ts",
     "hedera:status": "node --env-file-if-exists=.env --experimental-strip-types scripts/hedera-status.ts",
     "services:register": "node --env-file-if-exists=.env --experimental-strip-types scripts/register-services.ts",
@@ -25,7 +25,7 @@
     "db:generate": "drizzle-kit generate",
     "dev:app": "npm run dev -w app",
     "build:app": "npm run build -w app",
-    "demo": "node --env-file-if-exists=.env --experimental-strip-types scripts/demo/agent.ts"
+    "demo": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --experimental-strip-types scripts/demo/agent.ts"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -73,13 +73,41 @@ test("without reviews the agent repeats the trial; with them it avoids API A", a
   assert.equal(second.check.outcome, "success")
   assert.equal(second.interaction.evidence.status, "verified")
 
-  const text = lines.join("\n")
-  assert.match(text, /Taking the first listing/)
+  // Messages wrap at terminal width; compare with whitespace collapsed.
+  const text = lines.join(" ").replace(/\s+/g, " ")
+  // Agent A: no reviews, first listing, an honest failure.
   assert.match(
     text,
-    /Demo Invoice API A: 1 onchain review\(s\), average 0\/100 → avoid/
+    /I have no reviews to go on, so I'll try the first listing, Demo Invoice API A/
   )
-  assert.match(text, /"Dropped 2 of 4 line items/)
-  assert.match(text, /Chose Demo Invoice API B/)
-  assert.match(text, /Done: task completed with 1 paid call/)
+  assert.match(text, /● reviews pay\(Demo Invoice API A, cap \$0\.10\)/)
+  assert.match(
+    text,
+    /I couldn't complete the task\. Demo Invoice API A returned only 2 of the 4 line items/
+  )
+  assert.match(
+    text,
+    /Approved with World ID · written to Hedera as feedback #1/
+  )
+  // Agent B: checks reviews, avoids A for the reason given, delivers the result.
+  assert.match(
+    text,
+    /● reviews check\(2 endpoints, task invoice-extraction:hi\)/
+  )
+  assert.match(
+    text,
+    /Demo Invoice API A: 1 onchain review, average 0\/100 → avoid/
+  )
+  assert.match(
+    text,
+    /Demo Invoice API A has failed this exact task for other agents: "Dropped 2 of 4 line items/
+  )
+  assert.match(text, /I'll use Demo Invoice API B instead/)
+  assert.match(
+    text,
+    /Done\. Here are all 4 line items from INV-2026-0042 \(Sharma Traders, Mumbai\)/
+  )
+  assert.match(text, /हल्दी पाउडर 200g/)
+  assert.match(text, /One paid call, 0\.01 USDC/)
+  assert.doesNotMatch(text, /\u001b\[/, "no colour codes unless asked")
 })
