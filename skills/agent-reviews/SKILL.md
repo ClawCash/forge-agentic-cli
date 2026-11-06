@@ -27,7 +27,7 @@ npm run -s reviews -- <command> ...
 4. **Judge the result against the task**, not the API's description: are all requested items there, do the numbers
    add up, is the language or format right?
 5. **Offer a review.** Tell the user the outcome and the one-sentence reason you would publish, and that it needs
-   their World ID approval. If they agree, request the approval (see [Review](#review)), give them the link, and
+   their World ID approval. If they agree, request the approval (see [Review](#review)), show them the QR code and link, and
    wait for them to say they approved. Then finish the review and share the onchain link.
 
 ## Check
@@ -75,8 +75,13 @@ npm run -s reviews -- submit <interaction-id> --task <tag> --outcome <outcome> -
 npm run -s reviews -- submit <interaction-id> --task <tag> --outcome <outcome> --reason "<sentence>" --approval <apr_id>
 ```
 
-- Give the user the link from step 1: they open it, tap **Approve with World ID**, and sign in. If World App opens,
-  they approve there and return to the same browser tab, which then shows "Approved".
+- Show the user a QR code to scan with the phone that has World App: if you can run a command in the user's own
+  terminal (for example the Terminal panel in the Claude desktop app), run `npm run -s reviews -- qr <apr_id>` there,
+  from the root of this repository. It draws the QR code, waits, and prints "Approved with World ID" when they approve.
+  Don't run it with your own shell tool: the user would not see the QR, and it waits. Also give them the link from
+  step 1, for opening on the computer instead.
+- On the phone: scan, tap **Approve with World ID**, approve in World App, and return to the same browser tab, which
+  then shows "Approved". On the computer: open the link, and World shows its own QR code for World App.
 - Step 2 publishes the review onchain from your key and prints the HashScan link; share it. If it says the review
   was stored as unverified, the user denied or the approval expired: nothing was published.
 - One review per payment, and one counted review per person, service and task. If the server says the person already
