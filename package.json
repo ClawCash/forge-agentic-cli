@@ -10,9 +10,9 @@
     "server"
   ],
   "scripts": {
-    "start": "node --experimental-strip-types server/src/index.ts",
-    "dev:server": "node --experimental-strip-types --watch server/src/index.ts",
-    "start:server": "node --experimental-strip-types server/src/index.ts",
+    "start": "node --env-file-if-exists=.env --experimental-strip-types server/src/index.ts",
+    "dev:server": "node --env-file-if-exists=.env --experimental-strip-types --watch server/src/index.ts",
+    "start:server": "node --env-file-if-exists=.env --experimental-strip-types server/src/index.ts",
     "reviews": "node --experimental-strip-types cli/src/index.ts",
     "wallet:new": "node --experimental-strip-types scripts/new-wallet.ts",
     "typecheck": "tsc --noEmit",
