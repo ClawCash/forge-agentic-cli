@@ -13,6 +13,11 @@
     "isolatedModules": true,
     "types": ["node"]
   },
-  "include": ["cli/src/**/*.ts", "server/src/**/*.ts", "scripts/**/*.ts"],
+  "include": [
+    "cli/src/**/*.ts",
+    "server/src/**/*.ts",
+    "shared/src/**/*.ts",
+    "scripts/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }
