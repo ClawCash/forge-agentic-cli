@@ -34,8 +34,9 @@ export const LIVE = {
       ),
       document: `${SERVER_URL}/reviews/rev_8749a877-e6d1-4081-8f81-d4a18e9c00f3.json`,
     },
+    // Agent B's review of API B, approved with World ID.
     agentB: hashscan(
-      "0xf009a2cff33c6853b64e5c3e8a6cb6bb406a2ba93e163ba5493e289916678150"
+      "0x21353c9a4fe46dc067109834072302f8f6869a5e053aa515e279afe82ddf1efc"
     ),
   },
 }

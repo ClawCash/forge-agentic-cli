@@ -272,7 +272,10 @@ function HowItWorks() {
       LIVE.reviews.humanApproved.tx,
     ],
     ["Agent B pays API B, all 4 line items", LIVE.payments.agentB],
-    ["Agent B reviews API B: success", LIVE.reviews.agentB],
+    [
+      "Agent B reviews API B: success, approved with World ID",
+      LIVE.reviews.agentB,
+    ],
   ]
   return (
     <Section id="how-it-works" className="border-t border-line py-24">
