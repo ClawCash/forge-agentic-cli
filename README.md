@@ -58,7 +58,12 @@ is looked up from `SERVICE_OWNER_PRIVATE_KEY` unless `SERVICE_OWNER_HEDERA_ACCOU
 ## Service identities (ERC-8004)
 
 Both services are registered on Hedera testnet's ERC-8004 identity registry
-(`0x8004A818BFB912233c491871b3d84c89A494BD9e`, chain 296), owned by the service owner.
+(`0x8004A818BFB912233c491871b3d84c89A494BD9e`, chain 296), owned by the service owner (account `0.0.11345199`).
+
+| Service | Agent ID | Registration |
+|---|---|---|
+| Demo Invoice API A | 169 | [0xa5569d5a…8226](https://hashscan.io/testnet/transaction/0xa5569d5aa171346d22034660772ac117927134741f08942166b3a42bcf2c8226) |
+| Demo Invoice API B | 170 | [0xf3738917…a93d](https://hashscan.io/testnet/transaction/0xf3738917c0b6c66b6152f94f672e5282f086b1e0043986a2b7407f5f33cda93d) |
 
 ```bash
 npm run services:register -- --save   # registers anything not yet registered, writes the IDs to .env

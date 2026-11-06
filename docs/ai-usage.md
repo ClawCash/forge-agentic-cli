@@ -66,3 +66,7 @@ This file records that, phase by phase.
   signs a USDC transfer from the agent's Hedera account, found on the mirror node from its key's EVM address),
   replaced the EVM receipt check with a mirror node check, pointed the ERC-8004 code at Hedera, removed the Arc code,
   and added `hedera:status` for funding and USDC association. The Arc-era entries above are kept as history.
+- After the team funded the wallets with HBAR, Claude associated testnet USDC with the three Hedera accounts
+  (`0.0.11345199` owner, `0.0.11345215` agent A, `0.0.11345228` agent B), registered both services on Hedera's
+  ERC-8004 registry (agents 169 and 170), checked the live 402 terms against x402.org, and updated the Railway
+  variables (new agent IDs, `ARC_RPC_URL` removed).
