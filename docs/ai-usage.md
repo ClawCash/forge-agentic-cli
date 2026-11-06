@@ -39,3 +39,13 @@ This file records that, phase by phase.
   x402 paywall, the ERC-8004 registration files, and their tests.
 - `npm audit` reports a moderate advisory in `@hono/node-server`'s `serveStatic`, which this server does not use. The
   fix requires a major upgrade, so it was left as is.
+
+## Phase 2: paying from the agent's wallet
+
+- Claude wrote `reviews pay`, which drives the x402 steps itself instead of using the wrapped `fetch`, so it can time
+  the challenge and the paid call separately and read the settlement receipt. It also wrote the shared onchain payment
+  check, the local interaction store, and tests against a stand-in seller with a fake facilitator and fake receipts.
+- At the team's request, Claude ran the first real payment (agent A → deployed demo API A, Arc testnet) and confirmed
+  it against the chain: agent A's balance fell by exactly $0.01 and the service owner paid the gas. Arc emits two
+  `Transfer` events per USDC transfer (a system event in 18-decimal native units and the standard 6-decimal one at
+  `0x3600…`); the check matches the standard one.

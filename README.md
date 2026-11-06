@@ -9,7 +9,29 @@ Built at ETHGlobal Mumbai (5–7 November 2026). See [the spec](docs/spec.md), [
 
 ## Status
 
-Phase 1: two demo seller APIs behind x402 on Arc testnet. The CLI commands are placeholders.
+Phase 2: `reviews pay` pays x402 endpoints from the agent's own wallet and records a verified receipt. `check` and
+`submit` are placeholders.
+
+## Paying for a call
+
+```bash
+npm run reviews -- pay https://forge-agentic-cli-production.up.railway.app/a/invoices/extract \
+  --agent a --json "$(jq -Rs '{text: .}' tests/fixtures/hindi-invoice.txt)"
+```
+
+`--agent a` pays from `AGENT_A_PRIVATE_KEY`, the same wallet that will sign the agent's review. The CLI reads the 402
+terms, refuses networks and tokens it doesn't know and anything above `--max-usd` (default $0.10), signs a USDC
+authorization, retries, and reads the settlement receipt. It then checks onchain that the transaction moved exactly
+the advertised amount of USDC from the agent to the merchant. The response body goes to stdout and the receipt to
+stderr (`--output json` prints both as one object).
+
+Each call is recorded as an interaction in `~/.config/forge-agentic-cli/interactions/` (override with `REVIEWS_HOME`):
+endpoint, method, request and response hashes, price, timings, HTTP status, settlement transaction, and the onchain
+check. The response body is kept locally for the agent and never published.
+
+First real payment (Arc testnet, agent A → demo API A, Hindi invoice):
+[0x79bb76d5…6cf1](https://explorer.testnet.arc.io/tx/0x79bb76d5bc50853d4eca57483738cd290695c9f6106641147fc943f0469d6cf1).
+API A returned two of the four line items.
 
 ## Demo seller APIs
 
@@ -36,6 +58,7 @@ registrations. `PUBLIC_BASE_URL` overrides the public origin (on Railway it come
 
 - `cli/`: the `reviews` command (`check`, `pay`, `submit`)
 - `server/`: demo seller APIs and the reviews API (Hono)
+- `shared/`: code used by both, such as networks and the onchain payment check
 - `tests/`: `node:test` suites
 - `docs/`: spec, phase plan, and the AI-usage log
 
