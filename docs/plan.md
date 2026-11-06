@@ -25,8 +25,8 @@ Stretch, only if time allows: a small read-only merchant page served by the serv
 
 ## Phase 7: World ID Agent Pass
 
-Agent Pass is World's OpenID Connect sign-in at auth.world.org. Proofs currently use mocked identities, so production
-use must wait for World.
+Agent Pass is World's OpenID Connect sign-in at auth.world.org. The prize page warned that proofs might use mocked
+identities; the live approval on 6 November used a real Orb-verified World ID.
 
 Protected actions, both behind one approval checkpoint:
 
