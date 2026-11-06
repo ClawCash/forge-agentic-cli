@@ -1,6 +1,6 @@
 import {
-  ARC_TESTNET_IDENTITY_REGISTRY,
-  ARC_TESTNET_REGISTRIES,
+  HEDERA_TESTNET_IDENTITY_REGISTRY,
+  HEDERA_TESTNET_REGISTRIES,
   identityRegistryAbi,
 } from "./erc8004.ts"
 
@@ -67,7 +67,7 @@ export async function resolveEndpointIdentity(
   let claimed: Registration[]
   try {
     claimed = registrationsOf(await getJson(deps.fetch, wellKnown)).filter(
-      (r) => r.agentRegistry === ARC_TESTNET_IDENTITY_REGISTRY
+      (r) => r.agentRegistry === HEDERA_TESTNET_IDENTITY_REGISTRY
     )
   } catch (error) {
     return { status: "unknown", reason: (error as Error).message }
@@ -75,7 +75,7 @@ export async function resolveEndpointIdentity(
   if (claimed.length === 0) {
     return {
       status: "unknown",
-      reason: "The domain lists no Arc testnet ERC-8004 registration",
+      reason: "The domain lists no Hedera testnet ERC-8004 registration",
     }
   }
 
@@ -85,13 +85,13 @@ export async function resolveEndpointIdentity(
     try {
       const [agentURI, owner] = (await Promise.all([
         deps.registry.readContract({
-          address: ARC_TESTNET_REGISTRIES.identity,
+          address: HEDERA_TESTNET_REGISTRIES.identity,
           abi: identityRegistryAbi,
           functionName: "tokenURI",
           args: [agentId],
         }),
         deps.registry.readContract({
-          address: ARC_TESTNET_REGISTRIES.identity,
+          address: HEDERA_TESTNET_REGISTRIES.identity,
           abi: identityRegistryAbi,
           functionName: "ownerOf",
           args: [agentId],
@@ -108,13 +108,13 @@ export async function resolveEndpointIdentity(
       const listsRegistration = registrationsOf(file).some(
         (r) =>
           String(r.agentId) === agentId.toString() &&
-          r.agentRegistry === ARC_TESTNET_IDENTITY_REGISTRY
+          r.agentRegistry === HEDERA_TESTNET_IDENTITY_REGISTRY
       )
       if (listsEndpoint && listsRegistration) {
         return {
           status: "verified",
           agentId: agentId.toString(),
-          agentRegistry: ARC_TESTNET_IDENTITY_REGISTRY,
+          agentRegistry: HEDERA_TESTNET_IDENTITY_REGISTRY,
           owner,
           name: typeof file.name === "string" ? file.name : null,
           agentURI,

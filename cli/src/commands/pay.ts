@@ -3,9 +3,13 @@ import { readFileSync } from "node:fs"
 import { parseArgs } from "node:util"
 import { x402Client, x402HTTPClient } from "@x402/core/client"
 import type { PaymentRequirements } from "@x402/core/types"
-import { ExactEvmScheme } from "@x402/evm/exact/client"
-import { createPublicClient, type Address, type Hex, http } from "viem"
-import { checkPayment } from "../../../shared/src/evidence.ts"
+import { createClientHederaSigner, PrivateKey } from "@x402/hedera"
+import { ExactHederaScheme } from "@x402/hedera/exact/client"
+import {
+  checkPayment,
+  type EvidenceDeps,
+} from "../../../shared/src/evidence.ts"
+import { accountIdForAddress } from "../../../shared/src/hedera.ts"
 import {
   formatUsdc,
   PAYMENT_NETWORKS,
@@ -36,7 +40,8 @@ export interface PayDeps {
   env: NodeJS.ProcessEnv
   stdout: (text: string) => void
   stderr: (text: string) => void
-  receiptClient?: (network: string) => Parameters<typeof checkPayment>[0]
+  // Hedera mirror node access, for account lookups and the payment check.
+  mirror?: EvidenceDeps
 }
 
 function selectAccept(
@@ -101,9 +106,21 @@ export async function runPay(argv: string[], deps: PayDeps): Promise<number> {
     body === undefined ? {} : { "Content-Type": "application/json" }
   const maxUsd = values["max-usd"]
 
+  const mirror = deps.mirror ?? { fetch }
+  const accountId = await accountIdForAddress(agent.account.address, mirror)
+  if (!accountId) {
+    throw new Error(
+      `${agent.account.address} has no Hedera testnet account yet; send it testnet HBAR first`
+    )
+  }
+  const signer = createClientHederaSigner(
+    accountId,
+    PrivateKey.fromStringECDSA(agent.privateKey),
+    { network: "hedera:testnet" }
+  )
   const client = new x402Client().register(
-    "eip155:*",
-    new ExactEvmScheme(agent.account)
+    "hedera:*",
+    new ExactHederaScheme(signer)
   )
   const http402 = new x402HTTPClient(client)
 
@@ -159,33 +176,30 @@ export async function runPay(argv: string[], deps: PayDeps): Promise<number> {
       network: settle.network,
       payer: settle.payer ?? null,
       explorerUrl: settle.transaction
-        ? (PAYMENT_NETWORKS[settle.network]?.explorerTx(settle.transaction) ??
-          null)
+        ? (PAYMENT_NETWORKS[settle.network]?.transactionUrl(
+            settle.transaction
+          ) ?? null)
         : null,
     }
   }
 
   let evidence: Interaction["evidence"] = null
   if (price && settlement?.success && settlement.transaction) {
-    const network = PAYMENT_NETWORKS[settlement.network]
-    const reader =
-      deps.receiptClient?.(settlement.network) ??
-      createPublicClient({
-        chain: network.chain,
-        transport: http(deps.env.ARC_RPC_URL ?? network.defaultRpcUrl),
-      })
-    evidence = await checkPayment(reader, {
-      txHash: settlement.transaction as Hex,
-      asset: price.asset as Address,
-      from: agent.account.address,
-      to: price.payTo as Address,
-      amount: BigInt(price.amount),
-    })
+    evidence = await checkPayment(
+      {
+        transactionId: settlement.transaction,
+        token: price.asset,
+        from: accountId,
+        to: price.payTo,
+        amount: BigInt(price.amount),
+      },
+      mirror
+    )
   }
 
   const interaction: Interaction = {
     id: `int_${randomUUID()}`,
-    agent: { name: agent.name, address: agent.account.address },
+    agent: { name: agent.name, address: agent.account.address, accountId },
     request: {
       endpoint: url.toString(),
       method,
@@ -229,7 +243,7 @@ function summary(i: Interaction) {
   if (i.settlement) {
     const check =
       i.evidence?.status === "verified"
-        ? "verified onchain"
+        ? "verified on the mirror node"
         : `not verified: ${i.evidence?.reason ?? "settlement failed"}`
     lines.push(
       `Settlement: ${i.settlement.explorerUrl ?? i.settlement.transaction} (${check})`

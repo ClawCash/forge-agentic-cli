@@ -1,4 +1,4 @@
-// Generates a throwaway EVM wallet for testnets (Arc, Hedera EVM). Never fund it
+// Generates a throwaway ECDSA wallet for Hedera testnet. Never fund it
 // with real money.
 //
 //   npm run wallet:new                              print address and private key
@@ -52,7 +52,7 @@ function main() {
     console.log("Testnet only. Anyone with this key controls the wallet.")
   }
   console.log(
-    "Fund on Arc testnet: https://faucet.circle.com (select Arc Testnet)"
+    "Fund on Hedera testnet: HBAR at https://portal.hedera.com/faucet, then USDC at https://faucet.circle.com (Hedera Testnet)"
   )
 }
 

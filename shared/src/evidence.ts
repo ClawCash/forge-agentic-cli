@@ -1,64 +1,65 @@
-import { type Address, erc20Abi, type Hex, parseEventLogs } from "viem"
+import { getTransaction, type MirrorDeps } from "./hedera.ts"
 
-// What a paying agent claims happened: `from` paid `to` exactly `amount` of
-// `asset` in transaction `txHash`.
+// What a paying agent claims happened: account `from` paid account `to`
+// exactly `amount` of token `token` in Hedera transaction `transactionId`.
 export interface PaymentClaim {
-  txHash: Hex
-  asset: Address
-  from: Address
-  to: Address
+  transactionId: string
+  token: string
+  from: string
+  to: string
   amount: bigint
 }
 
 export type PaymentEvidence =
-  | { status: "verified"; blockNumber: string }
+  | { status: "verified"; consensusTimestamp: string }
   | { status: "unverified"; reason: string }
 
-interface ReceiptReader {
-  getTransactionReceipt(args: { hash: Hex }): Promise<{
-    status: "success" | "reverted"
-    blockNumber: bigint
-    logs: Parameters<typeof parseEventLogs>[0]["logs"]
-  }>
+export interface EvidenceDeps extends MirrorDeps {
+  // The mirror node trails consensus by a few seconds, so lookups retry.
+  attempts?: number
+  delayMs?: number
 }
 
-const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
-
-// Checks the claim against the chain: the transaction succeeded and emitted
-// a matching USDC Transfer. This binds the payment to the payer's address, so
-// a review can later require that the reviewer is the wallet that paid.
+// Checks the claim against the Hedera mirror node: the transaction succeeded
+// and moved exactly `amount` of the token out of `from` and into `to`. This
+// binds the payment to the payer's account, so a review can later require
+// that the reviewer is the account that paid.
 export async function checkPayment(
-  client: ReceiptReader,
-  claim: PaymentClaim
+  claim: PaymentClaim,
+  deps: EvidenceDeps
 ): Promise<PaymentEvidence> {
-  let receipt
-  try {
-    receipt = await client.getTransactionReceipt({ hash: claim.txHash })
-  } catch (error) {
-    return {
-      status: "unverified",
-      reason: `No receipt for ${claim.txHash}: ${(error as Error).message.split("\n")[0]}`,
+  const attempts = deps.attempts ?? 8
+  let lastReason = "Transaction not found on the mirror node"
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, deps.delayMs ?? 2000))
     }
-  }
-  if (receipt.status !== "success") {
-    return { status: "unverified", reason: "Transaction reverted" }
-  }
-  const transfers = parseEventLogs({
-    abi: erc20Abi,
-    eventName: "Transfer",
-    logs: receipt.logs,
-  })
-  const match = transfers.find(
-    (log) =>
-      same(log.address, claim.asset) &&
-      same(log.args.from, claim.from) &&
-      same(log.args.to, claim.to) &&
-      log.args.value === claim.amount
-  )
-  return match
-    ? { status: "verified", blockNumber: receipt.blockNumber.toString() }
-    : {
-        status: "unverified",
-        reason: "No matching USDC transfer from the payer to the merchant",
+    let transactions
+    try {
+      transactions = await getTransaction(claim.transactionId, deps)
+    } catch (error) {
+      lastReason = (error as Error).message
+      continue
+    }
+    if (transactions.length === 0) continue
+    for (const tx of transactions) {
+      if (tx.result !== "SUCCESS") {
+        lastReason = `Transaction result ${tx.result}`
+        continue
       }
+      const net = (account: string) =>
+        (tx.token_transfers ?? [])
+          .filter((t) => t.token_id === claim.token && t.account === account)
+          .reduce((sum, t) => sum + BigInt(t.amount), 0n)
+      if (net(claim.from) === -claim.amount && net(claim.to) === claim.amount) {
+        return {
+          status: "verified",
+          consensusTimestamp: tx.consensus_timestamp,
+        }
+      }
+      lastReason = "No matching USDC transfer from the payer to the merchant"
+    }
+    return { status: "unverified", reason: lastReason }
+  }
+  return { status: "unverified", reason: lastReason }
 }

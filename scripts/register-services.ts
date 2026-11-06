@@ -1,4 +1,4 @@
-// Registers the two demo services on the ERC-8004 identity registry (Arc
+// Registers the two demo services on the ERC-8004 identity registry (Hedera
 // testnet) from the service owner's wallet. Each agentURI points to the
 // service's registration file on the deployed server.
 //
@@ -18,18 +18,18 @@ import {
   parseEventLogs,
 } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
-import { arcTestnet } from "viem/chains"
 import {
-  ARC_TESTNET_REGISTRIES,
+  HEDERA_TESTNET_REGISTRIES,
   identityRegistryAbi,
 } from "../shared/src/erc8004.ts"
 import { DEMO_APIS } from "../server/src/demo-apis.ts"
 import { registrationPath } from "../server/src/registration.ts"
+import { HEDERA_TESTNET } from "../shared/src/networks.ts"
 import { setEnvValue } from "./new-wallet.ts"
 
 const DEFAULT_BASE_URL = "https://forge-agentic-cli-production.up.railway.app"
 const explorerTx = (hash: string) =>
-  `https://explorer.testnet.arc.io/tx/${hash}`
+  `https://hashscan.io/testnet/transaction/${hash}`
 
 async function main() {
   const { values } = parseArgs({
@@ -48,12 +48,13 @@ async function main() {
     DEFAULT_BASE_URL
   ).replace(/\/$/, "")
   const account = privateKeyToAccount(key as Hex)
-  const transport = http(process.env.ARC_RPC_URL)
-  const reader = createPublicClient({ chain: arcTestnet, transport })
-  const wallet = createWalletClient({ account, chain: arcTestnet, transport })
-  const registry = ARC_TESTNET_REGISTRIES.identity
+  const chain = HEDERA_TESTNET.evmChain
+  const transport = http(process.env.HEDERA_RPC_URL ?? HEDERA_TESTNET.evmRpcUrl)
+  const reader = createPublicClient({ chain, transport })
+  const wallet = createWalletClient({ account, chain, transport })
+  const registry = HEDERA_TESTNET_REGISTRIES.identity
 
-  console.log(`Owner ${account.address}, registry ${registry} (Arc testnet)`)
+  console.log(`Owner ${account.address}, registry ${registry} (Hedera testnet)`)
   const ids: Record<string, string> = {}
 
   for (const api of DEMO_APIS) {

@@ -1,19 +1,29 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, readFileSync, readdirSync } from "node:fs"
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
+import { inspectHederaTransaction } from "@x402/hedera"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { run } from "../cli/src/index.ts"
-import { FAKE_TX, fakeReceipts, fakeSeller } from "./helpers/payments.mjs"
+import { mirrorTransactionId } from "../shared/src/hedera.ts"
+import {
+  FAKE_TX,
+  FEE_PAYER,
+  fakeMirror,
+  fakeSeller,
+  USDC,
+  usdcTransfer,
+} from "./helpers/payments.mjs"
 
 const agentKey = generatePrivateKey()
-const agent = privateKeyToAccount(agentKey).address
-const merchant = privateKeyToAccount(generatePrivateKey()).address
+const agentAddress = privateKeyToAccount(agentKey).address
+const agentAccount = "0.0.5001"
+const merchant = "0.0.5002"
 
 function harness(
   seller,
-  receipts = fakeReceipts({ from: agent, to: merchant, value: 10000n })
+  transfer = usdcTransfer({ from: agentAccount, to: merchant, amount: 10000 })
 ) {
   const out = { stdout: "", stderr: "" }
   const home = mkdtempSync(join(tmpdir(), "reviews-test-"))
@@ -22,12 +32,15 @@ function harness(
     env: { AGENT_A_PRIVATE_KEY: agentKey, REVIEWS_HOME: home },
     stdout: (text) => (out.stdout += text),
     stderr: (text) => (out.stderr += text),
-    receiptClient: () => receipts,
+    mirror: fakeMirror({
+      accounts: { [agentAddress]: agentAccount },
+      transactions: { [mirrorTransactionId(FAKE_TX)]: transfer },
+    }),
   }
   return { deps, out, home }
 }
 
-test("pays a 402 endpoint from the agent's wallet and records the receipt", async () => {
+test("pays a 402 endpoint from the agent's Hedera account and records the receipt", async () => {
   const settles = []
   const { deps, out, home } = harness(fakeSeller({ payTo: merchant, settles }))
   const code = await run(
@@ -43,32 +56,38 @@ test("pays a 402 endpoint from the agent's wallet and records the receipt", asyn
   )
   assert.equal(code, 0, out.stderr)
   assert.deepEqual(JSON.parse(out.stdout), { echo: { text: "hi" } })
-  assert.match(out.stderr, /Paid \$0\.01 USDC on Arc testnet/)
-  assert.match(out.stderr, /verified onchain/)
+  assert.match(out.stderr, /Paid \$0\.01 USDC on Hedera testnet to 0\.0\.5002/)
+  assert.match(out.stderr, /verified on the mirror node/)
 
-  // The payment was signed by the agent, for the advertised amount.
+  // The agent signed a USDC transfer from its own account to the merchant,
+  // with the facilitator as fee payer.
   assert.equal(settles.length, 1)
-  const auth = settles[0].payload.payload.authorization
-  assert.equal(auth.from, agent)
-  assert.equal(auth.to, merchant)
-  assert.equal(auth.value, "10000")
+  const { requirements, payload } = settles[0]
+  assert.equal(requirements.extra.feePayer, FEE_PAYER)
+  const tx = inspectHederaTransaction(payload.payload.transaction)
+  const usdc = tx.tokenTransfers[USDC]
+  assert.ok(usdc, "transfers testnet USDC")
+  assert.deepEqual(usdc.map((t) => [t.accountId, t.amount.toString()]).sort(), [
+    [agentAccount, "-10000"],
+    [merchant, "10000"],
+  ])
 
   const dir = join(home, "interactions")
   const file = readdirSync(dir).find((name) => name.endsWith(".json"))
   const interaction = JSON.parse(readFileSync(join(dir, file), "utf8"))
   assert.match(interaction.id, /^int_/)
-  assert.equal(interaction.agent.address, agent)
-  assert.equal(interaction.request.method, "POST")
+  assert.equal(interaction.agent.address, agentAddress)
+  assert.equal(interaction.agent.accountId, agentAccount)
+  assert.equal(interaction.price.network, "hedera:testnet")
+  assert.equal(interaction.price.asset, USDC)
   assert.equal(interaction.price.amountUsd, "0.01")
-  assert.equal(interaction.price.payTo, merchant)
   assert.equal(interaction.response.status, 200)
   assert.equal(interaction.settlement.transaction, FAKE_TX)
   assert.equal(
     interaction.settlement.explorerUrl,
-    `https://explorer.testnet.arc.io/tx/${FAKE_TX}`
+    `https://hashscan.io/testnet/transaction/${FAKE_TX}`
   )
   assert.equal(interaction.evidence.status, "verified")
-  assert.ok(interaction.timings.challengeMs >= 0)
   assert.equal(
     readFileSync(join(dir, file.replace(".json", ".body")), "utf8"),
     out.stdout.trim()
@@ -98,11 +117,10 @@ test("refuses to pay more than --max-usd", async () => {
   assert.equal(settles.length, 0)
 })
 
-test("records an unverified receipt when the chain disagrees", async () => {
-  const stranger = privateKeyToAccount(generatePrivateKey()).address
+test("records an unverified receipt when the mirror node disagrees", async () => {
   const { deps, out } = harness(
     fakeSeller({ payTo: merchant }),
-    fakeReceipts({ from: stranger, to: merchant, value: 10000n })
+    usdcTransfer({ from: "0.0.6666", to: merchant, amount: 10000 })
   )
   await run(
     ["pay", "https://seller.test/paid", "--agent", "a", "--json", "{}"],
@@ -124,12 +142,23 @@ test("free endpoints are recorded without a price", async () => {
   assert.equal(interaction.request.method, "GET")
 })
 
-test("explains a missing agent key", async () => {
-  const { deps, out } = harness(fakeSeller({ payTo: merchant }))
-  deps.env = { REVIEWS_HOME: deps.env.REVIEWS_HOME }
+test("explains a missing key or a wallet without a Hedera account", async () => {
+  const noKey = harness(fakeSeller({ payTo: merchant }))
+  noKey.deps.env = { REVIEWS_HOME: noKey.deps.env.REVIEWS_HOME }
   assert.equal(
-    await run(["pay", "https://seller.test/paid", "--agent", "a"], deps),
+    await run(["pay", "https://seller.test/paid", "--agent", "a"], noKey.deps),
     1
   )
-  assert.match(out.stderr, /AGENT_A_PRIVATE_KEY is not set/)
+  assert.match(noKey.out.stderr, /AGENT_A_PRIVATE_KEY is not set/)
+
+  const noAccount = harness(fakeSeller({ payTo: merchant }))
+  noAccount.deps.mirror = fakeMirror()
+  assert.equal(
+    await run(
+      ["pay", "https://seller.test/paid", "--agent", "a"],
+      noAccount.deps
+    ),
+    1
+  )
+  assert.match(noAccount.out.stderr, /has no Hedera testnet account yet/)
 })

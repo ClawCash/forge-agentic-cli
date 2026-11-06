@@ -2,7 +2,9 @@ import type { Hex } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
 
 // The paying agent's own wallet: AGENT_<NAME>_PRIVATE_KEY, e.g. --agent a
-// reads AGENT_A_PRIVATE_KEY. The same key later signs that agent's reviews.
+// reads AGENT_A_PRIVATE_KEY. It is an ECDSA key: on Hedera it controls an
+// account (0.0.x) whose EVM address alias is the same key's address, so the
+// key that pays is the key that later signs the agent's reviews.
 export function loadAgent(name: string, env = process.env) {
   if (!/^[a-z0-9_]+$/i.test(name))
     throw new Error(`Invalid agent name: ${name}`)
@@ -13,5 +15,9 @@ export function loadAgent(name: string, env = process.env) {
       `${variable} is not set to a private key (see .env.example)`
     )
   }
-  return { name, account: privateKeyToAccount(key as Hex) }
+  return {
+    name,
+    privateKey: key as Hex,
+    account: privateKeyToAccount(key as Hex),
+  }
 }

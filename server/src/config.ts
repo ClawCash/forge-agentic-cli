@@ -1,22 +1,47 @@
 import type { Hex } from "viem"
+import { privateKeyToAccount } from "viem/accounts"
+import { accountIdForAddress } from "../../shared/src/hedera.ts"
 
 export interface ServerConfig {
   // Public origin used in 402 responses and ERC-8004 registration files.
   baseUrl: string
-  arcRpcUrl: string
-  // The demo merchant: owns both services' ERC-8004 identities, receives
-  // their payments, and pays gas to settle them on Arc.
-  sellerPrivateKey: Hex
-  // ERC-8004 agent IDs, known once the services are registered (Phase 3).
+  // The demo merchant's Hedera account: owns both services' ERC-8004
+  // identities and receives their payments.
+  sellerAccountId: string
+  // x402 facilitator that verifies and settles Hedera payments (and pays the
+  // network fees).
+  facilitatorUrl: string
+  // ERC-8004 agent IDs on Hedera testnet, known once the services are
+  // registered.
   agentIds: { a?: string; b?: string }
 }
 
-export function loadConfig(env = process.env): ServerConfig {
-  const sellerPrivateKey = env.SERVICE_OWNER_PRIVATE_KEY
-  if (!sellerPrivateKey || !/^0x[0-9a-fA-F]{64}$/.test(sellerPrivateKey)) {
-    throw new Error(
-      "SERVICE_OWNER_PRIVATE_KEY must be a 0x-prefixed private key"
-    )
+const HEDERA_ACCOUNT = /^0\.0\.\d+$/
+
+// The seller's account ID comes from SERVICE_OWNER_HEDERA_ACCOUNT_ID, or is
+// looked up on the mirror node from SERVICE_OWNER_PRIVATE_KEY's EVM address.
+export async function loadConfig(
+  env = process.env,
+  deps: { fetch: typeof fetch } = { fetch }
+): Promise<ServerConfig> {
+  let sellerAccountId = env.SERVICE_OWNER_HEDERA_ACCOUNT_ID
+  if (!sellerAccountId) {
+    const key = env.SERVICE_OWNER_PRIVATE_KEY
+    if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) {
+      throw new Error(
+        "Set SERVICE_OWNER_HEDERA_ACCOUNT_ID or SERVICE_OWNER_PRIVATE_KEY"
+      )
+    }
+    const { address } = privateKeyToAccount(key as Hex)
+    sellerAccountId = (await accountIdForAddress(address, deps)) ?? undefined
+    if (!sellerAccountId) {
+      throw new Error(
+        `The service owner ${address} has no Hedera testnet account yet; send it testnet HBAR first`
+      )
+    }
+  }
+  if (!HEDERA_ACCOUNT.test(sellerAccountId)) {
+    throw new Error(`Not a Hedera account ID: ${sellerAccountId}`)
   }
   const baseUrl =
     env.PUBLIC_BASE_URL ??
@@ -25,8 +50,8 @@ export function loadConfig(env = process.env): ServerConfig {
       : `http://localhost:${env.PORT ?? 8787}`)
   return {
     baseUrl: baseUrl.replace(/\/$/, ""),
-    arcRpcUrl: env.ARC_RPC_URL ?? "https://rpc.testnet.arc.io",
-    sellerPrivateKey: sellerPrivateKey as Hex,
+    sellerAccountId,
+    facilitatorUrl: env.X402_FACILITATOR_URL ?? "https://x402.org/facilitator",
     agentIds: {
       a: env.DEMO_API_A_AGENT_ID || undefined,
       b: env.DEMO_API_B_AGENT_ID || undefined,

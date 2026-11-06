@@ -1,27 +1,32 @@
-import type { Address, Chain } from "viem"
-import { arcTestnet } from "viem/chains"
+import type { Chain } from "viem"
+import { hederaTestnet } from "viem/chains"
 
-// Networks the CLI will pay on, with the stablecoin it accepts there.
+// The network everything runs on: x402 payments in USDC (an HTS token), and
+// ERC-8004 identities and reviews through Hedera's EVM JSON-RPC relay.
 export interface PaymentNetwork {
   id: string
   label: string
-  chain: Chain
-  defaultRpcUrl: string
-  usdc: Address
+  usdc: string
   usdcDecimals: number
-  explorerTx: (hash: string) => string
+  mirrorNode: string
+  evmChain: Chain
+  evmRpcUrl: string
+  transactionUrl: (transactionId: string) => string
+}
+
+export const HEDERA_TESTNET: PaymentNetwork = {
+  id: "hedera:testnet",
+  label: "Hedera testnet",
+  usdc: "0.0.429274",
+  usdcDecimals: 6,
+  mirrorNode: "https://testnet.mirrornode.hedera.com",
+  evmChain: hederaTestnet,
+  evmRpcUrl: "https://testnet.hashio.io/api",
+  transactionUrl: (id) => `https://hashscan.io/testnet/transaction/${id}`,
 }
 
 export const PAYMENT_NETWORKS: Record<string, PaymentNetwork> = {
-  "eip155:5042002": {
-    id: "eip155:5042002",
-    label: "Arc testnet",
-    chain: arcTestnet,
-    defaultRpcUrl: "https://rpc.testnet.arc.io",
-    usdc: "0x3600000000000000000000000000000000000000",
-    usdcDecimals: 6,
-    explorerTx: (hash) => `https://explorer.testnet.arc.io/tx/${hash}`,
-  },
+  [HEDERA_TESTNET.id]: HEDERA_TESTNET,
 }
 
 export function formatUsdc(amount: bigint, decimals: number) {

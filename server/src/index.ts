@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server"
+import type { FacilitatorClient } from "@x402/core/server"
 import { Hono } from "hono"
 import { z } from "zod"
 import { loadConfig, type ServerConfig } from "./config.ts"
@@ -14,7 +15,10 @@ import {
 
 const InvoiceRequest = z.object({ text: z.string().min(1).max(20_000) })
 
-export function createApp(config: ServerConfig) {
+export function createApp(
+  config: ServerConfig,
+  deps: { facilitator?: FacilitatorClient } = {}
+) {
   const app = new Hono()
 
   app.get("/health", (c) => c.json({ ok: true }))
@@ -23,8 +27,8 @@ export function createApp(config: ServerConfig) {
     c.json(wellKnownRegistration(config))
   )
 
-  // Unpaid requests to the demo APIs get a 402 with Arc testnet payment terms.
-  app.use(demoApiPaywall(config))
+  // Unpaid requests to the demo APIs get a 402 with Hedera testnet USDC terms.
+  app.use(demoApiPaywall(config, deps.facilitator))
 
   for (const api of DEMO_APIS) {
     app.post(api.path, async (c) => {
@@ -46,10 +50,10 @@ export function createApp(config: ServerConfig) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const config = loadConfig()
+  const config = await loadConfig()
   const port = Number(process.env.PORT ?? 8787)
   serve({ fetch: createApp(config).fetch, port })
   console.log(
-    `server listening on http://localhost:${port} (${config.baseUrl})`
+    `server listening on http://localhost:${port} (${config.baseUrl}), paying ${config.sellerAccountId}`
   )
 }

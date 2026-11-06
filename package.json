@@ -15,6 +15,7 @@
     "start:server": "node --env-file-if-exists=.env --experimental-strip-types server/src/index.ts",
     "reviews": "node --env-file-if-exists=.env --experimental-strip-types cli/src/index.ts",
     "wallet:new": "node --experimental-strip-types scripts/new-wallet.ts",
+    "hedera:status": "node --env-file-if-exists=.env --experimental-strip-types scripts/hedera-status.ts",
     "services:register": "node --env-file-if-exists=.env --experimental-strip-types scripts/register-services.ts",
     "services:verify": "node --env-file-if-exists=.env --experimental-strip-types scripts/verify-services.ts",
     "typecheck": "tsc --noEmit",
@@ -27,6 +28,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@x402/hedera": "2.30.0",
     "viem": "2.56.3"
   }
 }

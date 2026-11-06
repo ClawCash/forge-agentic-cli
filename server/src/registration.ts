@@ -1,4 +1,4 @@
-import { ARC_TESTNET_IDENTITY_REGISTRY } from "../../shared/src/erc8004.ts"
+import { HEDERA_TESTNET_IDENTITY_REGISTRY } from "../../shared/src/erc8004.ts"
 import type { ServerConfig } from "./config.ts"
 import { DEMO_APIS, type DemoApi } from "./demo-apis.ts"
 
@@ -8,7 +8,7 @@ function registrations(config: ServerConfig, api: DemoApi) {
     ? [
         {
           agentId: Number(agentId),
-          agentRegistry: ARC_TESTNET_IDENTITY_REGISTRY,
+          agentRegistry: HEDERA_TESTNET_IDENTITY_REGISTRY,
         },
       ]
     : []

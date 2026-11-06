@@ -1,17 +1,17 @@
 import { type Address, parseAbi } from "viem"
 
-// ERC-8004 registries on Arc testnet.
-// https://docs.arc.io/arc/references/contract-addresses#erc-8004
-export const ARC_TESTNET_REGISTRIES = {
-  chainId: 5042002,
+// ERC-8004 registries on Hedera testnet (chain 296), at the same addresses as
+// the reference deployments on other chains.
+export const HEDERA_TESTNET_REGISTRIES = {
+  chainId: 296,
   identity: "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Address,
   reputation: "0x8004B663056A597Dffe9eCcC1965A193B7388713" as Address,
 }
 
 // The registry reference used in registration files: {namespace}:{chainId}:{address}.
-export const ARC_TESTNET_IDENTITY_REGISTRY = `eip155:${ARC_TESTNET_REGISTRIES.chainId}:${ARC_TESTNET_REGISTRIES.identity}`
+export const HEDERA_TESTNET_IDENTITY_REGISTRY = `eip155:${HEDERA_TESTNET_REGISTRIES.chainId}:${HEDERA_TESTNET_REGISTRIES.identity}`
 
-// Checked against IdentityRegistryUpgradeable, verified on explorer.testnet.arc.io.
+// Matches IdentityRegistryUpgradeable, the reference implementation.
 export const identityRegistryAbi = parseAbi([
   "function register(string agentURI) returns (uint256 agentId)",
   "function setAgentURI(uint256 agentId, string newURI)",

@@ -8,7 +8,7 @@ import type { PaymentEvidence } from "../../shared/src/evidence.ts"
 // supplied by the agent.
 export interface Interaction {
   id: string
-  agent: { name: string; address: string }
+  agent: { name: string; address: string; accountId: string }
   request: {
     endpoint: string
     method: string

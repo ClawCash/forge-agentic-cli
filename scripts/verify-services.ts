@@ -5,9 +5,9 @@
 
 import { parseArgs } from "node:util"
 import { createPublicClient, http } from "viem"
-import { arcTestnet } from "viem/chains"
 import { DEMO_APIS } from "../server/src/demo-apis.ts"
 import { resolveEndpointIdentity } from "../shared/src/identity.ts"
+import { HEDERA_TESTNET } from "../shared/src/networks.ts"
 
 const { values } = parseArgs({ options: { "base-url": { type: "string" } } })
 const baseUrl = (
@@ -16,8 +16,8 @@ const baseUrl = (
   "https://forge-agentic-cli-production.up.railway.app"
 ).replace(/\/$/, "")
 const registry = createPublicClient({
-  chain: arcTestnet,
-  transport: http(process.env.ARC_RPC_URL),
+  chain: HEDERA_TESTNET.evmChain,
+  transport: http(process.env.HEDERA_RPC_URL ?? HEDERA_TESTNET.evmRpcUrl),
 })
 
 let failures = 0
