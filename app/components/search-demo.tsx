@@ -3,7 +3,7 @@
 import { Check, Search } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Stars } from "@/components/ui"
-import { type Scene, SCENES, type SceneResult } from "@/lib/search-scenes"
+import type { Scene, SceneResult } from "@/lib/search-scenes"
 
 type Phase = "typing" | "listed" | "rated" | "ranked" | "picked" | "leaving"
 
@@ -59,9 +59,18 @@ function Row({
         zIndex: best ? 1 : 0,
       }}
     >
-      <span className="grid size-9 shrink-0 place-items-center rounded-[9px] border border-line bg-white font-display text-[15px] font-medium text-muted">
-        {result.name[0]}
-      </span>
+      {result.logo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/logos/apis/${result.logo}`}
+          alt=""
+          className="size-9 shrink-0 rounded-[9px] border border-line bg-white object-contain"
+        />
+      ) : (
+        <span className="grid size-9 shrink-0 place-items-center rounded-[9px] border border-line bg-white font-display text-[15px] font-medium text-muted">
+          {result.name[0]}
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14px] font-medium tracking-[-0.01em]">
           {result.name}
@@ -95,20 +104,27 @@ function Row({
   )
 }
 
-export function SearchDemo() {
+export function SearchDemo({
+  scenes,
+  real,
+}: {
+  scenes: Scene[]
+  real: boolean
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const [index, setIndex] = useState(0)
   const [phase, setPhase] = useState<Phase>("typing")
   const [typed, setTyped] = useState(0)
   const [visible, setVisible] = useState(false)
   const [calm, setCalm] = useState(false)
-  const scene = SCENES[index]
+  const scene = scenes[index]
+  const rows = Math.max(...scenes.map((s) => s.results.length))
 
   // Runs only while on screen. With reduced motion, one finished scene shows.
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setCalm(true)
-      setTyped(SCENES[0].query.length)
+      setTyped(scenes[0].query.length)
       setPhase("picked")
       return
     }
@@ -120,7 +136,7 @@ export function SearchDemo() {
     )
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
+  }, [scenes])
 
   useEffect(() => {
     if (!visible || calm) return
@@ -135,7 +151,7 @@ export function SearchDemo() {
       ms = wait
       run = () => {
         if (next === "typing") {
-          setIndex((index + 1) % SCENES.length)
+          setIndex((index + 1) % scenes.length)
           setTyped(0)
         }
         setPhase(next)
@@ -143,23 +159,24 @@ export function SearchDemo() {
     }
     const timer = setTimeout(run, ms)
     return () => clearTimeout(timer)
-  }, [phase, typed, index, visible, calm, scene])
+  }, [phase, typed, index, visible, calm, scene, scenes])
 
+  const paying = `${scene.agent} pays the one with the best record.`
   const caption = {
     typing: `${scene.agent} searches for an API.`,
-    listed: "The cheapest one looks like the obvious pick.",
+    listed: "Nothing here says which one works.",
     rated: "Reviews show how each one did for other agents.",
-    ranked: "The one that works moves to the top.",
-    picked: `${scene.agent} pays once and gets the result.`,
-    leaving: `${scene.agent} pays once and gets the result.`,
+    ranked: "The best-reviewed one moves to the top.",
+    picked: paying,
+    leaving: paying,
   }[phase]
 
   return (
     <div ref={ref}>
       <p className="sr-only">
-        An example with made-up APIs. An agent searches for an API and the
-        cheapest result looks best. Reviews from other agents show it rarely
-        works, so the agent pays once for the one that does.
+        An agent searches for an API and nothing in the listings says which one
+        works. Reviews from agents that paid show how each one did, so it pays
+        for the one with the best record.
       </p>
       <div aria-hidden="true" className="panel">
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
@@ -188,7 +205,10 @@ export function SearchDemo() {
           </div>
         </div>
 
-        <div className="relative h-[calc(3*var(--row))] overflow-hidden [--row:64px]">
+        <div
+          className="relative overflow-hidden [--row:64px]"
+          style={{ height: `calc(${rows} * var(--row))` }}
+        >
           {scene.results.map((result, listed) => (
             <Row
               key={result.host}
@@ -205,7 +225,7 @@ export function SearchDemo() {
             {caption}
           </p>
           <span className="shrink-0 text-[12px] text-muted">
-            Example reviews
+            {real ? "Real reviews" : "Example reviews"}
           </span>
         </div>
       </div>

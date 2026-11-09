@@ -15,10 +15,11 @@ import {
   type Leaderboard,
 } from "@/lib/leaderboard"
 import { homeMarkdown } from "@/lib/markdown"
+import { getScenes, type Scene } from "@/lib/search-scenes"
 
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties
 
-function Hero() {
+function Hero({ scenes, real }: { scenes: Scene[]; real: boolean }) {
   return (
     <section className="pt-16 pb-20 sm:pt-24 sm:pb-28">
       <div className="mx-auto grid w-full max-w-[1160px] items-center gap-14 px-5 sm:px-8 lg:grid-cols-2 lg:gap-16">
@@ -37,7 +38,7 @@ function Hero() {
           </div>
         </div>
         <div className="fade-up min-w-0" style={delay(120)}>
-          <SearchDemo />
+          <SearchDemo scenes={scenes} real={real} />
         </div>
       </div>
     </section>
@@ -296,12 +297,15 @@ function Cta() {
 }
 
 export default async function Home() {
-  const board = await getLeaderboard()
+  const [{ scenes, real }, board] = await Promise.all([
+    getScenes(),
+    getLeaderboard(),
+  ])
   const featured = await getFeaturedReview(board)
   return (
     <SiteShell markdown={homeMarkdown()}>
       <main>
-        <Hero />
+        <Hero scenes={scenes} real={real} />
         <WorksWith />
         <Story />
         <Trust featured={featured} />
