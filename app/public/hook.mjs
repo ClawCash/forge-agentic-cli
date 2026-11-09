@@ -159,18 +159,28 @@ function readText(value) {
 
 function stdoutOf(response) {
   for (const node of objects(response)) {
-    if (typeof node.stdout === "string") return node.stdout
+    const output = node.stdout ?? node.output_for_prompt
+    if (typeof output === "string") return output
   }
   return typeof response === "string" ? response : ""
 }
 
+// Grok names MCP tools server__tool, without Claude's prefix.
+const prefixed = (name) =>
+  /^[a-z0-9].*__/i.test(name) && !name.startsWith("mcp__")
+    ? `mcp__${name}`
+    : name
+
+const SHELL_TOOLS = ["Bash", "Shell", "run_terminal_command"]
+
 const orText = (found, value) => (found.length > 0 ? found : readText(value))
 
 export function domainsIn(event) {
-  const name = String(event?.tool_name ?? "")
-  const response = event?.tool_response ?? event?.tool_output
-  if (name === "Bash" || name === "Shell") {
-    const line = String(event?.tool_input?.command ?? "")
+  const name = prefixed(String(event?.tool_name ?? event?.toolName ?? ""))
+  const response =
+    event?.tool_response ?? event?.toolResult ?? event?.tool_output
+  if (SHELL_TOOLS.includes(name)) {
+    const line = String((event?.tool_input ?? event?.toolInput)?.command ?? "")
     if (!COMMANDS.some((pattern) => pattern.test(line))) return []
     const stdout = stdoutOf(response)
     return orText(read(stdout, listed), stdout)
@@ -223,8 +233,10 @@ async function main() {
   if (!res.ok) return
   const { text } = await res.json()
   if (typeof text === "string" && text) {
+    const short = text.slice(0, MAX_TEXT)
+    const host = process.argv[2]
     process.stdout.write(
-      JSON.stringify(hookOutput(process.argv[2], text.slice(0, MAX_TEXT)))
+      host === "plain" ? short : JSON.stringify(hookOutput(host, short))
     )
   }
 }

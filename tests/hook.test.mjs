@@ -321,6 +321,29 @@ test("other servers' tools with the same names are ignored", () => {
   )
 })
 
+test("reads Grok's events", () => {
+  assert.deepEqual(
+    domainsIn({ toolName: "agentcash__search", toolResult: SEARCH_RESULT }),
+    DOMAINS
+  )
+  assert.deepEqual(
+    domainsIn({
+      toolName: "run_terminal_command",
+      toolInput: { command: "awal bazaar search q" },
+      toolResult: {
+        type: "Bash",
+        exit_code: 0,
+        output_for_prompt: "https://a.example/x\n---",
+      },
+    }),
+    ["a.example"]
+  )
+  assert.deepEqual(
+    domainsIn({ toolName: "notion__search", toolResult: SEARCH_RESULT }),
+    []
+  )
+})
+
 test("speaks each host's format", () => {
   assert.deepEqual(hookOutput("cursor", "hi"), { additional_context: "hi" })
   for (const host of ["claude", "codex"]) {
@@ -398,6 +421,16 @@ test("stays silent when our API fails or is unreachable", async () => {
   assert.deepEqual(unreachable, { code: 0, stdout: "" })
 })
 
+test("prints plain text for agents with their own adapter", async () => {
+  const api = await fakeApi((res) => {
+    res.setHeader("Content-Type", "application/json")
+    res.end(JSON.stringify({ text: "Agent Reviews: rated" }))
+  })
+  const { stdout } = await run(EVENT, api.url, "plain")
+  api.close()
+  assert.equal(stdout, "Agent Reviews: rated")
+})
+
 test("makes no request for other tools or broken input", async () => {
   const api = await fakeApi((res) => res.end("{}"))
   const other = JSON.stringify({ tool_name: "Bash", tool_response: text })
@@ -412,9 +445,9 @@ test("the install guide's matchers fit the search tools and nothing else", () =>
   const guide = readFileSync("app/public/HOOK.md", "utf8")
   const matchers = [...guide.matchAll(/"matcher": "([^"]+)"/g)]
     .map((m) => m[1])
-    .filter((m) => m.length > 20)
-  assert.equal(matchers.length, 3)
-  const [claude, codex, cursor] = matchers.map((m) => new RegExp(m))
+    .filter((m) => m.includes("agentcash") || m.startsWith("^MCP:"))
+  assert.equal(matchers.length, 4)
+  const [claude, codex, cursor, grok] = matchers.map((m) => new RegExp(m))
   for (const matcher of [claude, codex]) {
     for (const name of [
       "mcp__agentcash__search",
@@ -451,4 +484,13 @@ test("the install guide's matchers fit the search tools and nothing else", () =>
     assert.ok(cursor.test(name), name)
   }
   assert.ok(!cursor.test("MCP:fetch"))
+  for (const name of [
+    "agentcash__search",
+    "payments-mcp__bazaar_search",
+    "mpp-services__search_services",
+  ]) {
+    assert.ok(grok.test(name), name)
+  }
+  assert.ok(!grok.test("notion__search"))
+  assert.ok(!grok.test("agentcash__fetch"))
 })

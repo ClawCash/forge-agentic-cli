@@ -77,7 +77,8 @@ marks the ones that have stopped answering. It can't see what happens after paym
 
 ## Ratings in the same call
 
-An optional hook adds one line per API to a wallet's search results in Claude Code, Codex and Cursor. It sends only the
+An optional hook adds one line per API to a wallet's search results in Claude Code, Codex, Cursor, Grok Build, Hermes
+and OpenCode. It sends only the
 domains of the APIs in those results, and it says nothing if the service is unavailable. See `app/public/HOOK.md`.
 
 ## What has been tested

@@ -90,6 +90,27 @@ they do.
 }
 ```
 
+**Grok Build**, in a new file at `~/.grok/hooks/agent-reviews.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "^.*agentcash.*__(search|discover_api_endpoints)$|^.*__bazaar_(search|list|get_resource_details)$|^.*(bazaar|cdp|coinbase).*__search_resources$|^.*pay.*__search_skills$|^.*(mpp|tempo).*__(search_services|list_services|recommend_services|search_offers|get_service)$|^.*__.*(x402.*(search|discover)|(search|discover).*x402)|^.*(x402|402index|agent-?tools|decixa).*__.*(search|discover|ask_services)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" grok",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 ## 3. If you search from the shell
 
 Add this too if you use `awal`, `npx agentcash`, `pay` or `tempo` commands. Put the entry in the same `PostToolUse` list.
@@ -109,7 +130,7 @@ Add this too if you use `awal`, `npx agentcash`, `pay` or `tempo` commands. Put 
 }
 ```
 
-**Codex** and **Cursor** can't filter by command, so the script starts after every shell command. It exits straight away
+**Codex**, **Cursor** and **Grok Build** can't filter by command, so the script starts after every shell command. It exits straight away
 unless the command is a wallet search, and sends nothing. Tell the user that before you add it.
 
 ```json
@@ -120,12 +141,35 @@ unless the command is a wallet search, and sends nothing. Tell the user that bef
 { "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" cursor", "matcher": "^Shell$", "timeout": 5 }
 ```
 
-## 4. Finish
+```json
+{ "matcher": "^run_terminal_command$", "hooks": [{ "type": "command", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" grok", "timeout": 5 }] }
+```
+
+## 4. Hermes and OpenCode
+
+These use a small plugin instead of steps 2 and 3. It calls the script from step 1 after wallet searches only, for both MCP
+tools and shell commands.
+
+**Hermes:**
+
+```bash
+mkdir -p ~/.hermes/plugins/agent-reviews && curl -fsSL https://reviews.forgeintel.co/hermes/plugin.yaml -o ~/.hermes/plugins/agent-reviews/plugin.yaml && curl -fsSL https://reviews.forgeintel.co/hermes/__init__.py -o ~/.hermes/plugins/agent-reviews/__init__.py && hermes plugins enable agent-reviews < /dev/null
+```
+
+**OpenCode:**
+
+```bash
+mkdir -p ~/.config/opencode/plugins && curl -fsSL https://reviews.forgeintel.co/agent-reviews-opencode.js -o ~/.config/opencode/plugins/agent-reviews.js
+```
+
+## 5. Finish
 
 It starts working in the next session. Tell the user what you added and how to turn it off.
 
-If your agent has no hooks, keep calling `check_apis` before you pay.
+OpenClaw doesn't let outside plugins change a tool's result before the model reads it. There, and in any agent without
+hooks, keep calling `check_apis` before you pay.
 
 ## Turn it off
 
-Remove those entries from the file above, then delete `~/.config/agent-reviews/hook.mjs`.
+Remove those entries, or delete the plugin or hook file you added, then delete `~/.config/agent-reviews/hook.mjs`. On
+Hermes, run `hermes plugins disable agent-reviews` first.

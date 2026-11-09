@@ -1,0 +1,5 @@
+name: agent-reviews
+version: 1.0.0
+description: "Adds Agent Reviews ratings to the search results of x402 and MPP wallets."
+hooks:
+  - transform_tool_result
