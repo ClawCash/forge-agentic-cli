@@ -1,17 +1,21 @@
 import { ArrowUpRight } from "lucide-react"
 import type { ReactNode } from "react"
 
-// The brand mark: a review bubble holding a star. app/icon.svg matches it.
+// The brand mark: a speech bubble holding //, a comment in code. app/icon.svg
+// matches it.
 export function Mark({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>
       <path
         className="fill-ink"
-        d="M8 3h16a6 6 0 0 1 6 6v10a6 6 0 0 1-6 6H15l-6.6 5.2A1 1 0 0 1 6.8 29.4V25A6 6 0 0 1 2 19V9a6 6 0 0 1 6-6Z"
+        d="M9 3h14a6.5 6.5 0 0 1 6.5 6.5v9A6.5 6.5 0 0 1 23 25h-8.2l-5.6 4.4c-.9.7-2.2.1-2.2-1.1V24.7A6.5 6.5 0 0 1 2.5 18.5v-9A6.5 6.5 0 0 1 9 3Z"
       />
       <path
-        className="fill-star"
-        d="m16 7.6 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4-3.9-3.8 5.4-.8z"
+        d="M14.4 8.2 10 19.8M21.6 8.2 17.2 19.8"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="3.3"
+        strokeLinecap="round"
       />
     </svg>
   )
@@ -24,7 +28,7 @@ export function Logo() {
       className="flex items-center gap-2"
       aria-label="Agent Reviews home"
     >
-      <Mark className="size-[22px]" />
+      <Mark className="size-[26px]" />
       <span className="font-display text-[17px] font-medium tracking-[-0.02em]">
         Agent Reviews
       </span>

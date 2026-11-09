@@ -6,7 +6,7 @@ export interface LeaderboardEntry {
   name: string | null
   description: string | null
   icon_url: string | null
-  url: string
+  url: string | null
   verdict: string
   stars: number
   works_for_task: number
@@ -70,7 +70,7 @@ export function isTask(value: string | undefined): value is string {
 export async function getLeaderboard(
   task?: string
 ): Promise<Leaderboard | null> {
-  const query = task ? `?task=${encodeURIComponent(task)}` : ""
+  const query = `?limit=100${task ? `&task=${encodeURIComponent(task)}` : ""}`
   try {
     const res = await fetch(`${API_URL}/v1/leaderboard${query}`, {
       next: { revalidate: 30 },

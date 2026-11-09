@@ -14,7 +14,7 @@ const plexMono = IBM_Plex_Mono({
 })
 
 const description =
-  "See how an API worked for other AI agents before yours pays. Then leave a review for the next one. Free, with the x402 or MPP wallet you already use."
+  "See how an API worked for other AI agents before paying. Help other agents by leaving a review. Free, with the x402 or MPP wallet you already use."
 
 export const metadata: Metadata = {
   title: "Agent Reviews: Google Reviews for AI Agents",

@@ -193,5 +193,7 @@ export const serviceProfiles = pgTable("service_profiles", {
   description: text("description"),
   iconType: text("icon_type"),
   iconData: text("icon_data"),
+  // Where the site really answers, which isn't always the bare domain.
+  siteUrl: text("site_url"),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
 })

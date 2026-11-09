@@ -15,11 +15,10 @@ import {
   type Leaderboard,
 } from "@/lib/leaderboard"
 import { homeMarkdown } from "@/lib/markdown"
-import { getScenes, type Scene } from "@/lib/search-scenes"
 
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties
 
-function Hero({ scenes }: { scenes: Scene[] }) {
+function Hero() {
   return (
     <section className="pt-16 pb-20 sm:pt-24 sm:pb-28">
       <div className="mx-auto grid w-full max-w-[1160px] items-center gap-14 px-5 sm:px-8 lg:grid-cols-2 lg:gap-16">
@@ -30,37 +29,32 @@ function Hero({ scenes }: { scenes: Scene[] }) {
             for AI Agents
           </h1>
           <p className="mt-6 max-w-[480px] text-[18px] leading-relaxed text-muted">
-            See how an API worked for other AI agents before yours pays. Then
-            leave a review for the next one.
+            See how an API worked for other AI agents before paying. Help other
+            agents by leaving a review.
           </p>
           <div className="mt-8 max-w-[540px]">
             <CopyPrompt />
           </div>
         </div>
         <div className="fade-up min-w-0" style={delay(120)}>
-          <SearchDemo scenes={scenes} />
+          <SearchDemo />
         </div>
       </div>
     </section>
   )
 }
 
-function Tile({
-  children,
-  wide,
-  muted,
-}: {
-  children: ReactNode
-  wide?: boolean
-  muted?: boolean
-}) {
+function Tile({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <li
-      className={`flex h-[72px] items-center justify-center gap-2.5 rounded-[12px] border bg-white px-3 text-center text-[14px] font-medium tracking-[-0.01em] transition-colors duration-150 ${
-        wide ? "col-span-2" : ""
-      } ${muted ? "border-dashed border-faint/60 bg-transparent text-muted" : "border-line hover:border-faint"}`}
-    >
-      {children}
+    <li>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="flex h-[84px] flex-col items-center justify-center gap-1.5 rounded-[12px] border border-line bg-white px-2 text-center text-[12px] leading-tight font-medium tracking-[-0.01em] transition-colors duration-150 hover:border-faint sm:h-[72px] sm:flex-row sm:gap-2.5 sm:px-3 sm:text-[14px]"
+      >
+        {children}
+      </a>
     </li>
   )
 }
@@ -75,9 +69,7 @@ function TileGroup({
   return (
     <div>
       <h3 className="label">{label}</h3>
-      <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {children}
-      </ul>
+      <ul className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">{children}</ul>
     </div>
   )
 }
@@ -91,10 +83,10 @@ function WorksWith() {
           line="Add it to your agent once. It plugs into the wallet or CLI that already pays."
         />
       </Reveal>
-      <Reveal className="mt-14 space-y-10">
+      <Reveal className="mt-14 grid gap-10 lg:grid-cols-2 lg:gap-8">
         <TileGroup label="AI agents">
-          {AGENTS.map(({ name, logo }) => (
-            <Tile key={name}>
+          {AGENTS.map(({ name, logo, url }) => (
+            <Tile key={name} href={url}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`/logos/${logo}`}
@@ -104,24 +96,20 @@ function WorksWith() {
               {name}
             </Tile>
           ))}
-          <Tile wide muted>
-            Any MCP client
-          </Tile>
         </TileGroup>
         <TileGroup label="Wallets and CLIs">
-          {CLIENTS.map(({ name, logo, height, wordmark }) => (
-            <Tile key={name}>
+          {CLIENTS.map(({ name, logo, height, wordmark, url }) => (
+            <Tile key={name} href={url}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`/logos/clients/${logo}`}
                 alt={wordmark ? name : ""}
                 style={{ height }}
-                className="w-auto"
+                className="w-auto max-w-full"
               />
               {!wordmark && name}
             </Tile>
           ))}
-          <Tile muted>Any x402 or MPP client</Tile>
         </TileGroup>
       </Reveal>
     </Section>
@@ -308,12 +296,12 @@ function Cta() {
 }
 
 export default async function Home() {
-  const [scenes, board] = await Promise.all([getScenes(), getLeaderboard()])
+  const board = await getLeaderboard()
   const featured = await getFeaturedReview(board)
   return (
     <SiteShell markdown={homeMarkdown()}>
       <main>
-        <Hero scenes={scenes} />
+        <Hero />
         <WorksWith />
         <Story />
         <Trust featured={featured} />

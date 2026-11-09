@@ -23,6 +23,7 @@ export interface Profile {
   description: string | null
   iconType: string | null
   iconData: string | null
+  siteUrl: string | null
 }
 
 export type ReadProfile = (domain: string) => Promise<Profile>
@@ -223,6 +224,7 @@ export function profileReader(
     return {
       name,
       description,
+      siteUrl: page ? origin : null,
       ...(await readIcon([...parsed.icons, `${origin}/favicon.ico`])),
     }
   }

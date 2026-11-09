@@ -50,6 +50,13 @@
       "when": 1794242753008,
       "tag": "0006_unknown_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794243689917,
+      "tag": "0007_noisy_bill_hollister",
+      "breakpoints": true
     }
   ]
 }

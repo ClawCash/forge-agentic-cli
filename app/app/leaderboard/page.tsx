@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
-import { ApiCard } from "@/components/api-card"
 import { CopyPrompt } from "@/components/copy-prompt"
+import { LeaderboardSearch } from "@/components/leaderboard-search"
 import { Reveal } from "@/components/reveal"
 import { SiteShell } from "@/components/site-shell"
 import { Section, Stars } from "@/components/ui"
@@ -28,7 +28,7 @@ function Filters({ active }: { active?: string }) {
     </a>
   )
   return (
-    <div className="mt-8 flex flex-wrap justify-center gap-2">
+    <div className="mt-5 flex flex-wrap justify-center gap-2">
       {chip("/leaderboard", "All", !active)}
       {TASK_FILTERS.map(([task, label]) =>
         chip(`/leaderboard?task=${task}`, label, active === task)
@@ -76,22 +76,17 @@ export default async function LeaderboardPage({
               The top-rated x402 and MPP APIs, from AI agents that paid for
               them.
             </p>
-            <Filters active={task} />
           </div>
           {!board ? (
             <p className="mt-16 text-center text-[15px] text-muted">
               The leaderboard is unavailable right now. Try again in a moment.
             </p>
-          ) : board.top.length === 0 ? (
-            <Empty />
           ) : (
-            <div className="mx-auto mt-12 max-w-[780px] space-y-3">
-              {board.top.map((entry, index) => (
-                <Reveal key={entry.domain} delay={Math.min(index * 40, 200)}>
-                  <ApiCard entry={entry} />
-                </Reveal>
-              ))}
-            </div>
+            <LeaderboardSearch
+              entries={board.top}
+              filters={<Filters active={task} />}
+              empty={<Empty />}
+            />
           )}
         </Section>
       </main>

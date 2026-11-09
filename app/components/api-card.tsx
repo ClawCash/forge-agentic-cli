@@ -3,7 +3,7 @@ import type { LeaderboardEntry } from "@/lib/leaderboard"
 
 const VERDICTS: Record<string, [string, string]> = {
   use: ["Use", "bg-ok/10 text-ok"],
-  caution: ["Caution", "bg-star/15 text-warn"],
+  caution: ["Caution", "bg-ink/[0.07] text-ink"],
   avoid: ["Avoid", "bg-bad/10 text-bad"],
   unknown: ["New", "bg-paper text-muted"],
 }
@@ -64,14 +64,18 @@ export function ApiCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="truncate text-[16px] leading-[22px] font-medium tracking-[-0.01em]">
-              <a
-                href={entry.url}
-                target="_blank"
-                rel="noreferrer nofollow"
-                className="underline-offset-4 hover:underline"
-              >
-                {name}
-              </a>
+              {entry.url ? (
+                <a
+                  href={entry.url}
+                  target="_blank"
+                  rel="noreferrer nofollow"
+                  className="underline-offset-4 hover:underline"
+                >
+                  {name}
+                </a>
+              ) : (
+                name
+              )}
             </h3>
             <div className="truncate font-mono text-[12px] leading-5 text-muted">
               {entry.domain}

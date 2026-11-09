@@ -686,6 +686,7 @@ export function v1Routes(deps: V1Deps) {
             description: read.description ?? known?.description ?? null,
             iconType: icon?.iconType ?? null,
             iconData: icon?.iconData ?? null,
+            siteUrl: read.siteUrl ?? known?.siteUrl ?? null,
             fetchedAt: new Date(),
           }
           await deps.store.saveProfile(profile)
@@ -760,7 +761,7 @@ export function v1Routes(deps: V1Deps) {
           icon_url: profile?.iconData
             ? `${deps.baseUrl}/v1/services/${entry.domain}/icon`
             : null,
-          url: `https://${entry.domain}`,
+          url: profile?.siteUrl ?? null,
         }
       }),
       recent: rows

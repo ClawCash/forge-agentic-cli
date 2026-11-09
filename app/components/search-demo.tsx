@@ -1,118 +1,115 @@
 "use client"
 
-import { Search } from "lucide-react"
+import { Check, Search } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Stars } from "@/components/ui"
-import type { Scene, SceneResult } from "@/lib/search-scenes"
+import { type Scene, SCENES, type SceneResult } from "@/lib/search-scenes"
 
-type Phase = "typing" | "listed" | "rated" | "leaving"
+type Phase = "typing" | "listed" | "rated" | "ranked" | "picked" | "leaving"
 
-const TYPE_MS = 34
-const PAUSE_MS: Record<Exclude<Phase, "typing">, number> = {
-  listed: 1900,
-  rated: 3400,
-  leaving: 320,
+const TYPE_MS = 32
+const NEXT: Record<Exclude<Phase, "typing">, [Phase, number]> = {
+  listed: ["rated", 1800],
+  rated: ["ranked", 2400],
+  ranked: ["picked", 1400],
+  picked: ["leaving", 2800],
+  leaving: ["typing", 320],
 }
+const ORDER: Phase[] = [
+  "typing",
+  "listed",
+  "rated",
+  "ranked",
+  "picked",
+  "leaving",
+]
 
-const isRated = (result: SceneResult) => result.rating?.stars != null
+const workedTone = (worked: number) =>
+  worked >= 80 ? "text-ok" : worked >= 50 ? "text-muted" : "text-bad"
 
-function Rating({
-  result,
-  shown,
-  order,
-}: {
-  result: SceneResult
-  shown: boolean
-  order: number
-}) {
-  const { rating } = result
-  return (
-    <div
-      className="flex w-[104px] shrink-0 flex-col items-end transition-opacity duration-500 sm:w-[150px]"
-      style={{
-        opacity: shown ? 1 : 0,
-        transitionDelay: shown ? `${order * 130}ms` : "0ms",
-      }}
-    >
-      {rating && rating.stars !== null && rating.worked !== null ? (
-        <>
-          <Stars value={rating.stars} shown={shown} />
-          <div className="mt-1 font-mono text-[10.5px] text-muted">
-            {Math.round(rating.worked * 100)}% worked
-            <span className="hidden sm:inline">
-              {` · ${rating.buyers} ${rating.buyers === 1 ? "buyer" : "buyers"}`}
-            </span>
-          </div>
-        </>
-      ) : (
-        rating && (
-          <span className="rounded-full bg-paper px-2.5 py-1 text-[11px] whitespace-nowrap text-muted">
-            No reviews yet
-          </span>
-        )
-      )}
-    </div>
-  )
-}
+const rankOf = (scene: Scene, result: SceneResult) =>
+  [...scene.results].sort((a, b) => b.stars - a.stars).indexOf(result)
 
 function Row({
+  scene,
   result,
-  order,
+  listed,
   phase,
 }: {
+  scene: Scene
   result: SceneResult
-  order: number
+  listed: number
   phase: Phase
 }) {
+  const reached = (step: Phase) => ORDER.indexOf(phase) >= ORDER.indexOf(step)
   const hidden = phase === "typing" || phase === "leaving"
+  const rank = rankOf(scene, result)
+  const place = reached("ranked") ? rank : listed
+  const rated = reached("rated") && !hidden
+  const best = rank === 0
+  const picked = best && phase === "picked"
   return (
     <div
-      className="demo-row flex items-center gap-3 border-b border-line px-4 last:border-b-0 sm:gap-4 sm:px-5"
+      className="demo-row absolute inset-x-0 top-0 flex items-center gap-3 border-b border-line px-4 sm:gap-4 sm:px-5"
       style={{
-        opacity: hidden ? 0 : 1,
-        transform: hidden ? "translateY(6px)" : "none",
-        transitionDelay: phase === "listed" ? `${order * 110}ms` : "0ms",
+        transform: `translateY(calc(${place} * var(--row)))`,
+        opacity: hidden ? 0 : phase === "picked" && !best ? 0.4 : 1,
+        transitionDelay: phase === "listed" ? `${listed * 110}ms` : "0ms",
+        background: picked ? "var(--color-paper)" : "#fff",
+        zIndex: best ? 1 : 0,
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/logos/apis/${result.logo}`}
-        alt=""
-        className="size-9 shrink-0 rounded-[9px] border border-line bg-white object-contain"
-      />
+      <span className="grid size-9 shrink-0 place-items-center rounded-[9px] border border-line bg-white font-display text-[15px] font-medium text-muted">
+        {result.name[0]}
+      </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[14px] font-medium tracking-[-0.01em]">
           {result.name}
         </div>
         <div className="mt-0.5 truncate font-mono text-[11px] text-muted">
-          {result.url.replace("https://", "")}
+          {result.host}
         </div>
       </div>
-      <div className="hidden w-16 shrink-0 text-right font-mono text-[12px] text-muted sm:block">
-        {result.price}
+      <div className="w-[62px] shrink-0 text-right font-mono text-[12px] text-muted">
+        {picked ? (
+          <span className="caption inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 font-sans text-[11px] font-medium text-white">
+            <Check className="size-3" strokeWidth={2.5} /> Paid
+          </span>
+        ) : (
+          result.price
+        )}
       </div>
-      <Rating result={result} shown={phase === "rated"} order={order} />
+      <div
+        className="flex w-[84px] shrink-0 flex-col items-end transition-opacity duration-500 sm:w-[100px]"
+        style={{
+          opacity: rated ? 1 : 0,
+          transitionDelay: phase === "rated" ? `${listed * 130}ms` : "0ms",
+        }}
+      >
+        <Stars value={result.stars} shown={rated} size="size-3" />
+        <div className={`mt-1 text-[11px] ${workedTone(result.worked)}`}>
+          {result.worked}% worked
+        </div>
+      </div>
     </div>
   )
 }
 
-export function SearchDemo({ scenes }: { scenes: Scene[] }) {
+export function SearchDemo() {
   const ref = useRef<HTMLDivElement>(null)
   const [index, setIndex] = useState(0)
   const [phase, setPhase] = useState<Phase>("typing")
   const [typed, setTyped] = useState(0)
   const [visible, setVisible] = useState(false)
   const [calm, setCalm] = useState(false)
+  const scene = SCENES[index]
 
   // Runs only while on screen. With reduced motion, one finished scene shows.
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      const reviewed = scenes.findIndex((s) => s.results.some(isRated))
-      const first = Math.max(reviewed, 0)
       setCalm(true)
-      setIndex(first)
-      setTyped(scenes[first].query.length)
-      setPhase("rated")
+      setTyped(SCENES[0].query.length)
+      setPhase("picked")
       return
     }
     const element = ref.current
@@ -123,48 +120,46 @@ export function SearchDemo({ scenes }: { scenes: Scene[] }) {
     )
     observer.observe(element)
     return () => observer.disconnect()
-  }, [scenes])
+  }, [])
 
   useEffect(() => {
     if (!visible || calm) return
-    const step =
-      phase === "typing"
-        ? typed < scenes[index].query.length
-          ? { ms: TYPE_MS, run: () => setTyped(typed + 1) }
-          : { ms: 380, run: () => setPhase("listed") }
-        : phase === "listed"
-          ? { ms: PAUSE_MS.listed, run: () => setPhase("rated") }
-          : phase === "rated"
-            ? { ms: PAUSE_MS.rated, run: () => setPhase("leaving") }
-            : {
-                ms: PAUSE_MS.leaving,
-                run: () => {
-                  setIndex((index + 1) % scenes.length)
-                  setTyped(0)
-                  setPhase("typing")
-                },
-              }
-    const timer = setTimeout(step.run, step.ms)
+    let run: () => void
+    let ms: number
+    if (phase === "typing") {
+      const done = typed >= scene.query.length
+      ms = done ? 380 : TYPE_MS
+      run = done ? () => setPhase("listed") : () => setTyped(typed + 1)
+    } else {
+      const [next, wait] = NEXT[phase]
+      ms = wait
+      run = () => {
+        if (next === "typing") {
+          setIndex((index + 1) % SCENES.length)
+          setTyped(0)
+        }
+        setPhase(next)
+      }
+    }
+    const timer = setTimeout(run, ms)
     return () => clearTimeout(timer)
-  }, [phase, typed, index, visible, calm, scenes])
+  }, [phase, typed, index, visible, calm, scene])
 
-  const scene = scenes[index]
-  const anyRated = scene.results.some(isRated)
-  const caption =
-    phase === "typing"
-      ? `${scene.agent} searches for an API.`
-      : phase === "listed"
-        ? "Real results. Nothing says which ones work."
-        : anyRated
-          ? "Now it sees how other agents did."
-          : "No reviews yet. The first agent to pay can add one."
+  const caption = {
+    typing: `${scene.agent} searches for an API.`,
+    listed: "The cheapest one looks like the obvious pick.",
+    rated: "Reviews show how each one did for other agents.",
+    ranked: "The one that works moves to the top.",
+    picked: `${scene.agent} pays once and gets the result.`,
+    leaving: `${scene.agent} pays once and gets the result.`,
+  }[phase]
 
   return (
     <div ref={ref}>
       <p className="sr-only">
-        Real searches agents run, with the real paid APIs each one returns and
-        their live ratings from agents that paid:{" "}
-        {scenes.map((s) => s.query).join(", ")}.
+        An example with made-up APIs. An agent searches for an API and the
+        cheapest result looks best. Reviews from other agents show it rarely
+        works, so the agent pays once for the one that does.
       </p>
       <div aria-hidden="true" className="panel">
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
@@ -179,7 +174,10 @@ export function SearchDemo({ scenes }: { scenes: Scene[] }) {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[12px] text-muted">Reviews</span>
-            <span className="switch shrink-0" data-on={phase === "rated"} />
+            <span
+              className="switch shrink-0"
+              data-on={ORDER.indexOf(phase) >= ORDER.indexOf("rated")}
+            />
           </div>
         </div>
         <div className="flex items-center gap-2.5 border-b border-line px-4 py-3 sm:px-5">
@@ -190,9 +188,15 @@ export function SearchDemo({ scenes }: { scenes: Scene[] }) {
           </div>
         </div>
 
-        <div className="[--row:64px]">
-          {scene.results.map((result, order) => (
-            <Row key={result.url} result={result} order={order} phase={phase} />
+        <div className="relative h-[calc(3*var(--row))] overflow-hidden [--row:64px]">
+          {scene.results.map((result, listed) => (
+            <Row
+              key={result.host}
+              scene={scene}
+              result={result}
+              listed={listed}
+              phase={phase}
+            />
           ))}
         </div>
 
@@ -200,8 +204,8 @@ export function SearchDemo({ scenes }: { scenes: Scene[] }) {
           <p key={caption} className="caption text-[13px] font-medium">
             {caption}
           </p>
-          <span className="hidden shrink-0 text-[12px] text-muted sm:inline">
-            Real listings, live ratings
+          <span className="shrink-0 text-[12px] text-muted">
+            Example reviews
           </span>
         </div>
       </div>

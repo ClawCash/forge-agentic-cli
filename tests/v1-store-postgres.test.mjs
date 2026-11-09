@@ -66,6 +66,7 @@ test(
         description: "Data for agents.",
         iconType: "image/png",
         iconData: "aWNvbg==",
+        siteUrl: "https://stableenrich.dev",
         fetchedAt: new Date(),
       }
       await store.saveProfile(profile)

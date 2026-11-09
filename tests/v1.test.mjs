@@ -750,6 +750,7 @@ const PROFILE = {
   description: "Fast web search for agents.",
   iconType: "image/png",
   iconData: Buffer.from("not really a png").toString("base64"),
+  siteUrl: "https://www.great.example",
 }
 
 async function profileSetup(readProfile) {
@@ -767,7 +768,7 @@ test("leaderboard cards carry the seller's name, description and logo", async ()
   const first = await (await app.request("/v1/leaderboard")).json()
   assert.equal(first.top[0].name, "Great API")
   assert.equal(first.top[0].description, "Fast web search for agents.")
-  assert.equal(first.top[0].url, "https://great.example")
+  assert.equal(first.top[0].url, "https://www.great.example")
   assert.equal(
     first.top[0].icon_url,
     `${BASE_URL}/v1/services/great.example/icon`
@@ -839,6 +840,20 @@ test("a profile is read from the seller's own page", async () => {
   assert.equal(profile.description, "Clean data for agents.")
   assert.equal(profile.iconType, "image/png")
   assert.equal(profile.iconData, PNG_BYTES.toString("base64"))
+})
+
+test("a site that only answers on www keeps that address", async () => {
+  const read = reader({
+    "https://www.seller.example/": { body: "<title>Seller</title>" },
+  })
+  const profile = await read("seller.example")
+  assert.equal(profile.name, "Seller")
+  assert.equal(profile.siteUrl, "https://www.seller.example")
+})
+
+test("a site with no page gets no link", async () => {
+  const profile = await reader({})("seller.example")
+  assert.equal(profile.siteUrl, null)
 })
 
 test("instructions in a seller's page are never kept", async () => {
