@@ -27,7 +27,7 @@ import { registrationPath } from "../server/src/registration.ts"
 import { HEDERA_TESTNET } from "../shared/src/networks.ts"
 import { setEnvValue } from "./new-wallet.ts"
 
-const DEFAULT_BASE_URL = "https://forge-agentic-cli-production.up.railway.app"
+const DEFAULT_BASE_URL = "https://reviews-api.forgeintel.co"
 const explorerTx = (hash: string) =>
   `https://hashscan.io/testnet/transaction/${hash}`
 

@@ -23,7 +23,7 @@ import {
   sourceItems,
 } from "./check-invoice.ts"
 
-const DEFAULT_SERVER = "https://forge-agentic-cli-production.up.railway.app"
+const DEFAULT_SERVER = "https://reviews-api.forgeintel.co"
 
 export interface DemoOptions {
   agent: string

@@ -13,7 +13,7 @@ const { values } = parseArgs({ options: { "base-url": { type: "string" } } })
 const baseUrl = (
   values["base-url"] ??
   process.env.PUBLIC_BASE_URL ??
-  "https://forge-agentic-cli-production.up.railway.app"
+  "https://reviews-api.forgeintel.co"
 ).replace(/\/$/, "")
 const registry = createPublicClient({
   chain: HEDERA_TESTNET.evmChain,

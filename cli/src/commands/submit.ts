@@ -36,8 +36,7 @@ Options:
                        later with --approval <id> (for agents)
 `
 
-export const DEFAULT_SERVER =
-  "https://forge-agentic-cli-production.up.railway.app"
+export const DEFAULT_SERVER = "https://reviews-api.forgeintel.co"
 
 export async function runSubmit(
   argv: string[],
