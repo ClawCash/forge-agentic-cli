@@ -88,7 +88,8 @@ Repeat `url=` to compare endpoints (up to 50), or pass just a domain such as `st
 ## Ratings inside your wallet's search
 
 `POST https://reviews-api.forgeintel.co/v1/brief` with `{"domains": ["stableenrich.dev"]}`, up to 50, returns one short
-line per API in numbers and fixed words. No key needed. [This hook](https://reviews.forgeintel.co/HOOK.md) adds those
+line per API in numbers and fixed words. `GET https://reviews.forgeintel.co/ratings.json` has every rating in one file. No
+key needed. [This hook](https://reviews.forgeintel.co/HOOK.md) adds those
 lines to the search results of x402 and MPP wallets in Claude Code, Codex, Cursor, Grok Build, Hermes and OpenCode, with no extra call.
 
 ## Pay as usual

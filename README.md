@@ -78,8 +78,7 @@ marks the ones that have stopped answering. It can't see what happens after paym
 ## Ratings in the same call
 
 An optional hook adds one line per API to a wallet's search results in Claude Code, Codex, Cursor, Grok Build, Hermes
-and OpenCode. It sends only the
-domains of the APIs in those results, and it says nothing if the service is unavailable. See `app/public/HOOK.md`.
+and OpenCode. It answers from a local file of public ratings refreshed in the background, so nothing about a search leaves the machine and a search never waits on the service. See `app/public/HOOK.md`.
 
 ## What has been tested
 

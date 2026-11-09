@@ -10,3 +10,4 @@ next-env.d.ts
 .vercel
 
 evals/enrichment/out/
+__pycache__/

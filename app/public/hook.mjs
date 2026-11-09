@@ -2,20 +2,40 @@
 // Agent Reviews: adds ratings to the API search results of x402 and MPP wallets.
 //
 // It runs after a wallet's search tool or search command, reads the domains of
-// the APIs in the result, and adds one short line per API to what the agent
-// sees. Those domains are all it ever sends: never your query, files, keys or
-// wallet details. If anything goes wrong it stays silent, so it can't get in
-// your agent's way.
+// the APIs in the result, and looks them up in a small local file of public
+// ratings. Nothing about your searches leaves your machine: the file is
+// refreshed in the background with a plain download. If anything goes wrong it
+// stays silent, so it can't get in your agent's way.
 
-import { realpathSync } from "node:fs"
-import { pathToFileURL } from "node:url"
+import { spawn } from "node:child_process"
+import {
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs"
+import { homedir } from "node:os"
+import { dirname, join } from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
-const API = process.env.AGENT_REVIEWS_API ?? "https://reviews-api.forgeintel.co"
+const RATINGS_URL =
+  process.env.AGENT_REVIEWS_RATINGS_URL ??
+  "https://reviews.forgeintel.co/ratings.json"
+const RATINGS_FILE =
+  process.env.AGENT_REVIEWS_RATINGS ??
+  join(homedir(), ".config", "agent-reviews", "ratings.json")
+const LAST_ATTEMPT = `${RATINGS_FILE}.attempt`
+const FRESH_MS = 10 * 60_000
+const RETRY_MS = 60_000
+const TOO_OLD_MS = 7 * 86_400_000
+const MAX_RATINGS_BYTES = 8_000_000
+const REFRESH_TIMEOUT_MS = 10_000
 const MAX_INPUT_BYTES = 4_000_000
 const MAX_DOMAINS = 50
 const MAX_DEPTH = 12
 const MAX_TEXT = 4000
-const TIMEOUT_MS = 2500
 
 const ADDRESS = String.raw`https:\/\/[^\s"'<>)\]\x00-\x1f]+`
 const TLD = "com|dev|io|ai|xyz|co|net|org|app|sh|to|one|gg|so|fun|cash|cloud"
@@ -216,25 +236,106 @@ async function readInput() {
   return Buffer.concat(chunks).toString("utf8")
 }
 
+// Same wording as the API's /v1/brief. A test holds the two together.
+export function briefFrom(ratings, domains) {
+  if (!ratings?.rated || !ratings.generated_at) return null
+  if (Date.now() - Date.parse(ratings.generated_at) > TOO_OLD_MS) return null
+  const { rated } = ratings
+  const names = Object.keys(rated)
+  const down = new Set(ratings.down)
+  const lines = []
+  let reviewed = 0
+  for (const domain of domains) {
+    // A directory can list a company's site while reviews name its API host.
+    const name = Object.hasOwn(rated, domain)
+      ? domain
+      : names.find((known) => known.endsWith(`.${domain}`))
+    if (name) {
+      reviewed += 1
+      lines.push(`${domain}: ${rated[name]}`)
+    } else if (down.has(domain)) {
+      lines.push(`${domain}: not responding when last checked`)
+    }
+  }
+  if (lines.length === 0) {
+    return "Agent Reviews: none of these APIs have reviews yet."
+  }
+  const unreviewed = domains.length - reviewed
+  return [
+    "Agent Reviews, from agents that paid for these APIs:",
+    ...lines.map((line) => `- ${line}`),
+    ...(unreviewed > 0
+      ? [
+          `No reviews yet for ${unreviewed} of ${domains.length} APIs in these results.`,
+        ]
+      : []),
+    ...(reviewed > 0
+      ? ["See what each one promised and delivered with get_api_reviews."]
+      : []),
+  ].join("\n")
+}
+
+function loadRatings() {
+  try {
+    return JSON.parse(readFileSync(RATINGS_FILE, "utf8"))
+  } catch {
+    return null
+  }
+}
+
+function ageOf(file) {
+  try {
+    return Date.now() - statSync(file).mtimeMs
+  } catch {
+    return Infinity
+  }
+}
+
+// Hands the download to a separate process, so a search never waits for it.
+function refreshInBackground() {
+  if (ageOf(RATINGS_FILE) < FRESH_MS || ageOf(LAST_ATTEMPT) < RETRY_MS) return
+  mkdirSync(dirname(RATINGS_FILE), { recursive: true })
+  writeFileSync(LAST_ATTEMPT, "")
+  spawn(process.execPath, [fileURLToPath(import.meta.url), "refresh"], {
+    detached: true,
+    stdio: "ignore",
+  }).unref()
+}
+
+async function refresh() {
+  const res = await fetch(RATINGS_URL, {
+    headers: { "User-Agent": "agent-reviews-hook/2" },
+    signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
+  })
+  if (!res.ok) return
+  const body = await res.text()
+  if (body.length > MAX_RATINGS_BYTES) return
+  const ratings = JSON.parse(body)
+  const usable =
+    typeof ratings?.generated_at === "string" &&
+    ratings.rated &&
+    typeof ratings.rated === "object" &&
+    Array.isArray(ratings.down)
+  if (!usable) return
+  mkdirSync(dirname(RATINGS_FILE), { recursive: true })
+  const partial = `${RATINGS_FILE}.${process.pid}`
+  writeFileSync(partial, body)
+  renameSync(partial, RATINGS_FILE)
+}
+
 async function main() {
+  const host = process.argv[2]
+  if (host === "refresh") return refresh()
   const input = await readInput()
   if (!input) return
   const domains = domainsIn(JSON.parse(input))
   if (domains.length === 0) return
-  const res = await fetch(`${API}/v1/brief`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": "agent-reviews-hook/1",
-    },
-    body: JSON.stringify({ domains }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  })
-  if (!res.ok) return
-  const { text } = await res.json()
-  if (typeof text === "string" && text) {
+  try {
+    refreshInBackground()
+  } catch {}
+  const text = briefFrom(loadRatings(), domains)
+  if (text) {
     const short = text.slice(0, MAX_TEXT)
-    const host = process.argv[2]
     process.stdout.write(
       host === "plain" ? short : JSON.stringify(hookOutput(host, short))
     )

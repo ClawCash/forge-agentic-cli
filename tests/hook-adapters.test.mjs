@@ -1,34 +1,50 @@
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
-import { createServer } from "node:http"
-import { after, before, test } from "node:test"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { before, test } from "node:test"
 import { promisify } from "node:util"
 import { AgentReviews } from "../app/public/agent-reviews-opencode.js"
 
-// Runs each agent's adapter against the real hook script and a fake API.
+// Runs each agent's adapter against the real hook script and a ratings file.
 
 const RESULT = JSON.stringify({
   results: { results: [{ path: "/x", origin: { url: "https://a.example" } }] },
 })
-const LINE = "Agent Reviews: rated"
-let requests = 0
-let fail = false
-let server
+const DETAILS = "5/5 from 1 agent, about 67% likely to work"
+const LINE = [
+  "Agent Reviews, from agents that paid for these APIs:",
+  `- a.example: ${DETAILS}`,
+  "See what each one promised and delivered with get_api_reviews.",
+].join("\n")
+const dir = mkdtempSync(join(tmpdir(), "reviews-"))
+const FILE = join(dir, "ratings.json")
+const MISSING = join(dir, "missing", "ratings.json")
 
-before(async () => {
-  server = createServer((req, res) => {
-    req.resume()
-    req.on("end", () => {
-      requests += 1
-      res.statusCode = fail ? 500 : 200
-      res.end(JSON.stringify({ text: LINE }))
+before(() => {
+  writeFileSync(
+    FILE,
+    JSON.stringify({
+      version: 1,
+      generated_at: new Date().toISOString(),
+      rated: { "a.example": DETAILS },
+      down: [],
     })
-  })
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
-  process.env.AGENT_REVIEWS_API = `http://127.0.0.1:${server.address().port}`
+  )
+  process.env.AGENT_REVIEWS_RATINGS = FILE
+  process.env.AGENT_REVIEWS_RATINGS_URL = "http://127.0.0.1:9/"
   process.env.AGENT_REVIEWS_HOOK = "app/public/hook.mjs"
 })
-after(() => server.close())
+
+const withoutRatings = async (work) => {
+  process.env.AGENT_REVIEWS_RATINGS = MISSING
+  try {
+    return await work()
+  } finally {
+    process.env.AGENT_REVIEWS_RATINGS = FILE
+  }
+}
 
 const opencode = async (tool, args, output) => {
   const hooks = await AgentReviews()
@@ -77,7 +93,6 @@ test("OpenCode gets ratings when the result is MCP content", async () => {
 })
 
 test("OpenCode leaves other tools and failures alone", async () => {
-  const before = requests
   const other = await opencode(
     "bash",
     { command: "ls" },
@@ -90,14 +105,13 @@ test("OpenCode leaves other tools and failures alone", async () => {
     { title: "", output: RESULT, metadata: {} }
   )
   assert.equal(unrelated.output, RESULT)
-  assert.equal(requests, before)
-  fail = true
-  const failed = await opencode(
-    "agentcash_search",
-    {},
-    { title: "", output: RESULT, metadata: {} }
+  const failed = await withoutRatings(() =>
+    opencode(
+      "agentcash_search",
+      {},
+      { title: "", output: RESULT, metadata: {} }
+    )
   )
-  fail = false
   assert.equal(failed.output, RESULT)
 })
 
@@ -111,11 +125,10 @@ module.register(type("Ctx", (), {"register_hook": lambda self, name, fn: hooks.s
 print(json.dumps(hooks["transform_tool_result"](**json.loads(sys.argv[1]))))
 `
 
-// Must not block: the fake API runs in this process.
 const hermes = async (call) => {
   const { stdout } = await promisify(execFile)(
     "python3",
-    ["-I", "-c", HERMES, JSON.stringify(call)],
+    ["-I", "-B", "-c", HERMES, JSON.stringify(call)],
     { env: process.env }
   )
   return JSON.parse(stdout)
@@ -143,7 +156,6 @@ test("Hermes gets ratings on a shell wallet search", async () => {
 })
 
 test("Hermes leaves other tools and failures alone", async () => {
-  const before = requests
   assert.equal(
     await hermes({
       tool_name: "terminal",
@@ -160,15 +172,10 @@ test("Hermes leaves other tools and failures alone", async () => {
     }),
     null
   )
-  assert.equal(requests, before)
-  fail = true
   assert.equal(
-    await hermes({
-      tool_name: "mcp__agentcash__search",
-      args: {},
-      result: RESULT,
-    }),
+    await withoutRatings(() =>
+      hermes({ tool_name: "mcp__agentcash__search", args: {}, result: RESULT })
+    ),
     null
   )
-  fail = false
 })

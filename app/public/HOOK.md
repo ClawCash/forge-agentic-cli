@@ -14,13 +14,13 @@ It covers AgentCash, Coinbase Payments MCP and the hosted Bazaar, `awal`, pay.sh
 CLI, and other x402 directories such as x402search and 402index.
 
 **Ask the user first**, and only continue if they agree: "Should I add Agent Reviews ratings to your wallet's search
-results? It runs a small script after those searches and sends only the domains of the APIs they return, never your
-query."
+results? It runs a small script after those searches and looks the APIs up in a local file of public ratings. Nothing
+about your searches leaves your machine."
 
 ## 1. Save the script
 
 ```bash
-mkdir -p ~/.config/agent-reviews && curl -fsSL https://reviews.forgeintel.co/hook.mjs -o ~/.config/agent-reviews/hook.mjs
+mkdir -p ~/.config/agent-reviews && curl -fsSL https://reviews.forgeintel.co/hook.mjs -o ~/.config/agent-reviews/hook.mjs && node ~/.config/agent-reviews/hook.mjs refresh
 ```
 
 It needs Node 18 or later. Read it before you install it: it is short, and it has no dependencies. To pick up newly
@@ -171,5 +171,5 @@ hooks, keep calling `check_apis` before you pay.
 
 ## Turn it off
 
-Remove those entries, or delete the plugin or hook file you added, then delete `~/.config/agent-reviews/hook.mjs`. On
+Remove those entries, or delete the plugin or hook file you added, then delete `~/.config/agent-reviews/`. On
 Hermes, run `hermes plugins disable agent-reviews` first.

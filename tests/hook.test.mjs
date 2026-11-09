@@ -1,9 +1,19 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
-import { readFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs"
 import { createServer } from "node:http"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { setTimeout as wait } from "node:timers/promises"
 import { test } from "node:test"
-import { domainsIn, hookOutput } from "../app/public/hook.mjs"
+import { briefFrom, domainsIn, hookOutput } from "../app/public/hook.mjs"
+import { brief, ratingsFile } from "../server/src/v1/brief.ts"
 
 // Trimmed from a real AgentCash search result.
 const SEARCH_RESULT = {
@@ -356,10 +366,40 @@ test("speaks each host's format", () => {
   }
 })
 
-function run(input, api, host = "claude") {
+const DETAILS = "4.5/5 from 3 agents, about 80% likely to work"
+const TEXT = [
+  "Agent Reviews, from agents that paid for these APIs:",
+  `- 4yearcycle.com: ${DETAILS}`,
+  "No reviews yet for 1 of 2 APIs in these results.",
+  "See what each one promised and delivered with get_api_reviews.",
+].join("\n")
+const ratings = (extra) => ({
+  version: 1,
+  generated_at: new Date().toISOString(),
+  rated: { "4yearcycle.com": DETAILS },
+  down: [],
+  ...extra,
+})
+
+function ratingsPath(content) {
+  const file = join(mkdtempSync(join(tmpdir(), "reviews-")), "ratings.json")
+  if (content) writeFileSync(file, JSON.stringify(content))
+  return file
+}
+
+const makeOld = (file) => {
+  const old = new Date(Date.now() - 3_600_000)
+  utimesSync(file, old, old)
+}
+
+function run(input, { file, url = "http://127.0.0.1:9/", host = "claude" }) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ["app/public/hook.mjs", host], {
-      env: { ...process.env, AGENT_REVIEWS_API: api },
+      env: {
+        ...process.env,
+        AGENT_REVIEWS_RATINGS: file,
+        AGENT_REVIEWS_RATINGS_URL: url,
+      },
     })
     let stdout = ""
     child.stdout.on("data", (chunk) => (stdout += chunk))
@@ -368,22 +408,27 @@ function run(input, api, host = "claude") {
   })
 }
 
-async function fakeApi(respond) {
-  const bodies = []
+async function fakeSite(respond) {
+  const requests = []
   const server = createServer((req, res) => {
     let body = ""
     req.on("data", (chunk) => (body += chunk))
     req.on("end", () => {
-      bodies.push({ url: req.url, body })
+      requests.push({ method: req.method, url: req.url, body })
       respond(res)
     })
   })
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve))
   return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    bodies,
+    url: `http://127.0.0.1:${server.address().port}/`,
+    requests,
     close: () => server.close(),
   }
+}
+
+async function until(condition) {
+  for (let i = 0; i < 80 && !condition(); i++) await wait(50)
+  assert.ok(condition(), "timed out")
 }
 
 const EVENT = JSON.stringify({
@@ -392,53 +437,146 @@ const EVENT = JSON.stringify({
   tool_response: [{ type: "text", text }],
 })
 
-test("adds the ratings and sends only the domains", async () => {
-  const api = await fakeApi((res) => {
-    res.setHeader("Content-Type", "application/json")
-    res.end(JSON.stringify({ text: "Agent Reviews: rated" }))
+test("adds ratings from the local file with no network call", async () => {
+  const site = await fakeSite((res) => res.end("{}"))
+  const { code, stdout } = await run(EVENT, {
+    file: ratingsPath(ratings()),
+    url: site.url,
   })
-  const { code, stdout } = await run(EVENT, api.url)
-  api.close()
+  await wait(300)
+  site.close()
   assert.equal(code, 0)
-  assert.equal(
-    JSON.parse(stdout).hookSpecificOutput.additionalContext,
-    "Agent Reviews: rated"
-  )
-  assert.equal(api.bodies[0].url, "/v1/brief")
-  assert.deepEqual(JSON.parse(api.bodies[0].body), { domains: DOMAINS })
-  assert.doesNotMatch(api.bodies[0].body, /secret/)
+  assert.equal(JSON.parse(stdout).hookSpecificOutput.additionalContext, TEXT)
+  assert.equal(site.requests.length, 0)
 })
 
-test("stays silent when our API fails or is unreachable", async () => {
-  const api = await fakeApi((res) => {
-    res.statusCode = 500
-    res.end("{}")
+test("a search doesn't wait when the file needs refreshing", async () => {
+  const file = ratingsPath(ratings())
+  makeOld(file)
+  const newer = ratings({ rated: { "new.example": DETAILS } })
+  const site = await fakeSite((res) => {
+    setTimeout(() => res.end(JSON.stringify(newer)), 1500)
   })
-  const failed = await run(EVENT, api.url)
-  api.close()
-  assert.deepEqual(failed, { code: 0, stdout: "" })
-  const unreachable = await run(EVENT, "http://127.0.0.1:9")
-  assert.deepEqual(unreachable, { code: 0, stdout: "" })
+  const started = Date.now()
+  const { stdout } = await run(EVENT, { file, url: site.url })
+  assert.ok(Date.now() - started < 1000, "the search waited for the download")
+  assert.equal(JSON.parse(stdout).hookSpecificOutput.additionalContext, TEXT)
+  await until(() => readFileSync(file, "utf8").includes("new.example"))
+  site.close()
+  assert.deepEqual(site.requests, [{ method: "GET", url: "/", body: "" }])
+})
+
+test("with no file it says nothing, and fetches one for next time", async () => {
+  const file = ratingsPath()
+  const site = await fakeSite((res) => res.end(JSON.stringify(ratings())))
+  assert.deepEqual(await run(EVENT, { file, url: site.url }), {
+    code: 0,
+    stdout: "",
+  })
+  await until(() => existsSync(file))
+  site.close()
+})
+
+test("a failed refresh keeps the last good file and isn't retried at once", async () => {
+  for (const reply of [
+    (res) => {
+      res.statusCode = 500
+      res.end("{}")
+    },
+    (res) => res.end("not json"),
+    (res) => res.end(JSON.stringify({ version: 1 })),
+  ]) {
+    const file = ratingsPath(ratings())
+    const before = readFileSync(file, "utf8")
+    makeOld(file)
+    const site = await fakeSite(reply)
+    const first = await run(EVENT, { file, url: site.url })
+    await run(EVENT, { file, url: site.url })
+    await wait(400)
+    site.close()
+    assert.equal(
+      JSON.parse(first.stdout).hookSpecificOutput.additionalContext,
+      TEXT
+    )
+    assert.equal(readFileSync(file, "utf8"), before)
+    assert.equal(site.requests.length, 1)
+  }
+})
+
+test("very old ratings aren't shown", async () => {
+  const old = new Date(Date.now() - 8 * 86_400_000).toISOString()
+  const file = ratingsPath(ratings({ generated_at: old }))
+  assert.deepEqual(await run(EVENT, { file }), { code: 0, stdout: "" })
 })
 
 test("prints plain text for agents with their own adapter", async () => {
-  const api = await fakeApi((res) => {
-    res.setHeader("Content-Type", "application/json")
-    res.end(JSON.stringify({ text: "Agent Reviews: rated" }))
-  })
-  const { stdout } = await run(EVENT, api.url, "plain")
-  api.close()
-  assert.equal(stdout, "Agent Reviews: rated")
+  const file = ratingsPath(ratings())
+  const { stdout } = await run(EVENT, { file, host: "plain" })
+  assert.equal(stdout, TEXT)
 })
 
-test("makes no request for other tools or broken input", async () => {
-  const api = await fakeApi((res) => res.end("{}"))
+test("does nothing for other tools or broken input", async () => {
+  const file = ratingsPath()
+  const site = await fakeSite((res) => res.end("{}"))
   const other = JSON.stringify({ tool_name: "Bash", tool_response: text })
-  assert.deepEqual(await run(other, api.url), { code: 0, stdout: "" })
-  assert.deepEqual(await run("not json", api.url), { code: 0, stdout: "" })
-  assert.deepEqual(await run("", api.url), { code: 0, stdout: "" })
-  api.close()
-  assert.equal(api.bodies.length, 0)
+  for (const input of [other, "not json", ""]) {
+    assert.deepEqual(await run(input, { file, url: site.url }), {
+      code: 0,
+      stdout: "",
+    })
+  }
+  await wait(300)
+  site.close()
+  assert.equal(site.requests.length, 0)
+  assert.ok(!existsSync(file))
+})
+
+test("the hook and the API word a brief the same way", () => {
+  const rating = (extra) => ({
+    stars: 3.3,
+    buyers: 2,
+    works_for_task: 0.62,
+    verdict: "unknown",
+    listing_accuracy: null,
+    top_problem: "incomplete",
+    ...extra,
+  })
+  const none = rating({ stars: null })
+  for (const entries of [
+    [
+      { domain: "a.example", rating: rating(), down: false },
+      { domain: "b.example", rating: none, down: false },
+      { domain: "c.example", rating: none, down: true },
+    ],
+    [
+      {
+        domain: "a.example",
+        rating: rating({
+          buyers: 1,
+          verdict: "avoid",
+          listing_accuracy: { accurate: 1, overstated: 1, misleading: 0 },
+          top_problem: "paid_no_result",
+        }),
+        down: true,
+      },
+    ],
+    [{ domain: "b.example", rating: none, down: false }],
+  ]) {
+    assert.equal(
+      briefFrom(
+        ratingsFile(entries),
+        entries.map((entry) => entry.domain)
+      ),
+      brief(entries).text
+    )
+  }
+})
+
+test("a listed site finds reviews filed under its API host", () => {
+  const file = ratings({ rated: { "api.aisa.one": DETAILS } })
+  assert.match(briefFrom(file, ["aisa.one"]), /aisa\.one: 4\.5\/5/)
+  assert.doesNotMatch(briefFrom(file, ["isa.one"]), /4\.5\/5/)
+  assert.doesNotMatch(briefFrom(file, ["constructor"]), /function/)
 })
 
 test("the install guide's matchers fit the search tools and nothing else", () => {

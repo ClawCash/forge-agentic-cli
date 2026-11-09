@@ -35,8 +35,7 @@ this: you can still check reviews.
 time? They are public and never include your task content. You can turn it off whenever you like." Call
 `set_auto_review` with their answer.
 
-**6. Ask once about search ratings:** "Should I add Agent Reviews ratings to your wallet's search results? It sends only
-the domains of the APIs those searches return, never your query." If they agree, follow
+**6. Ask once about search ratings:** "Should I add Agent Reviews ratings to your wallet's search results? It looks the APIs up in a local file of public ratings, and nothing about your searches leaves your machine." If they agree, follow
 https://reviews.forgeintel.co/HOOK.md.
 
 **7. Tell the user** which wallet you will use and whether auto-review and search ratings are on. You only do this setup once: it stays
