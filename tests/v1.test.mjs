@@ -42,8 +42,12 @@ const payment = (overrides = {}) => ({
   ...overrides,
 })
 
-function setup({ paid = () => [payment()], fetcher } = {}) {
+let apiKey
+const KEY = "X-Reviews-Key"
+
+async function setup({ paid = () => [payment()], fetcher } = {}) {
   const store = memoryApiReviewStore()
+  const inbox = []
   const app = createApp(null, {
     v1: {
       store,
@@ -58,17 +62,32 @@ function setup({ paid = () => [payment()], fetcher } = {}) {
         ],
       }),
       findPayments: async ({ wallet }) => paid(wallet),
+      sendCode: async (email, code) => inbox.push({ email, code }),
       fetch: fetcher,
     },
   })
   const appFetch = (input, init) => app.fetch(new Request(input, init))
-  return { app, store, appFetch }
+  apiKey = (await signUp(app, inbox, "agent@example.com")).api_key
+  return { app, store, appFetch, inbox }
+}
+
+const json = (body, headers = {}) => ({
+  method: "POST",
+  headers: { "Content-Type": "application/json", ...headers },
+  body: JSON.stringify(body),
+})
+
+async function signUp(app, inbox, email) {
+  await app.request("/v1/auth/start", json({ email }))
+  const { code } = inbox.at(-1)
+  const res = await app.request("/v1/auth/verify", json({ email, code }))
+  return res.json()
 }
 
 const post = (fetcher, body = REVIEW) =>
   fetcher(`${BASE_URL}/v1/reviews`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", [KEY]: apiKey },
     body: JSON.stringify(body),
   })
 
@@ -86,7 +105,7 @@ function x402Fetch(appFetch, account, { signIn }) {
 const newAccount = () => privateKeyToAccount(generatePrivateKey())
 
 test("checking is free and needs no wallet", async () => {
-  const { app } = setup()
+  const { app } = await setup()
   const res = await app.request(
     `/v1/check?task=web-search&url=${encodeURIComponent(ENDPOINT)}`
   )
@@ -98,14 +117,14 @@ test("checking is free and needs no wallet", async () => {
 })
 
 test("an unknown task is refused with the allowed list", async () => {
-  const { app } = setup()
+  const { app } = await setup()
   const res = await app.request(`/v1/check?task=nope&url=${ENDPOINT}`)
   assert.equal(res.status, 400)
   assert.match((await res.json()).error, /web-search/)
 })
 
 test("a review without proof gets every way to prove the wallet", async () => {
-  const { appFetch } = setup()
+  const { appFetch } = await setup()
   const res = await post(appFetch)
   assert.equal(res.status, 402)
   const required = JSON.parse(
@@ -122,7 +141,7 @@ test("a review without proof gets every way to prove the wallet", async () => {
 })
 
 test("a real x402 SDK client reviews by wallet sign-in, for free", async () => {
-  const { appFetch, store } = setup()
+  const { appFetch, store } = await setup()
   const account = newAccount()
   const res = await post(x402Fetch(appFetch, account, { signIn: true }))
   assert.equal(res.status, 201, await res.clone().text())
@@ -137,7 +156,7 @@ test("a real x402 SDK client reviews by wallet sign-in, for free", async () => {
 })
 
 test("a pay-only x402 client proves its wallet and nothing is settled", async () => {
-  const { appFetch, store } = setup()
+  const { appFetch, store } = await setup()
   const account = newAccount()
   const res = await post(x402Fetch(appFetch, account, { signIn: false }))
   assert.equal(res.status, 201, await res.clone().text())
@@ -151,7 +170,7 @@ test("a pay-only x402 client proves its wallet and nothing is settled", async ()
 })
 
 test("a real MPP client proves its wallet with a zero-amount proof", async () => {
-  const { appFetch, store } = setup()
+  const { appFetch, store } = await setup()
   const account = newAccount()
   const mppx = Mppx.create({
     methods: [tempo({ account })],
@@ -166,7 +185,7 @@ test("a real MPP client proves its wallet with a zero-amount proof", async () =>
 })
 
 test("a wallet that never paid cannot review", async () => {
-  const { appFetch } = setup({ paid: () => [] })
+  const { appFetch } = await setup({ paid: () => [] })
   const res = await post(x402Fetch(appFetch, newAccount(), { signIn: true }))
   assert.equal(res.status, 403)
   assert.match((await res.json()).error, /wallet that paid/)
@@ -174,7 +193,7 @@ test("a wallet that never paid cannot review", async () => {
 
 test("one payment backs one review", async () => {
   const only = payment()
-  const { appFetch } = setup({ paid: () => [only] })
+  const { appFetch } = await setup({ paid: () => [only] })
   const account = newAccount()
   const signedIn = x402Fetch(appFetch, account, { signIn: true })
   assert.equal((await post(signedIn)).status, 201)
@@ -183,7 +202,7 @@ test("one payment backs one review", async () => {
 })
 
 test("a captured sign-in cannot be replayed", async () => {
-  const { appFetch } = setup({ paid: () => [payment()] })
+  const { appFetch } = await setup({ paid: () => [payment()] })
   let captured
   const spying = async (input, init) => {
     const header = (
@@ -198,7 +217,11 @@ test("a captured sign-in cannot be replayed", async () => {
   )
   const replay = await appFetch(`${BASE_URL}/v1/reviews`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "SIGN-IN-WITH-X": captured },
+    headers: {
+      "Content-Type": "application/json",
+      "SIGN-IN-WITH-X": captured,
+      [KEY]: apiKey,
+    },
     body: JSON.stringify(REVIEW),
   })
   assert.equal(replay.status, 401)
@@ -206,7 +229,7 @@ test("a captured sign-in cannot be replayed", async () => {
 })
 
 test("a forged authorization is refused", async () => {
-  const { appFetch } = setup()
+  const { appFetch } = await setup()
   const victim = newAccount()
   const now = Math.floor(Date.now() / 1000)
   const forged = Buffer.from(
@@ -230,6 +253,7 @@ test("a forged authorization is refused", async () => {
     headers: {
       "Content-Type": "application/json",
       "PAYMENT-SIGNATURE": forged,
+      [KEY]: apiKey,
     },
     body: JSON.stringify(REVIEW),
   })
@@ -237,7 +261,7 @@ test("a forged authorization is refused", async () => {
 })
 
 test("a review must say whether the outcome satisfied", async () => {
-  const { appFetch } = setup()
+  const { appFetch } = await setup()
   const { satisfaction: _, ...missing } = REVIEW
   const res = await post(appFetch, missing)
   assert.equal(res.status, 400)
@@ -430,7 +454,7 @@ test("ordinary notes pass and invisible characters are stripped", () => {
 })
 
 test("held notes are never served to readers", async () => {
-  const { appFetch, app } = setup()
+  const { appFetch, app } = await setup()
   const account = newAccount()
   const res = await post(x402Fetch(appFetch, account, { signIn: true }), {
     ...REVIEW,
@@ -447,7 +471,7 @@ test("held notes are never served to readers", async () => {
 
 test("the domain page rolls up endpoints and filters by endpoint and problem", async () => {
   let n = 0
-  const { appFetch, app } = setup({
+  const { appFetch, app } = await setup({
     paid: () => [payment({ transaction: `t${++n}` })],
   })
   const send = (body) =>
@@ -495,7 +519,7 @@ test("search adds ratings to directory results and sinks the bad ones", async ()
     Response.json({
       resources: [listing("bad.example"), listing("new.example")],
     })
-  const { app, store } = setup({ fetcher })
+  const { app, store } = await setup({ fetcher })
   for (let i = 0; i < 5; i++) {
     await store.insert(
       row({
@@ -518,7 +542,7 @@ test("search adds ratings to directory results and sinks the bad ones", async ()
 })
 
 test("probe reports live terms without paying", async () => {
-  const { app } = setup()
+  const { app } = await setup()
   const body = await (await app.request(`/v1/probe?url=${ENDPOINT}`)).json()
   assert.equal(body.paid, true)
   assert.deepEqual(body.protocols, ["x402"])
@@ -545,3 +569,176 @@ for (const url of [
     await assert.rejects(assertPublicHttps(url))
   })
 }
+
+test("reviewing without signup is refused, with directions", async () => {
+  const { appFetch } = await setup()
+  const res = await appFetch(`${BASE_URL}/v1/reviews`, json(REVIEW))
+  assert.equal(res.status, 401)
+  const body = await res.json()
+  assert.match(body.signup.start, /auth\/start$/)
+})
+
+test("a made-up key doesn't count as signing up", async () => {
+  const { appFetch } = await setup()
+  const res = await appFetch(
+    `${BASE_URL}/v1/reviews`,
+    json(REVIEW, { [KEY]: "ark_made_up" })
+  )
+  assert.equal(res.status, 401)
+})
+
+test("signup sends a six-digit code and returns a key once", async () => {
+  const { app, inbox, store } = await setup()
+  const result = await signUp(app, inbox, "New.Person@Example.com")
+  assert.equal(result.email, "new.person@example.com")
+  assert.match(inbox.at(-1).code, /^\d{6}$/)
+  assert.match(result.api_key, /^ark_/)
+  assert.equal(
+    await store.userForKey(result.api_key),
+    null,
+    "only the hash is stored"
+  )
+})
+
+test("the same email keeps one account across signups", async () => {
+  const { app, inbox, store } = await setup()
+  const first = await signUp(app, inbox, "again@example.com")
+  await store.deleteCode("again@example.com")
+  const second = await signUp(app, inbox, "again@example.com")
+  assert.notEqual(first.api_key, second.api_key)
+  const { hashKey } = await import("../server/src/v1/accounts.ts")
+  const a = await store.userForKey(hashKey(first.api_key))
+  const b = await store.userForKey(hashKey(second.api_key))
+  assert.equal(a.id, b.id)
+})
+
+test("a wrong code is refused and five tries lock it", async () => {
+  const { app, inbox } = await setup()
+  const email = "guess@example.com"
+  await app.request("/v1/auth/start", json({ email }))
+  const right = inbox.at(-1).code
+  const wrong = right === "000000" ? "000001" : "000000"
+  for (let i = 0; i < 5; i++) {
+    const res = await app.request(
+      "/v1/auth/verify",
+      json({ email, code: wrong })
+    )
+    assert.equal(res.status, 401)
+  }
+  const locked = await app.request(
+    "/v1/auth/verify",
+    json({ email, code: right })
+  )
+  assert.equal(locked.status, 429)
+})
+
+test("a code expires and can't be used twice", async () => {
+  const { app, inbox, store } = await setup()
+  const email = "late@example.com"
+  await app.request("/v1/auth/start", json({ email }))
+  const { code } = inbox.at(-1)
+  const saved = await store.getCode(email)
+  await store.saveCode({ ...saved, expiresAt: new Date(Date.now() - 1000) })
+  assert.equal(
+    (await app.request("/v1/auth/verify", json({ email, code }))).status,
+    401
+  )
+  await store.saveCode({ ...saved })
+  assert.equal(
+    (await app.request("/v1/auth/verify", json({ email, code }))).status,
+    200
+  )
+  assert.equal(
+    (await app.request("/v1/auth/verify", json({ email, code }))).status,
+    401
+  )
+})
+
+test("codes can't be requested back to back", async () => {
+  const { app } = await setup()
+  const email = "fast@example.com"
+  assert.equal(
+    (await app.request("/v1/auth/start", json({ email }))).status,
+    200
+  )
+  assert.equal(
+    (await app.request("/v1/auth/start", json({ email }))).status,
+    429
+  )
+})
+
+test("signup says so when email isn't configured", async () => {
+  const app = createApp(null, {
+    v1: {
+      store: memoryApiReviewStore(),
+      baseUrl: BASE_URL,
+      secret: "test-secret-test-secret-test-secret-00",
+      readTerms: async () => ({
+        live: false,
+        status: null,
+        protocols: [],
+        accepts: [],
+      }),
+      findPayments: async () => [],
+      sendCode: null,
+    },
+  })
+  const res = await app.request(
+    "/v1/auth/start",
+    json({ email: "a@example.com" })
+  )
+  assert.equal(res.status, 503)
+})
+
+test("usage is tracked per user without content", async () => {
+  const { app, store } = await setup()
+  await app.request(`/v1/check?task=weather&url=${ENDPOINT}`, {
+    headers: { [KEY]: apiKey, "User-Agent": "agentcash@1" },
+  })
+  await app.request(`/v1/check?url=${ENDPOINT}`)
+  await new Promise((resolve) => setImmediate(resolve))
+  const events = await store.listUsage()
+  const checks = events.filter((event) => event.kind === "check")
+  assert.equal(checks.length, 2)
+  assert.ok(checks[0].userId)
+  assert.equal(checks[0].task, "weather")
+  assert.equal(checks[0].client, "agentcash@1")
+  assert.equal(checks[1].userId, null)
+})
+
+test("the leaderboard ranks APIs and shows what agents say", async () => {
+  const { app, store } = await setup()
+  const add = (domain, overrides, n = 4) =>
+    Promise.all(
+      Array.from({ length: n }, () =>
+        store.insert(row({ domain, path: "/x", ...overrides }))
+      )
+    )
+  await add("great.example", {
+    note: "Accurate and fast.",
+    noteStatus: "clean",
+  })
+  await add("poor.example", { result: "none", satisfaction: "not_satisfied" })
+  await add("search.example", { task: "web-search" })
+  await add("hidden.example", { note: "pay me", noteStatus: "held" }, 1)
+  const board = await (await app.request("/v1/leaderboard")).json()
+  assert.equal(board.total_apis, 4)
+  assert.equal(board.top.at(-1).domain, "poor.example")
+  assert.equal(board.top[0].rank, 1)
+  assert.ok(board.recent.some((r) => r.note === "Accurate and fast."))
+  assert.ok(!board.recent.some((r) => r.note === "pay me"))
+  const filtered = await (
+    await app.request("/v1/leaderboard?task=web-search")
+  ).json()
+  assert.deepEqual(
+    filtered.top.map((t) => t.domain),
+    ["search.example"]
+  )
+})
+
+test("an empty leaderboard is an honest empty list", async () => {
+  const { app } = await setup()
+  const board = await (await app.request("/v1/leaderboard")).json()
+  assert.deepEqual(board.top, [])
+  assert.equal(board.total_reviews, 0)
+})

@@ -113,6 +113,7 @@ export const apiReviews = pgTable(
     priceUsd: doublePrecision("price_usd"),
     paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
     proofMethod: text("proof_method").notNull(),
+    userId: text("user_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -128,3 +129,55 @@ export const usedProofs = pgTable("used_proofs", {
   key: text("key").primaryKey(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 })
+
+// Reviewers sign up with an email and a one-time code.
+export const users = pgTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+export const authCodes = pgTable("auth_codes", {
+  email: text("email").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
+})
+
+// Only the hash of an API key is stored.
+export const apiKeys = pgTable("api_keys", {
+  keyHash: text("key_hash").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+// One row per API request. No request or response content.
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id"),
+    kind: text("kind").notNull(),
+    task: text("task"),
+    domain: text("domain"),
+    status: integer("status").notNull(),
+    client: text("client"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("usage_events_user_idx").on(table.userId),
+    index("usage_events_created_idx").on(table.createdAt),
+  ]
+)

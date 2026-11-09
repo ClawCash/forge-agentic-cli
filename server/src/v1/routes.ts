@@ -8,17 +8,25 @@ import {
   type FoundPayment,
   priceUsd,
 } from "./chains.ts"
+import {
+  accountRoutes,
+  hashKey,
+  KEY_HEADER,
+  type SendCode,
+} from "./accounts.ts"
 import { type WalletProof, walletProver } from "./proof.ts"
 import { type Rating, rate, screenNote, taskPrior } from "./rating.ts"
 import {
   type ApiReview,
   type ApiReviewStore,
+  type ApiUser,
   PaymentAlreadyReviewedError,
 } from "./store.ts"
 import type { ReadTerms } from "./terms.ts"
 
-// The free reviews API: search, check and probe need no wallet; writing a
-// review needs proof that the writer's wallet actually paid for the API.
+// The free reviews API. Search, check, probe and the leaderboard need nothing.
+// Writing a review needs a quick email signup and proof that the writer's
+// wallet actually paid for the API.
 
 export const TASKS = [
   "web-search",
@@ -76,6 +84,7 @@ export interface V1Deps {
   secret: string
   baseRpcUrl?: string
   findPayments: FindPayments
+  sendCode: SendCode | null
   readTerms: ReadTerms
   fetch?: typeof fetch
   // Overrides wallet proof in tests that exercise only the rating flow.
@@ -121,8 +130,54 @@ function publicReview(row: ApiReview) {
 const rank = (rating: Rating) =>
   ({ use: 0, unknown: 1, caution: 2, avoid: 3 })[rating.verdict] ?? 1
 
+const USAGE_KINDS: [RegExp, string][] = [
+  [/\/v1\/check$/, "check"],
+  [/\/v1\/search$/, "search"],
+  [/\/v1\/probe$/, "probe"],
+  [/\/v1\/reviews$/, "review"],
+  [/\/v1\/leaderboard$/, "leaderboard"],
+  [/\/v1\/services\//, "service"],
+]
+
 export function v1Routes(deps: V1Deps) {
-  const app = new Hono()
+  const app = new Hono<{ Variables: { user: ApiUser | null } }>()
+
+  // Knows who is calling, when they say, and records what was used. Never
+  // records request or response content.
+  app.use("*", async (c, next) => {
+    const key = c.req.header(KEY_HEADER)
+    const user = key ? await deps.store.userForKey(hashKey(key)) : null
+    c.set("user", user)
+    await next()
+    const kind = USAGE_KINDS.find(([path]) => path.test(c.req.path))?.[1]
+    if (!kind) return
+    void deps.store
+      .recordUsage({
+        id: randomUUID(),
+        userId: user?.id ?? null,
+        kind,
+        task: c.req.query("task") ?? null,
+        domain: c.req.param("domain") ?? null,
+        status: c.res.status,
+        client:
+          (
+            c.req.header("x-client-id") ??
+            c.req.header("user-agent") ??
+            ""
+          ).slice(0, 120) || null,
+      })
+      .catch(() => {})
+  })
+
+  app.route(
+    "/auth",
+    accountRoutes({
+      store: deps.store,
+      secret: deps.secret,
+      sendCode: deps.sendCode,
+    })
+  )
+
   const prove =
     deps.proveWallet ??
     walletProver({
@@ -405,6 +460,22 @@ export function v1Routes(deps: V1Deps) {
     }
     const body = parsed.data
 
+    const user = c.get("user")
+    if (!user) {
+      return c.json(
+        {
+          error:
+            "Reviewing needs a quick signup. Send the user's email to POST /v1/auth/start, then the code they receive to POST /v1/auth/verify, and pass the returned key as X-Reviews-Key.",
+          signup: {
+            start: `${deps.baseUrl}/v1/auth/start`,
+            verify: `${deps.baseUrl}/v1/auth/verify`,
+            header: "X-Reviews-Key",
+          },
+        },
+        401
+      )
+    }
+
     const proof = await prove(c.req.raw)
     if (proof.status === "challenge") return proof.response
     if (proof.status === "invalid") {
@@ -464,6 +535,7 @@ export function v1Routes(deps: V1Deps) {
         priceUsd: priceUsd(payment.asset, payment.amount),
         paidAt: payment.paidAt,
         proofMethod: proof.method,
+        userId: user.id,
       })
       const response = c.json(
         {
@@ -484,6 +556,64 @@ export function v1Routes(deps: V1Deps) {
       }
       throw error
     }
+  })
+
+  // What agents say: the top-rated APIs and the latest verified reviews.
+  app.get("/leaderboard", async (c) => {
+    const parsed = z
+      .object({
+        task: Task.optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(25),
+      })
+      .safeParse(c.req.query())
+    if (!parsed.success) return c.json({ error: "Invalid filters" }, 400)
+    const { task, limit } = parsed.data
+    const recent = await deps.store.listRecent(5000)
+    const rows = task ? recent.filter((row) => row.task === task) : recent
+    const prior = taskPrior(rows)
+    const byDomain = new Map<string, ApiReview[]>()
+    for (const row of rows) {
+      byDomain.set(row.domain, [...(byDomain.get(row.domain) ?? []), row])
+    }
+    const top = [...byDomain]
+      .map(([domain, domainRows]) => ({
+        domain,
+        ...rate(domainRows, { domain, path: "", task }, prior),
+      }))
+      .filter((entry) => entry.works_for_task !== null)
+      .sort(
+        (a, b) =>
+          (b.works_for_task as number) - (a.works_for_task as number) ||
+          b.buyers - a.buyers
+      )
+      .slice(0, limit)
+      .map((entry, index) => {
+        const {
+          scope: _,
+          domain_rating: __,
+          cost_per_success_usd: ___,
+          ...rest
+        } = entry
+        return { rank: index + 1, ...rest }
+      })
+    return c.json({
+      updated_at: new Date().toISOString(),
+      task: task ?? null,
+      total_reviews: rows.length,
+      total_apis: byDomain.size,
+      top,
+      recent: rows
+        .filter((row) => row.noteStatus === "clean" && row.note)
+        .slice(0, 12)
+        .map((row) => ({
+          domain: row.domain,
+          endpoint: row.path || "/",
+          task: row.task,
+          satisfaction: row.satisfaction,
+          note: row.note,
+          created_at: row.createdAt.toISOString(),
+        })),
+    })
   })
 
   return app

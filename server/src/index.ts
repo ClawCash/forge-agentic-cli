@@ -8,6 +8,7 @@ import { HEDERA_TESTNET } from "../../shared/src/networks.ts"
 import { approvalRoutes } from "./approvals.ts"
 import { loadConfig, publicBaseUrl, type ServerConfig } from "./config.ts"
 import { memoryStore, postgresStore } from "./db/store.ts"
+import { resendSender } from "./v1/accounts.ts"
 import { chainFinder } from "./v1/chains.ts"
 import { type V1Deps, v1Routes } from "./v1/routes.ts"
 import { memoryApiReviewStore, postgresApiReviewStore } from "./v1/store.ts"
@@ -104,6 +105,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     secret: env.REVIEWS_SECRET ?? randomBytes(32).toString("base64"),
     baseRpcUrl: env.BASE_RPC_URL,
     findPayments: chainFinder(env),
+    sendCode: resendSender(env),
     readTerms: termsReader(),
   }
   const hedera = createPublicClient({

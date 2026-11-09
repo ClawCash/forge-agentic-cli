@@ -2,10 +2,20 @@ import { desc, eq, inArray, lt, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import postgres from "postgres"
-import { apiReviews, usedProofs } from "../db/schema.ts"
+import {
+  apiKeys,
+  apiReviews,
+  authCodes,
+  usageEvents,
+  usedProofs,
+  users,
+} from "../db/schema.ts"
 
 export type ApiReview = typeof apiReviews.$inferSelect
 export type NewApiReview = Omit<ApiReview, "createdAt">
+export type ApiUser = typeof users.$inferSelect
+export type AuthCode = typeof authCodes.$inferSelect
+export type UsageEvent = Omit<typeof usageEvents.$inferSelect, "createdAt">
 
 export class PaymentAlreadyReviewedError extends Error {
   constructor() {
@@ -20,6 +30,17 @@ export interface ApiReviewStore {
   usedReferences(references: string[]): Promise<Set<string>>
   // Records a proof as spent. False if it had already been used.
   useProof(key: string, expiresAt: Date): Promise<boolean>
+  listRecent(limit: number): Promise<ApiReview[]>
+
+  getCode(email: string): Promise<AuthCode | null>
+  saveCode(code: AuthCode): Promise<void>
+  bumpCodeAttempts(email: string): Promise<void>
+  deleteCode(email: string): Promise<void>
+  upsertUser(user: { id: string; email: string }): Promise<ApiUser>
+  insertKey(keyHash: string, userId: string): Promise<void>
+  userForKey(keyHash: string): Promise<ApiUser | null>
+  recordUsage(event: UsageEvent): Promise<void>
+  listUsage(): Promise<UsageEvent[]>
   close(): Promise<void>
 }
 
@@ -76,6 +97,60 @@ export async function postgresApiReviewStore(
         .returning({ key: usedProofs.key })
       return rows.length === 1
     },
+    listRecent: (limit) =>
+      db
+        .select()
+        .from(apiReviews)
+        .orderBy(desc(apiReviews.createdAt))
+        .limit(limit),
+    async getCode(email) {
+      const [row] = await db
+        .select()
+        .from(authCodes)
+        .where(eq(authCodes.email, email))
+      return row ?? null
+    },
+    async saveCode(code) {
+      await db
+        .insert(authCodes)
+        .values(code)
+        .onConflictDoUpdate({ target: authCodes.email, set: code })
+    },
+    async bumpCodeAttempts(email) {
+      await db
+        .update(authCodes)
+        .set({ attempts: sql`${authCodes.attempts} + 1` })
+        .where(eq(authCodes.email, email))
+    },
+    async deleteCode(email) {
+      await db.delete(authCodes).where(eq(authCodes.email, email))
+    },
+    async upsertUser(user) {
+      const [row] = await db
+        .insert(users)
+        .values(user)
+        .onConflictDoUpdate({
+          target: users.email,
+          set: { lastSeenAt: new Date() },
+        })
+        .returning()
+      return row
+    },
+    async insertKey(keyHash, userId) {
+      await db.insert(apiKeys).values({ keyHash, userId })
+    },
+    async userForKey(keyHash) {
+      const [row] = await db
+        .select({ user: users })
+        .from(apiKeys)
+        .innerJoin(users, eq(apiKeys.userId, users.id))
+        .where(eq(apiKeys.keyHash, keyHash))
+      return row?.user ?? null
+    },
+    async recordUsage(event) {
+      await db.insert(usageEvents).values(event)
+    },
+    listUsage: () => db.select().from(usageEvents),
     close: () => client.end(),
   }
 }
@@ -84,6 +159,10 @@ export async function postgresApiReviewStore(
 export function memoryApiReviewStore(): ApiReviewStore {
   const rows: ApiReview[] = []
   const proofs = new Map<string, Date>()
+  const codes = new Map<string, AuthCode>()
+  const accounts = new Map<string, ApiUser>()
+  const keys = new Map<string, string>()
+  const usage: UsageEvent[] = []
   const newestFirst = (list: ApiReview[]) =>
     [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   return {
@@ -112,6 +191,38 @@ export function memoryApiReviewStore(): ApiReviewStore {
       proofs.set(key, expiresAt)
       return true
     },
+    listRecent: async (limit) => newestFirst(rows).slice(0, limit),
+    getCode: async (email) => codes.get(email) ?? null,
+    async saveCode(code) {
+      codes.set(code.email, code)
+    },
+    async bumpCodeAttempts(email) {
+      const code = codes.get(email)
+      if (code) codes.set(email, { ...code, attempts: code.attempts + 1 })
+    },
+    async deleteCode(email) {
+      codes.delete(email)
+    },
+    async upsertUser({ id, email }) {
+      const now = new Date()
+      const user = accounts.get(email) ?? {
+        id,
+        email,
+        createdAt: now,
+        lastSeenAt: now,
+      }
+      accounts.set(email, { ...user, lastSeenAt: now })
+      return accounts.get(email) as ApiUser
+    },
+    async insertKey(keyHash, userId) {
+      keys.set(keyHash, userId)
+    },
+    userForKey: async (keyHash) =>
+      [...accounts.values()].find((u) => u.id === keys.get(keyHash)) ?? null,
+    async recordUsage(event) {
+      usage.push(event)
+    },
+    listUsage: async () => usage,
     close: async () => {},
   }
 }
