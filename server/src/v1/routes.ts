@@ -941,7 +941,7 @@ export function v1Routes(deps: V1Deps) {
     const { task, limit } = parsed.data
     const recent = await deps.store.listRecent(5000)
     const rows = task ? recent.filter((row) => row.task === task) : recent
-    const prior = taskPrior(rows)
+    const prior = await priorFor(task)
     const byDomain = new Map<string, ApiReview[]>()
     for (const row of rows) {
       byDomain.set(row.domain, [...(byDomain.get(row.domain) ?? []), row])

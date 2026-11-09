@@ -754,6 +754,15 @@ test("the leaderboard ranks APIs and shows what agents say", async () => {
   )
 })
 
+test("the leaderboard and an API's page show the same numbers", async () => {
+  const { app, store } = await setup()
+  await store.insert(row({ domain: "great.example", path: "/x" }))
+  const board = await (await app.request("/v1/leaderboard")).json()
+  const page = await (await app.request("/v1/services/great.example")).json()
+  assert.equal(board.top[0].works_for_task, page.rating.works_for_task)
+  assert.equal(board.top[0].audit.baseline, page.rating.audit.baseline)
+})
+
 test("an empty leaderboard is an honest empty list", async () => {
   const { app } = await setup()
   const board = await (await app.request("/v1/leaderboard")).json()
