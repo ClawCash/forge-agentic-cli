@@ -29,12 +29,15 @@
   },
   "devDependencies": {
     "@types/node": "^22",
+    "@x402/evm": "^2.30.0",
+    "@x402/fetch": "^2.30.0",
     "drizzle-kit": "^0.31.11",
+    "mppx": "0.17.6",
     "prettier": "^3.8.3",
     "typescript": "^5"
   },
   "dependencies": {
     "@x402/hedera": "2.30.0",
-    "viem": "2.56.3"
+    "viem": "2.57.17"
   }
 }

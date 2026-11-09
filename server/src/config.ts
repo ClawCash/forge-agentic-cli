@@ -18,6 +18,15 @@ export interface ServerConfig {
 
 const HEDERA_ACCOUNT = /^0\.0\.\d+$/
 
+export function publicBaseUrl(env: Record<string, string | undefined>) {
+  const baseUrl =
+    env.PUBLIC_BASE_URL ??
+    (env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${env.RAILWAY_PUBLIC_DOMAIN}`
+      : `http://localhost:${env.PORT ?? 8787}`)
+  return baseUrl.replace(/\/$/, "")
+}
+
 // The seller's account ID comes from SERVICE_OWNER_HEDERA_ACCOUNT_ID, or is
 // looked up on the mirror node from SERVICE_OWNER_PRIVATE_KEY's EVM address.
 export async function loadConfig(
@@ -43,13 +52,8 @@ export async function loadConfig(
   if (!HEDERA_ACCOUNT.test(sellerAccountId)) {
     throw new Error(`Not a Hedera account ID: ${sellerAccountId}`)
   }
-  const baseUrl =
-    env.PUBLIC_BASE_URL ??
-    (env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${env.RAILWAY_PUBLIC_DOMAIN}`
-      : `http://localhost:${env.PORT ?? 8787}`)
   return {
-    baseUrl: baseUrl.replace(/\/$/, ""),
+    baseUrl: publicBaseUrl(env),
     sellerAccountId,
     facilitatorUrl: env.X402_FACILITATOR_URL ?? "https://x402.org/facilitator",
     agentIds: {
