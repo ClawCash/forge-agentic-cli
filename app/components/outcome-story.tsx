@@ -1,11 +1,11 @@
 "use client"
 
-import { Check, X } from "lucide-react"
+import { Check, X, Zap } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Mark, Stars } from "@/components/ui"
 
-// One task, run twice. A scripted illustration with placeholder APIs, so it
-// says nothing about any real seller and claims no measured saving.
+// One task, run twice. A scripted illustration with placeholder APIs and
+// made-up figures, so it says nothing about any real seller or real saving.
 interface Step {
   title: string
   detail: string
@@ -76,13 +76,42 @@ const WITH: Step[] = [
   },
 ]
 
-const METERS = ["Tokens", "Time", "Money"]
-const STEP_MS = 1250
+// The slower run's totals in this scripted example. Not measurements.
+const METERS = [
+  {
+    label: "Tokens",
+    total: 12_400,
+    format: (n: number) =>
+      n < 1000 ? String(Math.round(n)) : `${(n / 1000).toFixed(1)}k`,
+  },
+  {
+    label: "Time",
+    total: 84,
+    format: (n: number) => {
+      const seconds = Math.round(n)
+      return seconds < 60
+        ? `${seconds}s`
+        : `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+    },
+  },
+  {
+    label: "Money",
+    total: 0.04,
+    format: (n: number) => `$${n.toFixed(2)}`,
+  },
+]
+const STEP_MS = 620
 // Past the slower run's last step, so the finished result can be read.
-const LAST_TICK = 9
+const LAST_TICK = 11
 
 const outcomeTick = (steps: Step[]) =>
   steps.findIndex((step) => step.result === "ok") + 1
+
+const share = (steps: Step[], meter: number) =>
+  steps.reduce((sum, step) => sum + step.use[meter], 0)
+
+const SAVED = METERS.map((_, meter) => 100 - share(WITH, meter))
+const TIMES_FASTER = Math.round(share(WITHOUT, 1) / share(WITH, 1))
 
 function captionFor(tick: number) {
   if (tick < 1) return "Same task, same agent."
@@ -91,7 +120,7 @@ function captionFor(tick: number) {
   if (tick < outcomeTick(WITHOUT)) {
     return "Reviews got there first. The other run is still paying."
   }
-  return "Same outcome. Fewer tokens, less time, less money."
+  return `In this example: ${TIMES_FASTER}x faster, ${SAVED[0]}% fewer tokens, ${SAVED[2]}% less money.`
 }
 
 function StepIcon({ step, active }: { step: Step; active: boolean }) {
@@ -168,29 +197,47 @@ function Lane({
   heading,
   steps,
   tick,
-  strong,
+  winner,
 }: {
   heading: React.ReactNode
   steps: Step[]
   tick: number
-  strong?: boolean
+  winner?: boolean
 }) {
   const done = tick >= outcomeTick(steps)
+  const bothDone = tick >= outcomeTick(WITHOUT)
   const used = METERS.map((_, meter) =>
     steps.reduce((sum, step, i) => sum + (i <= tick ? step.use[meter] : 0), 0)
   )
   return (
-    <div className="p-5 sm:p-6">
+    <div
+      className={`p-5 transition-[background-color,opacity] duration-300 sm:p-6 ${
+        winner && done ? "bg-ok/[0.05]" : ""
+      } ${!winner && bothDone ? "opacity-55" : ""}`}
+    >
       <div className="flex h-6 items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-[14px] font-medium">
           {heading}
         </div>
-        {done && (
-          <span className="caption inline-flex shrink-0 items-center gap-1 rounded-full bg-ok/10 px-2 py-0.5 text-[12px] font-medium whitespace-nowrap text-ok">
-            <Check className="size-3" strokeWidth={2.5} />
-            <span className="sm:hidden">Done</span>
-            <span className="hidden sm:inline">Outcome reached</span>
+        {winner && bothDone ? (
+          <span
+            key="faster"
+            className="caption inline-flex shrink-0 items-center gap-1 rounded-full bg-ok px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap text-white"
+          >
+            <Zap className="size-3" strokeWidth={2.5} />
+            {TIMES_FASTER}x faster
           </span>
+        ) : (
+          done && (
+            <span
+              key="done"
+              className="caption inline-flex shrink-0 items-center gap-1 rounded-full bg-ok/10 px-2 py-0.5 text-[12px] font-medium whitespace-nowrap text-ok"
+            >
+              <Check className="size-3" strokeWidth={2.5} />
+              <span className="sm:hidden">Done</span>
+              <span className="hidden sm:inline">Outcome reached</span>
+            </span>
+          )
         )}
       </div>
       <ol className="mt-5 h-[270px]">
@@ -204,14 +251,22 @@ function Lane({
         ))}
       </ol>
       <dl className="space-y-2.5 border-t border-line pt-5">
-        {METERS.map((label, i) => (
+        {METERS.map(({ label, total, format }, i) => (
           <div key={label} className="flex items-center gap-3">
-            <dt className="w-14 shrink-0 text-[12px] text-muted">{label}</dt>
+            <dt className="w-12 shrink-0 text-[12px] text-muted">{label}</dt>
             <dd className="h-1.5 flex-1 overflow-hidden rounded-full bg-paper">
               <div
-                className={`meter h-full rounded-full ${strong ? "bg-ink" : "bg-faint"}`}
+                className={`meter h-full rounded-full ${
+                  winner ? (done ? "bg-ok" : "bg-ink") : "bg-faint"
+                }`}
                 style={{ width: `${used[i]}%` }}
               />
+            </dd>
+            <dd className="w-[50px] shrink-0 text-right font-mono text-[12px] font-medium tabular-nums">
+              {format((used[i] / 100) * total)}
+            </dd>
+            <dd className="w-9 shrink-0 text-right text-[12px] font-medium text-ok tabular-nums">
+              {winner && bothDone && `-${SAVED[i]}%`}
             </dd>
           </div>
         ))}
@@ -258,7 +313,8 @@ export function OutcomeStory() {
         An illustration of one task run twice. Without reviews, the agent pays
         two APIs that fail and searches again before it reaches the outcome.
         With reviews, it checks first, pays the API that works and reaches the
-        same outcome with fewer tokens, less time and less money.
+        same outcome about three times faster, with about a third of the tokens
+        and a quarter of the money. These figures are illustrative.
       </p>
       <div aria-hidden="true" className="panel">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-5 py-3.5 sm:px-6">
@@ -287,7 +343,7 @@ export function OutcomeStory() {
             }
             steps={WITH}
             tick={tick}
-            strong
+            winner
           />
         </div>
         <div className="border-t border-line bg-paper px-5 py-3.5 sm:px-6">

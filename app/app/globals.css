@@ -130,7 +130,9 @@ body {
 }
 
 .meter {
-  transition: width 1150ms linear;
+  transition:
+    width 560ms linear,
+    background-color 300ms ease;
 }
 
 /* The large outlined name along the bottom of the page. */
