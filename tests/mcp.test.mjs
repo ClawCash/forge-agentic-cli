@@ -149,11 +149,7 @@ test("a review prepared by the tool is accepted through a real wallet client", a
   )
   wallet.registerExtension(createSIWxClientExtension({ signers: [account] }))
   const paying = wrapFetchWithPayment(appFetch, new x402HTTPClient(wallet))
-  const res = await paying(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body: JSON.stringify(request.body),
-  })
+  const res = await paying(request.url, { method: request.method })
   assert.equal(res.status, 201, await res.clone().text())
 
   const board = await call("top_apis")
@@ -184,14 +180,14 @@ test("an invalid review is refused before anything is sent", async () => {
   assert.equal(data.error, "Invalid review")
 })
 
-test("a single quote in a note can't break the awal command", async () => {
-  const { call } = await setup()
-  const { data } = await call("prepare_review", {
-    ...REVIEW,
-    api_key: "ark_x",
-    note: "It's fine",
-  })
-  assert.match(data.how_to_send.awal, /It'\\''s fine/)
+test("prepare_review never hands the key back", async () => {
+  const context = await setup()
+  const api_key = await signUp(context)
+  const { data } = await context.call("prepare_review", { ...REVIEW, api_key })
+  assert.equal(data.ready, true)
+  assert.ok(!JSON.stringify(data).includes(api_key))
+  assert.ok(!JSON.stringify(data).includes("ark_"))
+  assert.doesNotMatch(data.how_to_send.awal, /-h /)
 })
 
 test("tool calls share the API's limits and are tracked as MCP use", async () => {

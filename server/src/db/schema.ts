@@ -100,6 +100,8 @@ export const apiReviews = pgTable(
     checked: text("checked"),
     payAgain: text("pay_again"),
     tries: integer("tries"),
+    // A short description of what the agent was trying to do.
+    taskDescription: text("task_description"),
     note: text("note"),
     // "clean" notes are served; "held" notes looked like instructions or
     // personal data and are kept for moderation only.
@@ -114,6 +116,17 @@ export const apiReviews = pgTable(
     paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
     proofMethod: text("proof_method").notNull(),
     userId: text("user_id"),
+    // A receipt for the response being reviewed. It describes the output and
+    // never holds its content.
+    outputHash: text("output_hash"),
+    outputStatus: integer("output_status"),
+    outputType: text("output_type"),
+    outputBytes: integer("output_bytes"),
+    outputShape: jsonb("output_shape").$type<{
+      fields: string[]
+      items?: number
+    }>(),
+    latencyMs: integer("latency_ms"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -185,6 +198,17 @@ export const usageEvents = pgTable(
     index("usage_events_created_idx").on(table.createdAt),
   ]
 )
+
+// A checked review waiting for its wallet proof. Keeping it here means a wallet
+// client only has to open one URL, with no custom headers or body.
+export const pendingReviews = pgTable("pending_reviews", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id),
+  body: jsonb("body").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+})
 
 // What an API's own site says about it, for its leaderboard card.
 export const serviceProfiles = pgTable("service_profiles", {

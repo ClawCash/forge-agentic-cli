@@ -15,6 +15,16 @@ export const BASE = "eip155:8453"
 export const TEMPO = "eip155:4217"
 export const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
 
+const EXPLORERS: Record<string, string> = {
+  [BASE]: "https://basescan.org/tx/",
+  [TEMPO]: "https://explore.tempo.xyz/tx/",
+  [SOLANA]: "https://solscan.io/tx/",
+}
+
+export function transactionUrl(network: string, hash: string) {
+  return EXPLORERS[network] ? `${EXPLORERS[network]}${hash}` : null
+}
+
 export const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 const USDC_SOLANA = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 const USDC_TEMPO = "0x20C000000000000000000000b9537d11c60E8b50"

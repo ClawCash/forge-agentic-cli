@@ -81,8 +81,11 @@ const TRANSFER_WITH_AUTHORIZATION = {
 } as const
 
 export function walletProver(deps: ProofDeps) {
-  const resource = `${deps.baseUrl}/v1/reviews`
   const origin = new URL(deps.baseUrl)
+  // Each proof is bound to the exact URL being opened, which is also what
+  // clients check the challenge against.
+  const resourceFor = (request: Request) =>
+    `${deps.baseUrl}${new URL(request.url).pathname}`
   const base = createPublicClient({
     transport: http(deps.baseRpcUrl ?? "https://base-rpc.publicnode.com"),
   })
@@ -100,6 +103,7 @@ export function walletProver(deps: ProofDeps) {
   async function challenge(request: Request): Promise<Response> {
     const now = Date.now()
     const expiresAt = now + CHALLENGE_SECONDS * 1000
+    const resource = resourceFor(request)
     const required = {
       x402Version: 2,
       error:
@@ -153,10 +157,31 @@ export function walletProver(deps: ProofDeps) {
       const header = mpp.challenge.headers.get("www-authenticate")
       if (header) headers.set("WWW-Authenticate", header)
     }
-    return new Response(JSON.stringify(required), { status: 402, headers })
+    // Current clients read the header; older ones read this version 1 body.
+    const legacy = {
+      x402Version: 1,
+      error: required.error,
+      accepts: required.accepts.map((accept) => ({
+        scheme: accept.scheme,
+        network: "base",
+        maxAmountRequired: accept.amount,
+        resource,
+        description: required.resource.description,
+        mimeType: required.resource.mimeType,
+        payTo: accept.payTo,
+        maxTimeoutSeconds: accept.maxTimeoutSeconds,
+        asset: accept.asset,
+        extra: accept.extra,
+      })),
+      extensions: required.extensions,
+    }
+    return new Response(JSON.stringify(legacy), { status: 402, headers })
   }
 
-  async function fromSignIn(header: string): Promise<WalletProof> {
+  async function fromSignIn(
+    header: string,
+    resource: string
+  ): Promise<WalletProof> {
     let payload
     try {
       payload = parseSIWxHeader(header)
@@ -298,7 +323,7 @@ export function walletProver(deps: ProofDeps) {
   return async function prove(request: Request): Promise<WalletProof> {
     const headers = request.headers
     const signIn = headers.get("sign-in-with-x")
-    if (signIn) return fromSignIn(signIn)
+    if (signIn) return fromSignIn(signIn, resourceFor(request))
     const paid = headers.get("payment-signature") ?? headers.get("x-payment")
     if (paid) return fromAuthorization(paid)
     if (headers.get("authorization")?.toLowerCase().startsWith("payment ")) {

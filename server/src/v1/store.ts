@@ -6,6 +6,7 @@ import {
   apiKeys,
   apiReviews,
   authCodes,
+  pendingReviews,
   serviceProfiles,
   usageEvents,
   usedProofs,
@@ -13,6 +14,7 @@ import {
 } from "../db/schema.ts"
 
 export type ServiceProfile = typeof serviceProfiles.$inferSelect
+export type PendingReview = typeof pendingReviews.$inferSelect
 export type ApiReview = typeof apiReviews.$inferSelect
 export type NewApiReview = Omit<ApiReview, "createdAt">
 export type ApiUser = typeof users.$inferSelect
@@ -40,12 +42,16 @@ export interface ApiReviewStore {
   deleteCode(email: string): Promise<void>
   upsertUser(user: { id: string; email: string }): Promise<ApiUser>
   insertKey(keyHash: string, userId: string): Promise<void>
+  deleteKey(keyHash: string): Promise<void>
   userForKey(keyHash: string): Promise<ApiUser | null>
   setAutoReview(userId: string, enabled: boolean): Promise<ApiUser>
   recordUsage(event: UsageEvent): Promise<void>
   listUsage(): Promise<UsageEvent[]>
   getProfiles(domains: string[]): Promise<Map<string, ServiceProfile>>
   saveProfile(profile: ServiceProfile): Promise<void>
+  savePending(pending: PendingReview): Promise<void>
+  getPending(id: string): Promise<PendingReview | null>
+  deletePending(id: string): Promise<void>
   close(): Promise<void>
 }
 
@@ -108,6 +114,25 @@ export async function postgresApiReviewStore(
         .from(apiReviews)
         .orderBy(desc(apiReviews.createdAt))
         .limit(limit),
+    async savePending(pending) {
+      await db
+        .delete(pendingReviews)
+        .where(lt(pendingReviews.expiresAt, sql`now()`))
+      await db.insert(pendingReviews).values(pending)
+    },
+    async getPending(id) {
+      const [row] = await db
+        .select()
+        .from(pendingReviews)
+        .where(eq(pendingReviews.id, id))
+      return row ?? null
+    },
+    async deletePending(id) {
+      await db.delete(pendingReviews).where(eq(pendingReviews.id, id))
+    },
+    async deleteKey(keyHash) {
+      await db.delete(apiKeys).where(eq(apiKeys.keyHash, keyHash))
+    },
     async getProfiles(domains) {
       if (domains.length === 0) return new Map()
       const rows = await db
@@ -191,6 +216,7 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const keys = new Map<string, string>()
   const usage: UsageEvent[] = []
   const profiles = new Map<string, ServiceProfile>()
+  const pending = new Map<string, PendingReview>()
   const newestFirst = (list: ApiReview[]) =>
     [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   return {
@@ -229,6 +255,16 @@ export function memoryApiReviewStore(): ApiReviewStore {
       ),
     async saveProfile(profile) {
       profiles.set(profile.domain, profile)
+    },
+    async savePending(review) {
+      pending.set(review.id, review)
+    },
+    getPending: async (id) => pending.get(id) ?? null,
+    async deletePending(id) {
+      pending.delete(id)
+    },
+    async deleteKey(keyHash) {
+      keys.delete(keyHash)
     },
     getCode: async (email) => codes.get(email) ?? null,
     async saveCode(code) {

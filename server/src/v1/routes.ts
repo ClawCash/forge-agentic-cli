@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { cors } from "hono/cors"
@@ -8,6 +8,7 @@ import {
   type FindPayments,
   type FoundPayment,
   priceUsd,
+  transactionUrl,
 } from "./chains.ts"
 import {
   accountRoutes,
@@ -18,7 +19,14 @@ import {
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
 import { type WalletProof, walletProver } from "./proof.ts"
-import { type Rating, rate, screenNote, taskPrior } from "./rating.ts"
+import {
+  latestPerAgent,
+  type Rating,
+  rate,
+  reviewScore,
+  screenNote,
+  taskPrior,
+} from "./rating.ts"
 import {
   type ApiReview,
   type ApiReviewStore,
@@ -49,7 +57,30 @@ const Task = z.enum(TASKS)
 const REVIEW_WINDOW_DAYS = 30
 const MAX_URLS = 50
 
-export const ReviewBody = z.object({
+const HELPFULNESS: Record<string, string> = {
+  helpful: "satisfied",
+  somewhat: "partly",
+  not_helpful: "not_satisfied",
+}
+
+const WORKED = (status: number) => status >= 200 && status < 300
+
+// `helpfulness` is the name agents use. `satisfaction` still works, so clients
+// built against it keep posting.
+function normalizeReview(input: unknown) {
+  if (!input || typeof input !== "object") return input
+  const { helpfulness, helpfulness_from, ...rest } = input as Record<
+    string,
+    unknown
+  >
+  return {
+    ...rest,
+    satisfaction: rest.satisfaction ?? HELPFULNESS[String(helpfulness)],
+    satisfaction_from: rest.satisfaction_from ?? helpfulness_from,
+  }
+}
+
+const ReviewFields = z.object({
   url: z.url({ protocol: /^https$/ }),
   task: Task,
   result: z.enum(["full", "partial", "none", "not_checked"]),
@@ -78,8 +109,51 @@ export const ReviewBody = z.object({
   language: z.string().trim().toLowerCase().max(16).optional(),
   format: z.string().trim().toLowerCase().max(16).optional(),
   note: z.string().trim().max(200).optional(),
+  task_description: z.string().trim().min(3).max(140).optional(),
   transaction: z.string().trim().min(32).max(120).optional(),
+  output_hash: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^sha256:[a-f0-9]{64}$/)
+    .optional(),
+  output_status: z.number().int().min(100).max(599).optional(),
+  output_type: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[\w.+-]+\/[\w.+-]+$/)
+    .max(100)
+    .optional(),
+  output_bytes: z.number().int().min(0).optional(),
+  // Names and counts only: the pattern leaves no room for values.
+  output_shape: z
+    .object({
+      fields: z.array(z.string().regex(/^[\w.$\[\]-]{1,64}$/)).max(40),
+      items: z.number().int().min(0).optional(),
+    })
+    .optional(),
+  latency_ms: z.number().int().min(0).optional(),
 })
+
+export const ReviewBody = z.preprocess(
+  normalizeReview,
+  ReviewFields.superRefine((review, context) => {
+    const failed =
+      review.output_status !== undefined && !WORKED(review.output_status)
+    const empty = review.output_bytes === 0
+    if ((failed || empty) && ["full", "partial"].includes(review.result)) {
+      context.addIssue({
+        code: "custom",
+        path: ["result"],
+        message:
+          "The output receipt shows a failed or empty response, so the result can't be full or partial",
+      })
+    }
+  })
+)
+
+export type ReviewInput = z.output<typeof ReviewBody>
 
 export interface V1Deps {
   store: ApiReviewStore
@@ -108,7 +182,12 @@ function shortWallet(wallet: string) {
   return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`
 }
 
-function publicReview(row: ApiReview) {
+const HELPFULNESS_OF: Record<string, string> = Object.fromEntries(
+  Object.entries(HELPFULNESS).map(([name, stored]) => [stored, name])
+)
+
+function publicReview(row: ApiReview, counted: boolean) {
+  const transaction = row.paymentReference.split(":").at(-1) as string
   return {
     endpoint: row.path || "/",
     task: row.task,
@@ -123,10 +202,27 @@ function publicReview(row: ApiReview) {
     pay_again: row.payAgain,
     tries: row.tries,
     note: row.noteStatus === "clean" ? row.note : null,
+    task_description: row.taskDescription ?? null,
+    helpfulness: HELPFULNESS_OF[row.satisfaction] ?? row.satisfaction,
+    score: reviewScore(row),
+    counted,
     verified_payment: true,
     network: row.network,
     price_usd: row.priceUsd,
     wallet: shortWallet(row.wallet),
+    transaction,
+    transaction_url: transactionUrl(row.network, transaction),
+    output:
+      row.outputHash || row.outputStatus
+        ? {
+            hash: row.outputHash ?? null,
+            status: row.outputStatus ?? null,
+            type: row.outputType ?? null,
+            bytes: row.outputBytes ?? null,
+            shape: row.outputShape ?? null,
+            latency_ms: row.latencyMs ?? null,
+          }
+        : null,
     paid_at: row.paidAt.toISOString(),
     created_at: row.createdAt.toISOString(),
   }
@@ -139,10 +235,10 @@ const USAGE_KINDS: [RegExp, string][] = [
   [/\/v1\/check$/, "check"],
   [/\/v1\/search$/, "search"],
   [/\/v1\/probe$/, "probe"],
-  [/\/v1\/reviews$/, "review"],
+  [/\/v1\/reviews(\/|$)/, "review"],
   [/\/v1\/leaderboard$/, "leaderboard"],
   [/\/v1\/services\//, "service"],
-  [/\/v1\/account$/, "account"],
+  [/\/v1\/account(\/|$)/, "account"],
 ]
 
 // Requests per minute, per client. Search and probe cost more because each one
@@ -158,6 +254,7 @@ const LIMITS: Record<string, number> = {
 }
 
 const ICONS_PER_MINUTE = 600
+const PENDING_REVIEW_MS = 24 * 60 * 60_000
 const DAY_MS = 86_400_000
 const PROFILE_FRESH_MS = 7 * DAY_MS
 const EMPTY_PROFILE_FRESH_MS = 3_600_000
@@ -241,6 +338,14 @@ export function v1Routes(deps: V1Deps) {
       sendCode: deps.sendCode,
     })
   )
+
+  const NEEDS_KEY =
+    "Reviewing needs a quick signup. Send the user's email to POST /v1/auth/start, then the code they receive to POST /v1/auth/verify, and pass the returned key as X-Reviews-Key."
+  const signupHelp = () => ({
+    start: `${deps.baseUrl}/v1/auth/start`,
+    verify: `${deps.baseUrl}/v1/auth/verify`,
+    header: "X-Reviews-Key",
+  })
 
   const prove =
     deps.proveWallet ??
@@ -418,6 +523,7 @@ export function v1Routes(deps: V1Deps) {
     const prior = await priorFor(task)
     const path = endpoint?.replace(/\/+$/, "")
     const paths = [...new Set(rows.map((row) => row.path))]
+    const counted = new Set(latestPerAgent(rows).map((row) => row.id))
     const reviews = rows
       .filter(
         (row) =>
@@ -435,7 +541,7 @@ export function v1Routes(deps: V1Deps) {
         url: `https://${domain}${p}`,
         ...rate(rows, { domain, path: p, task }, prior),
       })),
-      reviews: reviews.map(publicReview),
+      reviews: reviews.map((row) => publicReview(row, counted.has(row.id))),
     })
   })
 
@@ -508,44 +614,13 @@ export function v1Routes(deps: V1Deps) {
     }
   }
 
-  app.post("/reviews", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
-    // Read from a copy: MPP verification needs the original request intact.
-    const parsed = ReviewBody.safeParse(
-      await c.req.raw
-        .clone()
-        .json()
-        .catch(() => null)
-    )
-    if (!parsed.success) {
-      return c.json(
-        { error: "Invalid review", issues: parsed.error.issues },
-        400
-      )
-    }
-    const body = parsed.data
+  type VerifiedProof = Extract<WalletProof, { status: "verified" }>
 
-    const user = c.get("user")
-    if (!user) {
-      return c.json(
-        {
-          error:
-            "Reviewing needs a quick signup. Send the user's email to POST /v1/auth/start, then the code they receive to POST /v1/auth/verify, and pass the returned key as X-Reviews-Key.",
-          signup: {
-            start: `${deps.baseUrl}/v1/auth/start`,
-            verify: `${deps.baseUrl}/v1/auth/verify`,
-            header: "X-Reviews-Key",
-          },
-        },
-        401
-      )
-    }
-
-    const proof = await prove(c.req.raw)
-    if (proof.status === "challenge") return proof.response
-    if (proof.status === "invalid") {
-      return c.json({ error: proof.reason }, 401)
-    }
-
+  async function fileReview(
+    body: ReviewInput,
+    userId: string,
+    proof: VerifiedProof
+  ) {
     const where = locate(body.url)
     let lookup
     try {
@@ -556,20 +631,24 @@ export function v1Routes(deps: V1Deps) {
       )
     } catch (error) {
       if (error instanceof ChainUnavailableError) {
-        return c.json(
+        return Response.json(
           {
             error:
               "Could not reach the chain to confirm the payment. Try again shortly.",
           },
-          503
+          { status: 503 }
         )
       }
       throw error
     }
     if (lookup.problem) {
-      return c.json({ error: lookup.problem.error }, lookup.problem.status)
+      return Response.json(
+        { error: lookup.problem.error },
+        { status: lookup.problem.status }
+      )
     }
     const payment = lookup.payment as FoundPayment
+    const goal = screenNote(body.task_description)
 
     try {
       const row = await deps.store.insert({
@@ -588,6 +667,7 @@ export function v1Routes(deps: V1Deps) {
         checked: body.checked ?? null,
         payAgain: body.pay_again ?? null,
         tries: body.tries ?? null,
+        taskDescription: goal.noteStatus === "clean" ? goal.note : null,
         ...screenNote(body.note),
         wallet: proof.wallet.startsWith("0x")
           ? proof.wallet.toLowerCase()
@@ -599,9 +679,15 @@ export function v1Routes(deps: V1Deps) {
         priceUsd: priceUsd(payment.asset, payment.amount),
         paidAt: payment.paidAt,
         proofMethod: proof.method,
-        userId: user.id,
+        userId,
+        outputHash: body.output_hash ?? null,
+        outputStatus: body.output_status ?? null,
+        outputType: body.output_type ?? null,
+        outputBytes: body.output_bytes ?? null,
+        outputShape: body.output_shape ?? null,
+        latencyMs: body.latency_ms ?? null,
       })
-      const response = c.json(
+      const response = Response.json(
         {
           id: row.id,
           domain: row.domain,
@@ -610,16 +696,98 @@ export function v1Routes(deps: V1Deps) {
           note_published: row.noteStatus === "clean",
           more: moreLink(row.domain, row.task, row.path),
         },
-        201
+        { status: 201 }
       )
       proof.headers?.forEach((value, key) => response.headers.set(key, value))
       return response
     } catch (error) {
       if (error instanceof PaymentAlreadyReviewedError) {
-        return c.json({ error: error.message }, 409)
+        return Response.json({ error: error.message }, { status: 409 })
       }
       throw error
     }
+  }
+
+  const invalidReview = (issues: z.core.$ZodIssue[]) =>
+    Response.json({ error: "Invalid review", issues }, { status: 400 })
+
+  // Checks and stores a review, and hands back the one URL a wallet client has
+  // to open to prove it paid. Nothing secret goes through the wallet client.
+  app.post("/reviews/prepare", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
+    const parsed = ReviewBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return invalidReview(parsed.error.issues)
+    const user = c.get("user")
+    if (!user) return c.json({ error: NEEDS_KEY, signup: signupHelp() }, 401)
+    const id = `rv_${randomBytes(18).toString("base64url")}`
+    const expiresAt = new Date(Date.now() + PENDING_REVIEW_MS)
+    await deps.store.savePending({
+      id,
+      userId: user.id,
+      body: parsed.data,
+      expiresAt,
+    })
+    return c.json(
+      {
+        id,
+        submit_url: `${deps.baseUrl}/v1/reviews/submit/${id}`,
+        expires_at: expiresAt.toISOString(),
+      },
+      201
+    )
+  })
+
+  app.on(["GET", "POST"], "/reviews/submit/:id", async (c) => {
+    const pending = await deps.store.getPending(c.req.param("id"))
+    if (!pending || pending.expiresAt < new Date()) {
+      return c.json(
+        {
+          error:
+            "This review link has expired or was already used. Prepare the review again.",
+        },
+        404
+      )
+    }
+    const proof = await prove(c.req.raw)
+    if (proof.status === "challenge") return proof.response
+    if (proof.status === "invalid") {
+      return c.json({ error: proof.reason }, 401)
+    }
+    const response = await fileReview(
+      pending.body as ReviewInput,
+      pending.userId,
+      proof
+    )
+    if (response.ok) await deps.store.deletePending(pending.id)
+    return response
+  })
+
+  app.post("/reviews", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
+    // Read from a copy: MPP verification needs the original request intact.
+    const parsed = ReviewBody.safeParse(
+      await c.req.raw
+        .clone()
+        .json()
+        .catch(() => null)
+    )
+    if (!parsed.success) return invalidReview(parsed.error.issues)
+    // Wallet clients often probe without custom headers and give up on
+    // anything but a 402, so the key is only checked once a proof arrives.
+    const proof = await prove(c.req.raw)
+    if (proof.status === "challenge") return proof.response
+    if (proof.status === "invalid") {
+      return c.json({ error: proof.reason }, 401)
+    }
+    const user = c.get("user")
+    if (!user) {
+      return c.json(
+        {
+          error: `No X-Reviews-Key header reached the server. Some wallet clients drop custom headers: use POST /v1/reviews/prepare and open the submit_url it returns instead.`,
+          signup: signupHelp(),
+        },
+        401
+      )
+    }
+    return fileReview(parsed.data, user.id, proof)
   })
 
   // The signed-in user's settings. Auto-review is their standing permission to
@@ -651,6 +819,17 @@ export function v1Routes(deps: V1Deps) {
       body.data.auto_review
     )
     return c.json(accountView(updated))
+  })
+
+  // Replaces a key that may have leaked, without losing the account.
+  app.post("/account/rotate-key", async (c) => {
+    const user = c.get("user")
+    const current = c.req.header(KEY_HEADER)
+    if (!user || !current) return c.json({ error: SIGN_IN_FIRST }, 401)
+    const apiKey = `ark_${randomBytes(32).toString("base64url")}`
+    await deps.store.insertKey(hashKey(apiKey), user.id)
+    await deps.store.deleteKey(hashKey(current))
+    return c.json({ api_key: apiKey, header: KEY_HEADER })
   })
 
   // What agents say: the top-rated APIs and the latest verified reviews.

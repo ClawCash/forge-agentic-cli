@@ -12,12 +12,20 @@ const SATISFACTION = { satisfied: 1, partly: 0.5, not_satisfied: 0 } as Record<
   string,
   number
 >
+// Kept close together: nobody can verify this claim, so saying it mustn't buy
+// much influence, and leaving it out mustn't beat admitting a light check.
 const CHECKED = {
   against_source: 1,
-  cross_checked: 0.8,
-  looked_plausible: 0.3,
+  cross_checked: 0.9,
+  looked_plausible: 0.7,
 } as Record<string, number>
-const UNSTATED_CHECK = 0.5
+const UNSTATED_CHECK = 0.7
+const PAY_AGAIN = { yes: 1, if_no_alternative: 0.9, no: 0.75 } as Record<
+  string,
+  number
+>
+const TRY_PENALTY = 0.1
+const MIN_TRIES_FACTOR = 0.7
 const HALF_LIFE_DAYS = 30
 const DAY_MS = 86_400_000
 
@@ -43,13 +51,41 @@ interface Scored {
 
 // Outcome satisfaction counts toward the score. It counts for more when the
 // user said it than when the agent inferred it.
+const helpfulnessShare = (row: ApiReview) =>
+  row.satisfactionFrom === "user" ? 0.6 : 0.3
+
+const triesFactor = (row: ApiReview) =>
+  Math.max(MIN_TRIES_FACTOR, 1 - TRY_PENALTY * ((row.tries ?? 1) - 1))
+
+const payAgainFactor = (row: ApiReview) => PAY_AGAIN[row.payAgain ?? ""] ?? 1
+
+const checkWeight = (row: ApiReview) =>
+  row.checked ? (CHECKED[row.checked] ?? UNSTATED_CHECK) : UNSTATED_CHECK
+
 export function outcomeValue(row: ApiReview): number | null {
   const satisfaction = SATISFACTION[row.satisfaction]
-  if (row.result === "not_checked") {
-    return row.satisfactionFrom === "user" ? satisfaction : null
+  const share = helpfulnessShare(row)
+  const base =
+    row.result === "not_checked"
+      ? row.satisfactionFrom === "user"
+        ? satisfaction
+        : null
+      : (1 - share) * RESULT[row.result] + share * satisfaction
+  return base === null ? null : base * triesFactor(row) * payAgainFactor(row)
+}
+
+// One review's own score and every number behind it, so it can be recomputed.
+export function reviewScore(row: ApiReview) {
+  const value = outcomeValue(row)
+  return {
+    stars: value === null ? null : round(value * 5, 1),
+    result: row.result === "not_checked" ? null : RESULT[row.result],
+    helpfulness: SATISFACTION[row.satisfaction],
+    helpfulness_share: helpfulnessShare(row),
+    tries_factor: triesFactor(row),
+    pay_again_factor: payAgainFactor(row),
+    check_weight: checkWeight(row),
   }
-  const share = row.satisfactionFrom === "user" ? 0.6 : 0.3
-  return (1 - share) * RESULT[row.result] + share * satisfaction
 }
 
 function constraintMatch(row: ApiReview, query: RatingQuery) {
@@ -58,12 +94,15 @@ function constraintMatch(row: ApiReview, query: RatingQuery) {
   return factor(query.language, row.language) * factor(query.format, row.format)
 }
 
-// A wallet's newest review per endpoint and task is the one that counts, so
-// buying repeatedly doesn't buy extra influence.
-function latestPerWallet(rows: ApiReview[]) {
+// One signed-up account is one agent, however many wallets it pays from.
+const agentOf = (row: ApiReview) => row.userId ?? row.wallet
+
+// An agent's newest review per endpoint and task is the one that counts, so
+// buying repeatedly, or from more wallets, doesn't buy extra influence.
+export function latestPerAgent(rows: ApiReview[]) {
   const latest = new Map<string, ApiReview>()
   for (const row of rows) {
-    const key = `${row.wallet}|${row.path}|${row.task}`
+    const key = `${agentOf(row)}|${row.path}|${row.task}`
     const seen = latest.get(key)
     if (!seen || seen.createdAt < row.createdAt) latest.set(key, row)
   }
@@ -76,9 +115,7 @@ function score(rows: ApiReview[], query: RatingQuery, now: number) {
     if (value === null) return []
     const age = Math.max(0, now - row.createdAt.getTime()) / DAY_MS
     const weight =
-      (row.checked
-        ? (CHECKED[row.checked] ?? UNSTATED_CHECK)
-        : UNSTATED_CHECK) *
+      checkWeight(row) *
       0.5 ** (age / HALF_LIFE_DAYS) *
       constraintMatch(row, query)
     return [{ row, value, weight }]
@@ -128,9 +165,13 @@ function median(values: number[]) {
   return sorted[Math.floor(sorted.length / 2)]
 }
 
+// The plain average of the reviews, which anyone can check by hand.
+const averageValue = (evidence: Scored[]) =>
+  evidence.reduce((sum, e) => sum + e.value, 0) / evidence.length
+
 function summarize(evidence: Scored[], chance: number) {
   const weight = evidence.reduce((sum, e) => sum + e.weight, 0)
-  const buyers = new Set(evidence.map((e) => e.row.wallet)).size
+  const buyers = new Set(evidence.map((e) => agentOf(e.row))).size
   const satisfied =
     weight > 0
       ? evidence.reduce(
@@ -140,7 +181,7 @@ function summarize(evidence: Scored[], chance: number) {
       : null
   return {
     verdict: verdict(chance, buyers),
-    stars: round(chance * 5, 1),
+    stars: round(averageValue(evidence) * 5, 1),
     works_for_task: round(chance),
     satisfied: satisfied === null ? null : round(satisfied),
     confidence: weight < 3 ? "low" : weight < 12 ? "medium" : "high",
@@ -171,6 +212,16 @@ export interface Rating {
     buyers: number
     endpoints_reviewed: number
   } | null
+  // Every number behind works_for_task, so it can be recomputed by hand.
+  audit: {
+    reviews_counted: number
+    agents: number
+    weighted_score: number
+    evidence_weight: number
+    baseline: number
+    baseline_weight: number
+    baseline_source: "domain" | "task"
+  } | null
 }
 
 const EMPTY: Rating = {
@@ -188,6 +239,7 @@ const EMPTY: Rating = {
   top_problem: null,
   notes: [],
   domain_rating: null,
+  audit: null,
 }
 
 function latestNotes(evidence: Scored[]) {
@@ -206,7 +258,7 @@ export function rate(
   prior: number,
   now = Date.now()
 ): Rating {
-  const current = latestPerWallet(rows)
+  const current = latestPerAgent(rows)
   const sameTask = query.task
     ? current.filter((row) => row.task === query.task)
     : current
@@ -233,6 +285,7 @@ export function rate(
 
   const evidence = scope === "endpoint" ? onEndpoint : scored
   const summary = summarize(scored, chance)
+  const here = summarize(evidence, chance)
   const priced = [...(query.path ? onEndpoint : [])]
     .filter((e) => e.row.priceUsd !== null)
     .sort((a, b) => b.row.paidAt.getTime() - a.row.paidAt.getTime())[0]
@@ -241,6 +294,9 @@ export function rate(
 
   return {
     ...summary,
+    stars: here.stars,
+    satisfied: here.satisfied,
+    typical_tries: here.typical_tries,
     top_problem: topProblem(evidence) ?? summary.top_problem,
     cost_per_success_usd: priced
       ? round((priced.row.priceUsd as number) / Math.max(chance, 0.01), 4)
@@ -249,10 +305,26 @@ export function rate(
     matched: [task, ...constraints].join(", "),
     notes: latestNotes(evidence),
     domain_rating: {
-      stars: round(shrink(scored, prior, TASK_PRIOR_WEIGHT) * 5, 1),
+      stars: round(averageValue(scored) * 5, 1),
       works_for_task: round(shrink(scored, prior, TASK_PRIOR_WEIGHT)),
-      buyers: new Set(scored.map((e) => e.row.wallet)).size,
+      buyers: new Set(scored.map((e) => agentOf(e.row))).size,
       endpoints_reviewed: new Set(scored.map((e) => e.row.path)).size,
+    },
+    audit: {
+      reviews_counted: evidence.length,
+      agents: new Set(evidence.map((e) => agentOf(e.row))).size,
+      weighted_score: round(
+        evidence.reduce((sum, e) => sum + e.weight * e.value, 0) /
+          Math.max(
+            evidence.reduce((sum, e) => sum + e.weight, 0),
+            Number.EPSILON
+          )
+      ),
+      evidence_weight: round(evidence.reduce((sum, e) => sum + e.weight, 0)),
+      baseline: round(scope === "endpoint" ? domainChance : prior),
+      baseline_weight:
+        scope === "endpoint" ? DOMAIN_PRIOR_WEIGHT : TASK_PRIOR_WEIGHT,
+      baseline_source: scope === "endpoint" ? "domain" : "task",
     },
   }
 }
