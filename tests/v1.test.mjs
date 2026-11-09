@@ -1915,6 +1915,26 @@ test("changing what a review says changes its fingerprint", async () => {
   assert.equal(fingerprintOf({ ...review, counted: false }), fingerprint)
 })
 
+test("reviews from our own wallets are labelled as seeded", async () => {
+  const { app, store } = await setup()
+  await store.insert(
+    row({ wallet: "0x04d193a332f38980ec9a5ec87789009ab55b5dde" })
+  )
+  const review = await servedReview(app)
+  assert.equal(review.seeded, true)
+  assert.equal(fingerprintOf(review), review.fingerprint)
+  const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
+  assert.match(brief.text, /1 seeded by Agent Reviews/)
+})
+
+test("other wallets' reviews aren't labelled as seeded", async () => {
+  const { app, store } = await setup()
+  await store.insert(row())
+  assert.equal((await servedReview(app)).seeded, undefined)
+  const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
+  assert.doesNotMatch(brief.text, /seeded/)
+})
+
 test("the fingerprint list covers every review, oldest first", async () => {
   const { app, store } = await setup()
   await store.insert(row({ createdAt: new Date(2000) }))

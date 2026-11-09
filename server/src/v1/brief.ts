@@ -53,7 +53,7 @@ function briefDetails({ rating, down }: BriefEntry) {
     : 0
   const schema = rating.schema_match
   const sentences = [
-    `${counts} from ${agents} (latest ${latest}), ${early ? "too early to tell" : `verdict ${rating.verdict}`}`,
+    `${counts} from ${agents} (latest ${latest}${rating.seeded_reviews > 0 ? `, ${rating.seeded_reviews} seeded by Agent Reviews` : ""}), ${early ? "too early to tell" : `verdict ${rating.verdict}`}`,
     rating.charged_no_result > 0 &&
       `Charged with no result: ${rating.charged_no_result}`,
     schema &&

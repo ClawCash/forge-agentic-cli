@@ -18,6 +18,7 @@ import {
 } from "./accounts.ts"
 import { brief, briefDomains, MAX_BRIEF_DOMAINS, ratingsFile } from "./brief.ts"
 import { fingerprintOf } from "./fingerprint.ts"
+import { isSeeded } from "./seed.ts"
 import { domainHealth, healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
@@ -246,6 +247,7 @@ function reviewRecord(row: ApiReview) {
         : null,
     paid_at: row.paidAt.toISOString(),
     created_at: row.createdAt.toISOString(),
+    ...(isSeeded(row) && { seeded: true }),
   }
 }
 

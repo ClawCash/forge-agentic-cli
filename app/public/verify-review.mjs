@@ -62,6 +62,7 @@ export function fingerprintOf(review) {
   const record = Object.fromEntries(
     AUDITED_FIELDS.map((field) => [field, review[field]])
   )
+  if (review.seeded) record.seeded = true
   const hash = createHash("sha256").update(JSON.stringify(canonical(record)))
   return `sha256:${hash.digest("hex")}`
 }

@@ -1,3 +1,4 @@
+import { isSeeded } from "./seed.ts"
 import type { ApiReview } from "./store.ts"
 
 // Turns verified reviews into one number with a plain meaning: the chance the
@@ -220,6 +221,7 @@ export interface Rating {
   // How the paid calls went, as plain counts.
   outcomes: Record<"full" | "partial" | "none" | "not_checked", number> | null
   charged_no_result: number
+  seeded_reviews: number
   last_reviewed_at: string | null
   schema_match: {
     all_fields_returned: number
@@ -262,6 +264,7 @@ const EMPTY: Rating = {
   promised_vs_delivered: [],
   outcomes: null,
   charged_no_result: 0,
+  seeded_reviews: 0,
   last_reviewed_at: null,
   schema_match: null,
   domain_rating: null,
@@ -417,6 +420,7 @@ export function rate(
     charged_no_result: evidence.filter(({ row }) =>
       row.problems.includes("paid_no_result")
     ).length,
+    seeded_reviews: evidence.filter(({ row }) => isSeeded(row)).length,
     last_reviewed_at: new Date(
       Math.max(...evidence.map(({ row }) => row.createdAt.getTime()))
     ).toISOString(),
