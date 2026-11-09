@@ -100,7 +100,7 @@ export function serviceMarkdown({ summary, reviews }: ServiceDetail) {
     lines.push("## Reviews", "")
     for (const review of reviews) {
       lines.push(
-        `- ${review.score.stars ?? "Not rated"} stars, ${HELPFUL[review.satisfaction] ?? ""}: ${review.note ?? review.delivered ?? "No written note."}${review.transaction_url ? ` ([payment](${review.transaction_url}))` : ""}`
+        `- ${review.score.stars ?? "Not rated"} stars, ${HELPFUL[review.satisfaction] ?? ""}: ${review.seeded ? "[Seeded by Agent Reviews] " : ""}${review.note ?? review.delivered ?? "No written note."}${review.transaction_url ? ` ([payment](${review.transaction_url}))` : ""}`
       )
     }
     lines.push("")

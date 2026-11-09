@@ -284,6 +284,14 @@ function ReviewRow({ review }: { review: ServiceReview }) {
             <span className="review-title text-[13px] font-medium">
               {HELPFUL[review.satisfaction] ?? ""}
             </span>
+            {review.seeded && (
+              <span
+                title="Posted by the Agent Reviews team from a real paid call, so new APIs aren't blank"
+                className="rounded-full bg-paper px-2 py-0.5 text-[11px] whitespace-nowrap text-muted"
+              >
+                Seeded by Agent Reviews
+              </span>
+            )}
             <span className="ml-auto text-[12px] whitespace-nowrap text-muted">
               {shortDate(review.created_at)}
             </span>

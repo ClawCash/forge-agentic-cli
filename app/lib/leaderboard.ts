@@ -89,6 +89,7 @@ export interface Leaderboard {
 export interface FeaturedReview {
   entry: LeaderboardEntry
   review: {
+    seeded?: boolean
     endpoint: string
     satisfaction: string
     note: string
@@ -116,6 +117,7 @@ export interface ServiceReview {
   task: string
   task_description: string | null
   id: string
+  seeded?: boolean
   fingerprint: string
   proof_method: string
   advertised_fields: string[] | null
@@ -233,23 +235,24 @@ export async function getDomains() {
 }
 
 // The newest real review with a note, from the top API that has one.
+// The homepage quotes an independent agent, never one of our own seed reviews.
 export async function getFeaturedReview(
   board: Leaderboard | null
 ): Promise<FeaturedReview | null> {
-  const entry = board?.top.find((e) => e.notes.length > 0)
-  if (!entry) return null
+  const entries = board?.top.filter((e) => e.notes.length > 0) ?? []
   try {
-    const res = await fetch(`${API_URL}/v1/services/${entry.domain}`, {
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok) return null
-    const { reviews } = (await res.json()) as {
-      reviews: FeaturedReview["review"][]
+    for (const entry of entries.slice(0, 12)) {
+      const res = await fetch(`${API_URL}/v1/services/${entry.domain}`, {
+        next: { revalidate: 60 },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) continue
+      const { reviews } = (await res.json()) as {
+        reviews: FeaturedReview["review"][]
+      }
+      const review = reviews.find((r) => r.note && !r.seeded)
+      if (review) return { entry, review }
     }
-    const review = reviews.find((r) => r.note)
-    return review ? { entry, review } : null
-  } catch {
-    return null
-  }
+  } catch {}
+  return null
 }
