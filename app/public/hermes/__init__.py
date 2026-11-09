@@ -28,7 +28,11 @@ def _script():
 def _event(tool_name, args, result):
     if tool_name != "terminal":
         if WALLET_TOOL.search(tool_name or ""):
-            return {"tool_name": tool_name, "tool_response": result}
+            return {
+                "tool_name": tool_name,
+                "tool_input": args or {},
+                "tool_response": result,
+            }
         return None
     command = (args or {}).get("command") or ""
     if not WALLET_COMMAND.search(command):

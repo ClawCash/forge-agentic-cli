@@ -12,7 +12,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as wait } from "node:timers/promises"
 import { test } from "node:test"
-import { briefFrom, domainsIn, hookOutput } from "../app/public/hook.mjs"
+import {
+  briefFrom,
+  domainsIn,
+  hookOutput,
+  taskOf,
+} from "../app/public/hook.mjs"
 import { brief, ratingsFile } from "../server/src/v1/brief.ts"
 
 // Trimmed from a real AgentCash search result.
@@ -535,9 +540,13 @@ test("the hook and the API word a brief the same way", () => {
   const rating = (extra) => ({
     stars: 3.3,
     buyers: 2,
-    works_for_task: 0.62,
     verdict: "unknown",
+    outcomes: { full: 1, partial: 2, none: 0, not_checked: 0 },
+    charged_no_result: 0,
+    last_reviewed_at: "2026-11-09T10:00:00.000Z",
+    schema_match: null,
     listing_accuracy: null,
+    cost_per_success_usd: null,
     top_problem: "incomplete",
     ...extra,
   })
@@ -552,9 +561,12 @@ test("the hook and the API word a brief the same way", () => {
       {
         domain: "a.example",
         rating: rating({
-          buyers: 1,
+          buyers: 4,
           verdict: "avoid",
+          charged_no_result: 2,
+          schema_match: { all_fields_returned: 1, checked: 3, missing: ["a"] },
           listing_accuracy: { accurate: 1, overstated: 1, misleading: 0 },
+          cost_per_success_usd: 0.031,
           top_problem: "paid_no_result",
         }),
         down: true,
@@ -570,6 +582,40 @@ test("the hook and the API word a brief the same way", () => {
       brief(entries).text
     )
   }
+})
+
+test("uses the rating for the task at hand when there is one", () => {
+  const file = ratings({
+    rated: { "a.example": "overall" },
+    tasks: { "a.example": { enrichment: "for enrichment" } },
+  })
+  assert.match(briefFrom(file, ["a.example"]), /- a\.example: overall/)
+  assert.match(
+    briefFrom(file, ["a.example"], "enrichment"),
+    /- a\.example, enrichment: for enrichment/
+  )
+  assert.match(
+    briefFrom(file, ["a.example"], "weather"),
+    /- a\.example: overall/
+  )
+})
+
+test("works out the task from the search, on this machine", () => {
+  for (const [query, task] of [
+    ["find work emails from LinkedIn profiles", "enrichment"],
+    ["scrape a product page", "web-scrape"],
+    ["latest news about a launch", "web-search"],
+    ["bitcoin token price", "token-price"],
+    ["generate an image of a cat", "image-generation"],
+    ["something unrelated", null],
+  ]) {
+    assert.equal(taskOf({ tool_input: { query } }), task, query)
+  }
+  assert.equal(
+    taskOf({ toolInput: { command: 'awal bazaar search "weather"' } }),
+    "weather"
+  )
+  assert.equal(taskOf({}), null)
 })
 
 test("a listed site finds reviews filed under its API host", () => {

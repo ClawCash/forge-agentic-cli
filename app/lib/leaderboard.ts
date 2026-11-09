@@ -22,6 +22,19 @@ export interface LeaderboardEntry {
   reviews: number
   top_problem: string | null
   notes: string[]
+  outcomes: {
+    full: number
+    partial: number
+    none: number
+    not_checked: number
+  } | null
+  charged_no_result: number
+  last_reviewed_at: string | null
+  schema_match: {
+    all_fields_returned: number
+    checked: number
+    missing: string[]
+  } | null
   listing_accuracy: {
     accurate: number
     overstated: number
@@ -102,6 +115,9 @@ export interface ServiceReview {
   endpoint: string
   task: string
   task_description: string | null
+  id: string
+  proof_method: string
+  advertised_fields: string[] | null
   promised: string | null
   delivered: string | null
   result: string

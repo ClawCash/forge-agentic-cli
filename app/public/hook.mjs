@@ -118,6 +118,32 @@ const COMMANDS = [
   command("tempo", String.raw`wallet\s+(?:-\S+\s+)*services\b`),
 ]
 
+// Picks the rating for the job at hand. This only reads the search on this
+// machine, so the query itself is never sent anywhere.
+const TASK_WORDS = [
+  [
+    "enrichment",
+    /\b(enrich\w*|people|person|compan\w+|linkedin|leads?|contacts?|prospect\w*)\b/i,
+  ],
+  ["email", /\b(emails?|inbox\w*)\b/i],
+  ["web-scrape", /\b(scrap\w+|crawl\w*)\b/i],
+  ["web-search", /\b(web search|search the web|news|serp|google)\b/i],
+  ["token-price", /\b(token|crypto|coin|defi)\b/i],
+  ["weather", /\b(weather|forecast)\b/i],
+  ["document-extract", /\b(pdf|documents?|ocr)\b/i],
+  ["image-generation", /\b(images?|photos?|pictures?)\b/i],
+  ["transcription", /\b(transcri\w+|speech)\b/i],
+  ["translation", /\btranslat\w+/i],
+]
+
+export function taskOf(event) {
+  const input = event?.tool_input ?? event?.toolInput ?? {}
+  const text = [input.query, input.task, input.q, input.command]
+    .filter((part) => typeof part === "string")
+    .join(" ")
+  return TASK_WORDS.find(([, words]) => words.test(text))?.[0] ?? null
+}
+
 // Hosts wrap a tool's result differently, and some send it as a JSON string.
 function* objects(value, depth = 0) {
   if (depth > MAX_DEPTH) return
@@ -237,7 +263,7 @@ async function readInput() {
 }
 
 // Same wording as the API's /v1/brief. A test holds the two together.
-export function briefFrom(ratings, domains) {
+export function briefFrom(ratings, domains, task = null) {
   if (!ratings?.rated || !ratings.generated_at) return null
   if (Date.now() - Date.parse(ratings.generated_at) > TOO_OLD_MS) return null
   const { rated } = ratings
@@ -252,7 +278,10 @@ export function briefFrom(ratings, domains) {
       : names.find((known) => known.endsWith(`.${domain}`))
     if (name) {
       reviewed += 1
-      lines.push(`${domain}: ${rated[name]}`)
+      const forTask = task ? ratings.tasks?.[name]?.[task] : undefined
+      lines.push(
+        forTask ? `${domain}, ${task}: ${forTask}` : `${domain}: ${rated[name]}`
+      )
     } else if (down.has(domain)) {
       lines.push(`${domain}: not responding when last checked`)
     }
@@ -328,12 +357,13 @@ async function main() {
   if (host === "refresh") return refresh()
   const input = await readInput()
   if (!input) return
-  const domains = domainsIn(JSON.parse(input))
+  const event = JSON.parse(input)
+  const domains = domainsIn(event)
   if (domains.length === 0) return
   try {
     refreshInBackground()
   } catch {}
-  const text = briefFrom(loadRatings(), domains)
+  const text = briefFrom(loadRatings(), domains, taskOf(event))
   if (text) {
     const short = text.slice(0, MAX_TEXT)
     process.stdout.write(

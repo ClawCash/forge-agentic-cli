@@ -30,6 +30,12 @@ const MISMATCH: Record<string, string> = {
   misleading: "Misleading listing",
 }
 
+const PROOF: Record<string, string> = {
+  siwx: "Signed in with the paying wallet",
+  "x402-authorization": "Signed an authorization from the paying wallet",
+  "mpp-proof": "Sent a zero-amount proof from the paying wallet",
+}
+
 const CHECKED: Record<string, string> = {
   against_source: "Compared with the original source",
   cross_checked: "Compared with another source",
@@ -55,6 +61,25 @@ const networkLabel = (network: string) =>
 
 const humanize = (text: string) =>
   text[0].toUpperCase() + text.slice(1).replaceAll("_", " ")
+
+function outcomeSummary(entry: ApiSummary) {
+  const { outcomes, charged_no_result, last_reviewed_at, schema_match } = entry
+  if (!outcomes) return null
+  const counts = [
+    outcomes.full > 0 && `${outcomes.full} full`,
+    outcomes.partial > 0 && `${outcomes.partial} partial`,
+    outcomes.none > 0 && `${outcomes.none} nothing`,
+    outcomes.not_checked > 0 && `${outcomes.not_checked} unchecked`,
+  ].filter(Boolean)
+  return [
+    `${counts.join(", ")}${last_reviewed_at ? `, latest ${shortDate(last_reviewed_at)}` : ""}`,
+    charged_no_result > 0 && `Charged with no result: ${charged_no_result}`,
+    schema_match &&
+      `Every advertised field returned in ${schema_match.all_fields_returned} of ${schema_match.checked} checks`,
+  ]
+    .filter(Boolean)
+    .join(". ")
+}
 
 const percent = (value: number) => `${Math.round(value * 100)}%`
 
@@ -186,6 +211,12 @@ function ReviewDetails({ review }: { review: ServiceReview }) {
             </span>
           )}
         </Line>
+        <Line label="Review ID">
+          <span className="font-mono text-[12px]">{review.id}</span>
+        </Line>
+        <Line label="How it proved it paid">
+          {PROOF[review.proof_method] ?? humanize(review.proof_method)}
+        </Line>
         <Line label="Paying wallet">
           <span className="font-mono text-[12px]">{review.wallet}</span>
         </Line>
@@ -203,6 +234,16 @@ function ReviewDetails({ review }: { review: ServiceReview }) {
               {output.shape.items !== undefined &&
                 ` (${output.shape.items} items)`}
             </span>
+          </Line>
+        )}
+        {review.advertised_fields && output?.shape && (
+          <Line label="Advertised fields returned">
+            {
+              review.advertised_fields.filter((field) =>
+                output.shape?.fields.includes(field)
+              ).length
+            }{" "}
+            of {review.advertised_fields.length}
           </Line>
         )}
         {output?.hash && (
@@ -321,8 +362,6 @@ function PromisedVsDelivered({
 function HowItsWorkedOut({ entry }: { entry: ApiSummary }) {
   const audit = entry.audit
   if (!audit || entry.works_for_task === null) return null
-  const baselineName =
-    audit.baseline_source === "domain" ? "this API overall" : "all APIs"
   return (
     <details className="group mt-3 rounded-[10px] border border-line text-[13px]">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 font-medium">
@@ -340,14 +379,15 @@ function HowItsWorkedOut({ entry }: { entry: ApiSummary }) {
         </p>
         <p>
           <span className="font-medium text-ink">Likely to work:</span> starts
-          at the average for {baselineName} and moves toward this API’s own
-          reviews as more agents report, so one review can’t look certain.
+          at {percent(audit.baseline)} and moves toward this API’s own reviews
+          as more agents report, so one review can’t look certain. It’s shown
+          once 3 agents have paid.
         </p>
         <dl className="space-y-1.5 rounded-[8px] bg-paper p-3">
           <Line label="This API's reviews">
             {percent(audit.weighted_score)}, weight {audit.evidence_weight}
           </Line>
-          <Line label={`Average for ${baselineName}`}>
+          <Line label="Starting assumption">
             {percent(audit.baseline)}, weight {audit.baseline_weight}
           </Line>
           <Line label="Likely to work">
@@ -448,12 +488,19 @@ export function ApiDetails({
             Average of {counted} {counted === 1 ? "review" : "reviews"} from{" "}
             {agents}
           </p>
+          <p className="mt-0.5 text-[12px] text-muted">
+            {outcomeSummary(entry)}
+          </p>
           <PromisedVsDelivered items={entry.promised_vs_delivered} />
           <div className="mt-4 grid grid-cols-3 gap-2">
             <Stat
-              value={likelyToWork(entry)}
+              value={likelyToWork(entry) ?? "Too early"}
               label="Likely to work"
-              help="Estimate for the next paid call"
+              help={
+                likelyToWork(entry)
+                  ? "Estimate for the next paid call"
+                  : "Shown once 3 agents have paid"
+              }
             />
             <Stat
               value={

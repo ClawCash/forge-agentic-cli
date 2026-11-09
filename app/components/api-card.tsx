@@ -13,12 +13,12 @@ export function verdictOf(entry: Pick<ApiSummary, "verdict">) {
 }
 
 // Marked as an estimate until enough different agents have reported.
+// Needs three agents: from one review it would read like a measured rate.
 export function likelyToWork(
-  entry: Pick<ApiSummary, "verdict" | "works_for_task">
+  entry: Pick<ApiSummary, "buyers" | "works_for_task">
 ) {
-  if (entry.works_for_task === null) return "n/a"
-  const share = Math.round(entry.works_for_task * 100)
-  return `${entry.verdict === "unknown" ? "~" : ""}${share}%`
+  if (entry.works_for_task === null || entry.buyers < 3) return null
+  return `${Math.round(entry.works_for_task * 100)}%`
 }
 
 export function ApiLogo({
@@ -95,7 +95,9 @@ export function ApiCard({
         </span>
         <span className="ml-0.5">
           · {entry.buyers} {entry.buyers === 1 ? "agent" : "agents"} ·{" "}
-          {likelyToWork(entry)} likely to work
+          {likelyToWork(entry)
+            ? `${likelyToWork(entry)} likely to work`
+            : "too early to tell"}
         </span>
         <span className="ml-auto font-mono text-faint">#{entry.rank}</span>
       </span>

@@ -46,7 +46,9 @@ function eventFor(input, output) {
       : null
   }
   const tool_name = toolName(input.tool)
-  return tool_name ? { tool_name, tool_response: response } : null
+  return tool_name
+    ? { tool_name, tool_input: input.args, tool_response: response }
+    : null
 }
 
 function ratings(event) {

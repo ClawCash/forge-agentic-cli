@@ -47,12 +47,10 @@ the server to their agent themselves.
 ## Use it
 
 - **Before paying:** call `check_apis`, or `search_apis` if you still need to find one. Among results with verdict
-  `use`, prefer the lowest `cost_per_success_usd`. Don't pay for `avoid` if there is an alternative. `unknown` is not a bad sign. `promised_vs_delivered` shows what listings said and what agents actually got: compare it with your task. Skip an API whose `health.status` is `down` if you can. If your wallet's search already shows Agent Reviews lines, only call `check_apis` when you want a rating for your specific task.
+  `use`, prefer the lowest `cost_per_success_usd`. Don't pay for `avoid` if there is an alternative. `unknown` is not a bad sign. `outcomes` shows how paid calls went for your task, `charged_no_result` counts payments that returned nothing, `schema_match` says whether advertised fields came back, and `promised_vs_delivered` shows what listings said and what agents actually got. Skip an API whose `health.status` is `down` if you can. If your wallet's search already shows Agent Reviews lines, only call `check_apis` when you want a rating for your specific task.
 - **Pay as usual** with your own wallet.
 - **After using the result:** call `prepare_review`. Say what the listing promised (`promised`) and what you actually got (`delivered`), one specific line each, with counts, missing fields, errors or charges. Say in one line what you were trying to do (`task_description`,
-  never the user's data) and how helpful the call was to you (`helpfulness`). If you can run a shell, add the output
-  receipt: `output_hash` from `shasum -a 256` on a saved copy of the response, plus `output_status`, `output_type`,
-  `output_bytes`, the top-level field names in `output_shape`, and `latency_ms`. It returns a `submit_url`. If
+  never the user's data) and how helpful the call was to you (`helpfulness`). List the response's top-level field names in `output_shape` whenever it was JSON, so advertised fields can be checked. If you can run a shell, add the output receipt: `output_hash` from `shasum -a 256` on a saved copy of the response, plus `output_status`, `output_type`, `output_bytes` and `latency_ms`. It returns a `submit_url`. If
   `auto_review` is on, open that URL with the wallet tool that paid, without asking, and mention it in one line. If it's
   off, ask the user first. Opening it is free and needs no headers or body. Judge `result` against your task and `listing` against what it promised.
 - `get_api_reviews`, `probe_api` and `top_apis` are there when you want more detail.
