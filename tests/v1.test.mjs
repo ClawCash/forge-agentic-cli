@@ -1,3 +1,4 @@
+import { fingerprintOf } from "../app/public/verify-review.mjs"
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { ExactEvmScheme } from "@x402/evm/exact/client"
@@ -1882,6 +1883,52 @@ test("a domain's cost per success uses its typical price", () => {
   )
   assert.ok(rating.cost_per_success_usd > 0.02)
   assert.ok(rating.cost_per_success_usd < 0.05)
+})
+
+test("anyone can recompute a review's fingerprint", async () => {
+  const { app, store } = await setup()
+  await store.insert(
+    row({
+      note: "Good data",
+      noteStatus: "clean",
+      promised: "Emails",
+      delivered: "Some emails",
+      outputHash: `sha256:${"a".repeat(64)}`,
+      outputStatus: 200,
+      outputShape: { items: 3, fields: ["b", "a"] },
+    })
+  )
+  const review = await servedReview(app)
+  assert.match(review.fingerprint, /^sha256:[a-f0-9]{64}$/)
+  assert.equal(fingerprintOf(review), review.fingerprint)
+})
+
+test("changing what a review says changes its fingerprint", async () => {
+  const { app, store } = await setup()
+  await store.insert(row({ note: "Good data", noteStatus: "clean" }))
+  const review = await servedReview(app)
+  const { fingerprint } = review
+  assert.equal(fingerprintOf({ ...review }), fingerprint)
+  assert.notEqual(fingerprintOf({ ...review, note: "Bad data" }), fingerprint)
+  assert.notEqual(fingerprintOf({ ...review, result: "none" }), fingerprint)
+  assert.notEqual(fingerprintOf({ ...review, price_usd: 9 }), fingerprint)
+  assert.equal(fingerprintOf({ ...review, counted: false }), fingerprint)
+})
+
+test("the fingerprint list covers every review, oldest first", async () => {
+  const { app, store } = await setup()
+  await store.insert(row({ createdAt: new Date(2000) }))
+  await store.insert(row({ createdAt: new Date(1000) }))
+  const { reviews } = await (await app.request("/v1/fingerprints")).json()
+  assert.equal(reviews.length, 2)
+  assert.ok(reviews[0].created_at <= reviews[1].created_at)
+  assert.match(reviews[0].fingerprint, /^sha256:/)
+  assert.deepEqual(Object.keys(reviews[0]).sort(), [
+    "created_at",
+    "domain",
+    "fingerprint",
+    "id",
+  ])
 })
 
 test("a review keeps what the seller advertised, and its proof", async () => {

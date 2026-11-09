@@ -17,6 +17,7 @@ import {
   type SendCode,
 } from "./accounts.ts"
 import { brief, briefDomains, MAX_BRIEF_DOMAINS, ratingsFile } from "./brief.ts"
+import { fingerprintOf } from "./fingerprint.ts"
 import { domainHealth, healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
@@ -203,10 +204,13 @@ const HELPFULNESS_OF: Record<string, string> = Object.fromEntries(
   Object.entries(HELPFULNESS).map(([name, stored]) => [stored, name])
 )
 
-function publicReview(row: ApiReview, counted: boolean) {
+// Everything public about a review that isn't worked out from something else.
+// The fingerprint covers exactly these fields.
+function reviewRecord(row: ApiReview) {
   const transaction = row.paymentReference.split(":").at(-1) as string
   return {
     id: row.id,
+    domain: row.domain,
     endpoint: row.path || "/",
     task: row.task,
     language: row.language,
@@ -225,15 +229,10 @@ function publicReview(row: ApiReview, counted: boolean) {
     delivered: row.delivered ?? null,
     advertised_fields: row.advertisedFields ?? null,
     proof_method: row.proofMethod,
-    helpfulness: HELPFULNESS_OF[row.satisfaction] ?? row.satisfaction,
-    score: reviewScore(row),
-    counted,
-    verified_payment: true,
     network: row.network,
     price_usd: row.priceUsd,
     wallet: shortWallet(row.wallet),
     transaction,
-    transaction_url: transactionUrl(row.network, transaction),
     output:
       row.outputHash || row.outputStatus
         ? {
@@ -250,6 +249,19 @@ function publicReview(row: ApiReview, counted: boolean) {
   }
 }
 
+function publicReview(row: ApiReview, counted: boolean) {
+  const record = reviewRecord(row)
+  return {
+    ...record,
+    fingerprint: fingerprintOf(record),
+    helpfulness: HELPFULNESS_OF[row.satisfaction] ?? row.satisfaction,
+    score: reviewScore(row),
+    counted,
+    verified_payment: true,
+    transaction_url: transactionUrl(row.network, record.transaction),
+  }
+}
+
 const rank = (rating: Rating) =>
   ({ use: 0, unknown: 1, caution: 2, avoid: 3 })[rating.verdict] ?? 1
 
@@ -257,6 +269,7 @@ const USAGE_KINDS: [RegExp, string][] = [
   [/\/v1\/check$/, "check"],
   [/\/v1\/brief$/, "brief"],
   [/\/v1\/ratings$/, "service"],
+  [/\/v1\/fingerprints$/, "service"],
   [/\/v1\/search$/, "search"],
   [/\/v1\/probe$/, "probe"],
   [/\/v1\/reviews(\/|$)/, "review"],
@@ -281,6 +294,7 @@ const LIMITS: Record<string, number> = {
 
 const ICONS_PER_MINUTE = 600
 const PENDING_REVIEW_MS = 24 * 60 * 60_000
+const MAX_LOGGED_REVIEWS = 200_000
 const DAY_MS = 86_400_000
 const PROFILE_FRESH_MS = 7 * DAY_MS
 const EMPTY_PROFILE_FRESH_MS = 3_600_000
@@ -509,6 +523,26 @@ export function v1Routes(deps: V1Deps) {
         }))
       )
     )
+  })
+
+  // What the public log records, so later changes to a review can be spotted.
+  app.get("/fingerprints", async (c) => {
+    const rows = await deps.store.listRecent(MAX_LOGGED_REVIEWS)
+    const reviews = rows
+      .map((row) => {
+        const record = reviewRecord(row)
+        return {
+          id: record.id,
+          domain: record.domain,
+          fingerprint: fingerprintOf(record),
+          created_at: record.created_at,
+        }
+      })
+      .sort(
+        (a, b) =>
+          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
+      )
+    return c.json({ reviews })
   })
 
   app.get("/ratings", async (c) => {
