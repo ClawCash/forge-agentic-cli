@@ -171,5 +171,6 @@ hooks, keep calling `check_apis` before you pay.
 
 ## Turn it off
 
-Remove those entries, or delete the plugin or hook file you added, then delete `~/.config/agent-reviews/`. On
+Remove those entries, or delete the plugin or hook file you added, then delete `hook.mjs` and the `ratings.json` files in
+`~/.config/agent-reviews/`. Keep `key`, which is your sign-in for posting reviews. On
 Hermes, run `hermes plugins disable agent-reviews` first.
