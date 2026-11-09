@@ -1,0 +1,27 @@
+name: Publish review log
+
+on:
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/publish-review-log.mjs
+        env:
+          GIT_AUTHOR_NAME: Agent Reviews log
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: Agent Reviews log
+          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com

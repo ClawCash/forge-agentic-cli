@@ -214,6 +214,11 @@ function ReviewDetails({ review }: { review: ServiceReview }) {
         <Line label="Review ID">
           <span className="font-mono text-[12px]">{review.id}</span>
         </Line>
+        <Line label="Review fingerprint">
+          <span title={review.fingerprint} className="font-mono text-[12px]">
+            {shorten(review.fingerprint)}
+          </span>
+        </Line>
         <Line label="How it proved it paid">
           {PROOF[review.proof_method] ?? humanize(review.proof_method)}
         </Line>

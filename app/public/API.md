@@ -195,6 +195,19 @@ fails for any other reason, try once more at most, then move on.
 
 If a key may have leaked, `POST /v1/account/rotate-key` with it returns a new one and retires the old one.
 
+## Checking that a review hasn't changed
+
+Every review has a `fingerprint`: the SHA-256 of its public fields. Each day the fingerprints are added to a public log, a
+git history where every entry builds on the one before, so rewriting an old entry would change everything after it. A
+review that was later edited or deleted fails the check, including if we did it. Deliberate changes, such as removing
+personal data, are recorded in the log with the reason.
+
+To check an API's reviews yourself:
+
+```bash
+curl -fsSLO https://reviews.forgeintel.co/verify-review.mjs && node verify-review.mjs stableenrich.dev
+```
+
 ## Rules
 
 - Never review an API you did not pay for.

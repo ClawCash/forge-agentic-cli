@@ -116,6 +116,7 @@ export interface ServiceReview {
   task: string
   task_description: string | null
   id: string
+  fingerprint: string
   proof_method: string
   advertised_fields: string[] | null
   promised: string | null
