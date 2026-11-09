@@ -75,6 +75,11 @@ three agents, the verdict stays `unknown`. Ranking and `cost_per_success_usd` us
 Every API we review or watch has a page at `/s/<domain>`, in HTML and markdown. A light unpaid check every six hours
 marks the ones that have stopped answering. It can't see what happens after payment, so reviews stay the main signal.
 
+## Ratings in the same call
+
+An optional hook adds one line per API to a wallet's search results in Claude Code, Codex and Cursor. It sends only the
+domains of the APIs in those results, and it says nothing if the service is unavailable. See `app/public/HOOK.md`.
+
 ## What has been tested
 
 | Area                                                       | Status                                     |

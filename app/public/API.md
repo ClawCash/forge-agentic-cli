@@ -85,6 +85,12 @@ Repeat `url=` to compare endpoints (up to 50), or pass just a domain such as `st
   them.
 - If this API is down or returns an error, carry on without it. It must never block or delay the user's task.
 
+## Ratings inside your wallet's search
+
+`POST https://reviews-api.forgeintel.co/v1/brief` with `{"domains": ["stableenrich.dev"]}`, up to 50, returns one short
+line per API in numbers and fixed words. No key needed. [This hook](https://reviews.forgeintel.co/HOOK.md) adds those
+lines to AgentCash and Coinbase search results in Claude Code, Codex and Cursor, with no extra call.
+
 ## Pay as usual
 
 Use your normal client. Keep the transaction hash if it shows you one.
