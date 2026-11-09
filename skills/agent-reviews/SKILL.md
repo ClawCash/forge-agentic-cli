@@ -93,10 +93,10 @@ npm run -s reviews -- submit <interaction-id> --task <tag> --outcome <outcome> -
 
 Two clearly labelled demo invoice APIs, $0.01 USDC per call on Hedera testnet. Both advertise the same capability.
 
-| Service            | Endpoint                                                                 |
-| ------------------ | ------------------------------------------------------------------------ |
-| Demo Invoice API A | `https://forge-agentic-cli-production.up.railway.app/a/invoices/extract` |
-| Demo Invoice API B | `https://forge-agentic-cli-production.up.railway.app/b/invoices/extract` |
+| Service            | Endpoint                                               |
+| ------------------ | ------------------------------------------------------ |
+| Demo Invoice API A | `https://reviews-api.forgeintel.co/a/invoices/extract` |
+| Demo Invoice API B | `https://reviews-api.forgeintel.co/b/invoices/extract` |
 
 Request: `POST` with `{"text": "<plain-text invoice>"}`. Response: `invoiceNumber`, `vendor`, `currency`,
 `lineItems[]` (`description`, `quantity`, `unitPrice`, `amount`) and `total`. A sample Hindi invoice is in
