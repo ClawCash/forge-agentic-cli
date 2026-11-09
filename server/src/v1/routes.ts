@@ -16,6 +16,7 @@ import {
   KEY_HEADER,
   type SendCode,
 } from "./accounts.ts"
+import { brief, briefDomains, MAX_BRIEF_DOMAINS } from "./brief.ts"
 import { domainHealth, healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
@@ -250,6 +251,7 @@ const rank = (rating: Rating) =>
 
 const USAGE_KINDS: [RegExp, string][] = [
   [/\/v1\/check$/, "check"],
+  [/\/v1\/brief$/, "brief"],
   [/\/v1\/search$/, "search"],
   [/\/v1\/probe$/, "probe"],
   [/\/v1\/reviews(\/|$)/, "review"],
@@ -263,6 +265,7 @@ const USAGE_KINDS: [RegExp, string][] = [
 // calls someone else's server.
 const LIMITS: Record<string, number> = {
   check: 120,
+  brief: 120,
   service: 120,
   leaderboard: 120,
   search: 30,
@@ -467,6 +470,36 @@ export function v1Routes(deps: V1Deps) {
     const body = await c.req.json().catch(() => null)
     const { urls, ...filters } = (body ?? {}) as Record<string, unknown>
     return respondCheck(c, Array.isArray(urls) ? urls : [], filters)
+  })
+
+  // One line per API for a wallet's search results, so an agent sees ratings
+  // without making another call.
+  app.post("/brief", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const domains = briefDomains(body?.domains)
+    if (domains.length === 0) {
+      return c.json({ error: `Pass 1 to ${MAX_BRIEF_DOMAINS} domains` }, 400)
+    }
+    const [rows, health, prior] = await Promise.all([
+      deps.store.listByDomains(domains),
+      deps.store.listHealthByDomains(domains),
+      priorFor(undefined),
+    ])
+    return c.json(
+      brief(
+        domains.map((domain) => ({
+          domain,
+          rating: rate(
+            rows.filter((row) => row.domain === domain),
+            { domain, path: "" },
+            prior
+          ),
+          down:
+            domainHealth(health.filter((row) => row.domain === domain))
+              ?.status === "down",
+        }))
+      )
+    )
   })
 
   // Directory search with ratings added, so one query answers both "what
