@@ -756,3 +756,56 @@ test("a failed signup email reports why, without the key", async () => {
     return true
   })
 })
+
+test("the rate limiter counts per key and resets after a minute", async () => {
+  const { rateLimiter } = await import("../server/src/v1/limits.ts")
+  let time = 0
+  const hit = rateLimiter(() => time)
+  assert.equal(hit("a", 2).allowed, true)
+  assert.equal(hit("a", 2).allowed, true)
+  const blocked = hit("a", 2)
+  assert.equal(blocked.allowed, false)
+  assert.equal(blocked.retryAfterSeconds, 60)
+  assert.equal(hit("b", 2).allowed, true)
+  time = 60_000
+  assert.equal(hit("a", 2).allowed, true)
+})
+
+test("the client address can't be spoofed through X-Forwarded-For", async () => {
+  const { clientIp } = await import("../server/src/v1/limits.ts")
+  const headers = (values) => (name) => values[name]
+  assert.equal(
+    clientIp(
+      headers({ "x-real-ip": "9.9.9.9", "x-forwarded-for": "1.1.1.1, 9.9.9.9" })
+    ),
+    "9.9.9.9"
+  )
+  assert.equal(
+    clientIp(headers({ "x-forwarded-for": "1.1.1.1, 8.8.8.8" })),
+    "8.8.8.8"
+  )
+  assert.equal(clientIp(headers({})), "local")
+})
+
+test("too many requests get a 429 with Retry-After, per client", async () => {
+  const { app } = await setup()
+  const probe = (ip) =>
+    app.request(`/v1/probe?url=${ENDPOINT}`, { headers: { "X-Real-IP": ip } })
+  for (let i = 0; i < 20; i++) {
+    assert.equal((await probe("9.9.9.9")).status, 200)
+  }
+  const limited = await probe("9.9.9.9")
+  assert.equal(limited.status, 429)
+  assert.ok(Number(limited.headers.get("retry-after")) > 0)
+  assert.equal((await probe("8.8.8.8")).status, 200)
+})
+
+test("the published skill and the repo's copy stay identical", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const read = (path) =>
+    readFile(new URL(`../${path}`, import.meta.url), "utf8")
+  assert.equal(
+    await read("skills/agent-reviews/SKILL.md"),
+    await read("app/public/SKILL.md")
+  )
+})

@@ -9,6 +9,7 @@ import {
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { z } from "zod"
+import { clientIp } from "./limits.ts"
 import type { ApiReviewStore } from "./store.ts"
 
 // Quick signup for reviewers: an email, then a six-digit code, then an API key
@@ -85,7 +86,7 @@ export function accountRoutes(deps: {
     if (!deps.sendCode) {
       return c.json({ error: "Signup email is not configured yet" }, 503)
     }
-    const ip = c.req.header("x-forwarded-for")?.split(",")[0].trim() ?? "local"
+    const ip = clientIp((name) => c.req.header(name))
     if (!allowStart(ip)) {
       return c.json({ error: "Too many signups. Try again later." }, 429)
     }

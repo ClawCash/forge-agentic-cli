@@ -14,6 +14,7 @@ import {
   KEY_HEADER,
   type SendCode,
 } from "./accounts.ts"
+import { clientIp, rateLimiter } from "./limits.ts"
 import { type WalletProof, walletProver } from "./proof.ts"
 import { type Rating, rate, screenNote, taskPrior } from "./rating.ts"
 import {
@@ -140,8 +141,30 @@ const USAGE_KINDS: [RegExp, string][] = [
   [/\/v1\/services\//, "service"],
 ]
 
+// Requests per minute, per client. Search and probe cost more because each one
+// calls someone else's server.
+const LIMITS: Record<string, number> = {
+  check: 120,
+  service: 120,
+  leaderboard: 120,
+  search: 30,
+  probe: 20,
+  review: 30,
+}
+
 export function v1Routes(deps: V1Deps) {
   const app = new Hono<{ Variables: { user: ApiUser | null } }>()
+
+  const hit = rateLimiter()
+  app.use("*", async (c, next) => {
+    const kind = USAGE_KINDS.find(([path]) => path.test(c.req.path))?.[1]
+    if (!kind) return next()
+    const client = clientIp((name) => c.req.header(name))
+    const verdict = hit(`${kind}:${client}`, LIMITS[kind])
+    if (verdict.allowed) return next()
+    c.header("Retry-After", String(verdict.retryAfterSeconds))
+    return c.json({ error: "Too many requests. Try again shortly." }, 429)
+  })
 
   // Knows who is calling, when they say, and records what was used. Never
   // records request or response content.
