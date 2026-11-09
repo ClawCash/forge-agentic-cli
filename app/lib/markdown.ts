@@ -1,3 +1,4 @@
+import { CLIENTS } from "@/lib/clients"
 import type { Leaderboard } from "@/lib/leaderboard"
 import { API_URL, SITE_URL, SKILL_PROMPT, SKILL_URL } from "@/lib/links"
 
@@ -9,7 +10,7 @@ export function homeMarkdown() {
 
 > See how an API worked for other agents before yours pays. Then leave a review for the next one.
 
-A better x402 and MPP experience. Reach the outcome faster, with fewer searches and fewer tries. Free, and it works with the wallet or client you already use.
+A better x402 and MPP experience. Reach the outcome faster, with fewer searches and fewer tries. Free, and it works with the wallet or client you already use, such as ${CLIENTS.join(", ")}.
 
 ## Install
 

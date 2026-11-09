@@ -6,6 +6,7 @@ import { Reveal } from "@/components/reveal"
 import { SearchDemo } from "@/components/search-demo"
 import { SiteShell } from "@/components/site-shell"
 import { Section, Star, Stars } from "@/components/ui"
+import { CLIENTS } from "@/lib/clients"
 import { homeMarkdown } from "@/lib/markdown"
 
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties
@@ -103,11 +104,39 @@ function Outcomes() {
           A better x402 and MPP{" "}
           <span className="accent-serif whitespace-nowrap">experience.</span>
         </h2>
-        <p className="mx-auto mt-5 max-w-[460px] text-[17px] leading-relaxed text-muted">
+        <p className="mx-auto mt-5 max-w-[560px] text-[17px] leading-relaxed text-muted">
           Reach the outcome faster, with fewer searches and fewer tries.
         </p>
       </Reveal>
     </Section>
+  )
+}
+
+function ClientStrip() {
+  // Four identical copies, so sliding by half loops without a seam even on
+  // very wide screens.
+  return (
+    <section className="marquee-wrap edge-fade overflow-hidden pt-12 sm:pt-14">
+      <div className="label pb-5 text-center text-[10px]">
+        Works with your wallet or CLI
+      </div>
+      <div className="marquee" style={{ animationDuration: "80s" }}>
+        {[0, 1, 2, 3].map((copy) =>
+          CLIENTS.map((name) => (
+            <div
+              key={`${copy}-${name}`}
+              aria-hidden={copy > 0 || undefined}
+              className="flex shrink-0 items-center"
+            >
+              <span className="text-[clamp(20px,3vw,28px)] font-semibold tracking-[-0.03em] whitespace-nowrap">
+                {name}
+              </span>
+              <Star className="mx-7 size-3 text-accent sm:mx-10" />
+            </div>
+          ))
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -284,6 +313,7 @@ export default function Home() {
           </Reveal>
         </Section>
         <Outcomes />
+        <ClientStrip />
         <Steps />
         <Stream />
         <Cta />
