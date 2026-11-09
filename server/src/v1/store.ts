@@ -6,6 +6,7 @@ import {
   apiKeys,
   apiReviews,
   authCodes,
+  endpointHealth,
   pendingReviews,
   serviceProfiles,
   usageEvents,
@@ -15,6 +16,7 @@ import {
 
 export type ServiceProfile = typeof serviceProfiles.$inferSelect
 export type PendingReview = typeof pendingReviews.$inferSelect
+export type EndpointHealth = typeof endpointHealth.$inferSelect
 export type ApiReview = typeof apiReviews.$inferSelect
 export type NewApiReview = Omit<ApiReview, "createdAt">
 export type ApiUser = typeof users.$inferSelect
@@ -52,6 +54,10 @@ export interface ApiReviewStore {
   savePending(pending: PendingReview): Promise<void>
   getPending(id: string): Promise<PendingReview | null>
   deletePending(id: string): Promise<void>
+  saveHealth(health: EndpointHealth): Promise<void>
+  getHealth(urls: string[]): Promise<Map<string, EndpointHealth>>
+  listHealthByDomains(domains: string[]): Promise<EndpointHealth[]>
+  listHealthDomains(): Promise<string[]>
   close(): Promise<void>
 }
 
@@ -132,6 +138,33 @@ export async function postgresApiReviewStore(
     },
     async deleteKey(keyHash) {
       await db.delete(apiKeys).where(eq(apiKeys.keyHash, keyHash))
+    },
+    async saveHealth(health) {
+      await db
+        .insert(endpointHealth)
+        .values(health)
+        .onConflictDoUpdate({ target: endpointHealth.url, set: health })
+    },
+    async getHealth(urls) {
+      if (urls.length === 0) return new Map()
+      const rows = await db
+        .select()
+        .from(endpointHealth)
+        .where(inArray(endpointHealth.url, urls))
+      return new Map(rows.map((row) => [row.url, row]))
+    },
+    listHealthByDomains: (domains) =>
+      domains.length
+        ? db
+            .select()
+            .from(endpointHealth)
+            .where(inArray(endpointHealth.domain, domains))
+        : Promise.resolve([]),
+    async listHealthDomains() {
+      const rows = await db
+        .selectDistinct({ domain: endpointHealth.domain })
+        .from(endpointHealth)
+      return rows.map((row) => row.domain)
     },
     async getProfiles(domains) {
       if (domains.length === 0) return new Map()
@@ -217,6 +250,7 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const usage: UsageEvent[] = []
   const profiles = new Map<string, ServiceProfile>()
   const pending = new Map<string, PendingReview>()
+  const health = new Map<string, EndpointHealth>()
   const newestFirst = (list: ApiReview[]) =>
     [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   return {
@@ -266,6 +300,21 @@ export function memoryApiReviewStore(): ApiReviewStore {
     async deleteKey(keyHash) {
       keys.delete(keyHash)
     },
+    async saveHealth(row) {
+      health.set(row.url, row)
+    },
+    getHealth: async (urls) =>
+      new Map(
+        urls.flatMap((url) => {
+          const row = health.get(url)
+          return row ? [[url, row]] : []
+        })
+      ),
+    listHealthByDomains: async (domains) =>
+      [...health.values()].filter((row) => domains.includes(row.domain)),
+    listHealthDomains: async () => [
+      ...new Set([...health.values()].map((row) => row.domain)),
+    ],
     getCode: async (email) => codes.get(email) ?? null,
     async saveCode(code) {
       codes.set(code.email, code)

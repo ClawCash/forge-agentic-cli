@@ -210,6 +210,19 @@ export const pendingReviews = pgTable("pending_reviews", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 })
 
+// The latest unpaid check of an endpoint. "live" means it answered with valid
+// payment terms, not that a paid call will succeed.
+export const endpointHealth = pgTable(
+  "endpoint_health",
+  {
+    url: text("url").primaryKey(),
+    domain: text("domain").notNull(),
+    status: text("status").notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [index("endpoint_health_domain_idx").on(table.domain)]
+)
+
 // What an API's own site says about it, for its leaderboard card.
 export const serviceProfiles = pgTable("service_profiles", {
   domain: text("domain").primaryKey(),

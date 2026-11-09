@@ -78,7 +78,7 @@ function buildServer(call: Call, baseUrl: string) {
     "check_apis",
     {
       description:
-        "Before paying for an API, see how it worked for other agents. Takes endpoint URLs or bare domains. Among results with verdict use, prefer the lowest cost_per_success_usd. Verdict unknown means not enough evidence yet, not a bad sign.",
+        "Before paying for an API, see how it worked for other agents. Takes endpoint URLs or bare domains. Among results with verdict use, prefer the lowest cost_per_success_usd. Verdict unknown means not enough evidence yet, not a bad sign. Skip an API whose health.status is down if you can.",
       inputSchema: {
         urls: z.array(z.string().min(3).max(2048)).min(1).max(50),
         task: Task.optional().describe(taskNote),

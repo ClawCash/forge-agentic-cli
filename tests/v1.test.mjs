@@ -7,6 +7,12 @@ import { Mppx, tempo } from "mppx/client"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { createApp } from "../server/src/index.ts"
 import { BASE, USDC_BASE } from "../server/src/v1/chains.ts"
+import {
+  chooseTargets,
+  healthChecker,
+  healthStatus,
+  listingSample,
+} from "../server/src/v1/health.ts"
 import { profileReader } from "../server/src/v1/profiles.ts"
 import { rate, screenNote, taskPrior } from "../server/src/v1/rating.ts"
 import { locate } from "../server/src/v1/routes.ts"
@@ -1366,6 +1372,222 @@ test("an endpoint's helpfulness comes from that endpoint alone", () => {
     0.6
   )
   assert.equal(rating.satisfied, 0.5)
+})
+
+const terms = (status, accepts = []) => ({
+  live: status === 200,
+  status,
+  protocols: [],
+  accepts,
+})
+const PAID_TERMS = terms(402, [
+  { network: BASE, asset: USDC_BASE, payTo: SELLER, amount: "10000" },
+])
+
+test("a check result describes what actually happened", () => {
+  assert.equal(healthStatus(PAID_TERMS), "live")
+  assert.equal(healthStatus(terms(null)), "down")
+  assert.equal(healthStatus(terms(502)), "down")
+  assert.equal(healthStatus(terms(404)), "down")
+  assert.equal(healthStatus(terms(402)), "unclear")
+  assert.equal(healthStatus(terms(200)), "unclear")
+  assert.equal(healthStatus(terms(403)), "unclear")
+  assert.equal(healthStatus(terms(400)), "unclear")
+})
+
+test("a directory listing's example becomes the check's request", () => {
+  const post = listingSample({
+    resource: "https://a.example/run",
+    extensions: {
+      bazaar: { info: { input: { method: "POST", body: { q: "x" } } } },
+    },
+  })
+  assert.deepEqual(post, {
+    url: "https://a.example/run",
+    method: "POST",
+    body: '{"q":"x"}',
+  })
+  const get = listingSample({
+    resource: "https://a.example/run",
+    extensions: {
+      bazaar: { info: { input: { method: "GET", queryParams: { q: "x" } } } },
+    },
+  })
+  assert.equal(get.url, "https://a.example/run?q=x")
+  assert.equal(listingSample({ resource: "https://a.example/run" }), undefined)
+})
+
+test("the most-paid-for APIs are checked, capped per domain", () => {
+  const listing = (host, path, payers) => ({
+    resource: `https://${host}/${path}`,
+    quality: { l30DaysUniquePayers: payers },
+  })
+  const big = Array.from({ length: 8 }, (_, i) =>
+    listing("big.example", `e${i}`, 100 + i)
+  )
+  const targets = chooseTargets(
+    [listing("small.example", "x", 1), ...big, big[0]],
+    ["https://reviewed.example/y"]
+  )
+  const urls = targets.map((target) => target.url)
+  assert.equal(urls.filter((url) => url.includes("big.example")).length, 5)
+  assert.equal(urls[0], "https://big.example/e7")
+  assert.ok(urls.includes("https://small.example/x"))
+  assert.equal(urls.at(-1), "https://reviewed.example/y")
+  assert.equal(new Set(urls).size, urls.length)
+})
+
+test("a sweep records each endpoint's latest status", async () => {
+  const store = memoryApiReviewStore()
+  await store.insert(row())
+  let answer = PAID_TERMS
+  const asked = []
+  const checker = healthChecker({
+    store,
+    readTerms: async (url, sample) => {
+      asked.push({ url, sample })
+      return answer
+    },
+    fetch: async () =>
+      Response.json({
+        resources: [
+          {
+            resource: "https://listed.example/run",
+            extensions: {
+              bazaar: { info: { input: { method: "POST", body: { q: 1 } } } },
+            },
+          },
+        ],
+      }),
+  })
+  await checker.sweep()
+  assert.ok(asked.some((a) => a.sample?.body === '{"q":1}'))
+  assert.ok(asked.some((a) => a.url === ENDPOINT))
+  let [saved] = [...(await store.getHealth([ENDPOINT])).values()]
+  assert.equal(saved.status, "live")
+  assert.equal(saved.domain, "stableenrich.dev")
+  answer = terms(502)
+  await checker.sweep()
+  ;[saved] = [...(await store.getHealth([ENDPOINT])).values()]
+  assert.equal(saved.status, "down")
+})
+
+test("the background check never downloads a seller's spec", async () => {
+  const urls = []
+  const read = termsReader(
+    async (url) => {
+      urls.push(String(url))
+      return Response.json({}, { status: 400 })
+    },
+    async () => {},
+    { specs: false }
+  )
+  const result = await read(PAID_POST)
+  assert.equal(healthStatus(result), "unclear")
+  assert.ok(!urls.some((url) => url.endsWith("/openapi.json")))
+})
+
+test("a directory's example gets a price in a single request", async () => {
+  const calls = []
+  const read = termsReader(
+    async (url, init) => {
+      calls.push([url, init.method, init.body])
+      return Response.json(QUOTE, { status: 402 })
+    },
+    async () => {}
+  )
+  const result = await read(PAID_POST, {
+    url: PAID_POST,
+    method: "POST",
+    body: '{"q":"x"}',
+  })
+  assert.equal(result.status, 402)
+  assert.deepEqual(calls, [[PAID_POST, "POST", '{"q":"x"}']])
+})
+
+test("a seller's large spec is only downloaded once a day", async () => {
+  let specReads = 0
+  const read = termsReader(
+    async (url) => {
+      if (String(url).endsWith("/openapi.json")) {
+        specReads += 1
+        return Response.json({ paths: {} })
+      }
+      return Response.json({}, { status: 400 })
+    },
+    async () => {}
+  )
+  await read(PAID_POST)
+  await read(PAID_POST)
+  assert.equal(specReads, 1)
+})
+
+const saveHealth = (store, url, status) =>
+  store.saveHealth({
+    url,
+    domain: locate(url).domain,
+    status,
+    checkedAt: new Date(),
+  })
+
+test("check shows each endpoint's latest health", async () => {
+  const { app, store } = await setup()
+  await saveHealth(store, ENDPOINT, "live")
+  const body = await (
+    await app.request(
+      `/v1/check?url=${encodeURIComponent(ENDPOINT)}&url=other.example`
+    )
+  ).json()
+  assert.equal(body.results[0].health.status, "live")
+  assert.deepEqual(Object.keys(body.results[0].health), [
+    "status",
+    "checked_at",
+  ])
+  assert.equal(body.results[1].health, null)
+})
+
+test("search puts endpoints that are down last", async () => {
+  const down = "https://down.example/run"
+  const up = "https://up.example/run"
+  const { app, store } = await setup({
+    fetcher: async () =>
+      Response.json({
+        resources: [{ resource: down }, { resource: up }],
+      }),
+  })
+  await saveHealth(store, down, "down")
+  await saveHealth(store, up, "live")
+  const { results } = await (await app.request("/v1/search?q=run")).json()
+  assert.deepEqual(
+    results.map((r) => r.url),
+    [up, down]
+  )
+  assert.equal(results[1].health.status, "down")
+})
+
+test("an unreviewed API that is being checked still has a page", async () => {
+  const { app, store } = await setup()
+  await saveHealth(store, "https://checked.example/run", "live")
+  const page = await (await app.request("/v1/services/checked.example")).json()
+  assert.equal(page.known, true)
+  assert.equal(page.health.status, "live")
+  assert.equal(page.rating.stars, null)
+  const unknown = await (await app.request("/v1/services/nope.example")).json()
+  assert.equal(unknown.known, false)
+  const { domains } = await (await app.request("/v1/domains")).json()
+  assert.deepEqual(domains, [{ domain: "checked.example", reviewed: false }])
+})
+
+test("the leaderboard shows whether an API is answering", async () => {
+  const { app, store } = await setup()
+  await store.insert(row({ domain: "great.example", path: "/x" }))
+  await saveHealth(store, "https://great.example/x", "live")
+  await saveHealth(store, "https://great.example/y", "down")
+  const board = await (await app.request("/v1/leaderboard")).json()
+  assert.equal(board.top[0].health.status, "live")
+  await saveHealth(store, "https://great.example/x", "down")
+  const after = await (await app.request("/v1/leaderboard")).json()
+  assert.equal(after.top[0].health.status, "down")
 })
 
 test("a failed signup email reports why, without the key", async () => {

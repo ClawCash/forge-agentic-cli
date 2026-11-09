@@ -13,6 +13,7 @@ import { chainFinder } from "./v1/chains.ts"
 import { mcpRoutes } from "./v1/mcp.ts"
 import { type V1Deps, v1Routes } from "./v1/routes.ts"
 import { memoryApiReviewStore, postgresApiReviewStore } from "./v1/store.ts"
+import { healthChecker } from "./v1/health.ts"
 import { profileReader } from "./v1/profiles.ts"
 import { termsReader } from "./v1/terms.ts"
 import { DEMO_APIS } from "./demo-apis.ts"
@@ -147,6 +148,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         process.env.ALLOW_REPEAT_HUMAN_REVIEWS === "true",
     },
   })
+  healthChecker({
+    store: v1.store,
+    readTerms: termsReader(undefined, undefined, { specs: false }),
+  }).start()
   serve({ fetch: app.fetch, port })
   console.log(`server listening on http://localhost:${port} (${v1.baseUrl})`)
 }

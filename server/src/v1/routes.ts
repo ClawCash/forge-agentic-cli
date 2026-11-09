@@ -16,6 +16,7 @@ import {
   KEY_HEADER,
   type SendCode,
 } from "./accounts.ts"
+import { domainHealth, healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
 import { type WalletProof, walletProver } from "./proof.ts"
@@ -32,8 +33,9 @@ import {
   type ApiReviewStore,
   type ApiUser,
   PaymentAlreadyReviewedError,
+  type ServiceProfile,
 } from "./store.ts"
-import type { ReadTerms } from "./terms.ts"
+import { locate, type ReadTerms } from "./terms.ts"
 
 // The free reviews API. Search, check, probe and the leaderboard need nothing.
 // Writing a review needs a quick email signup and proof that the writer's
@@ -169,14 +171,7 @@ export interface V1Deps {
   proveWallet?: (request: Request) => Promise<WalletProof>
 }
 
-// A review is filed against an endpoint and rolled up to its domain.
-export function locate(input: string) {
-  const url = new URL(/^[a-z]+:\/\//i.test(input) ? input : `https://${input}`)
-  // "www." only merges for grouping: the URL itself must stay fetchable.
-  const domain = url.hostname.toLowerCase().replace(/^www\./, "")
-  const path = url.pathname.replace(/\/+$/, "")
-  return { domain, path, url: `https://${url.host.toLowerCase()}${path}` }
-}
+export { locate }
 
 function shortWallet(wallet: string) {
   return `${wallet.slice(0, 6)}…${wallet.slice(-4)}`
@@ -238,6 +233,7 @@ const USAGE_KINDS: [RegExp, string][] = [
   [/\/v1\/reviews(\/|$)/, "review"],
   [/\/v1\/leaderboard$/, "leaderboard"],
   [/\/v1\/services\//, "service"],
+  [/\/v1\/domains$/, "service"],
   [/\/v1\/account(\/|$)/, "account"],
 ]
 
@@ -378,7 +374,8 @@ export function v1Routes(deps: V1Deps) {
       ...new Set(targets.map((t) => t.domain)),
     ])
     const prior = await priorFor(filters.task)
-    return targets.map(({ input, domain, path }) => {
+    const health = await deps.store.getHealth(targets.map((t) => t.url))
+    return targets.map(({ input, domain, path, url }) => {
       const rating = rate(
         rows.filter((row) => row.domain === domain),
         { domain, path, ...filters },
@@ -388,6 +385,7 @@ export function v1Routes(deps: V1Deps) {
         url: input,
         domain,
         ...rating,
+        health: healthView(health.get(url)),
         more: moreLink(domain, filters.task, path),
       }
     })
@@ -477,7 +475,7 @@ export function v1Routes(deps: V1Deps) {
     const ratings = urls.length ? await check(urls, { task }) : []
     const results = ratings
       .map((rating, relevance) => {
-        const { url, ...reviews } = rating
+        const { url, health, ...reviews } = rating
         const listing = resources.find((r) => r.resource === url)
         const accept = listing?.accepts?.[0]
         return {
@@ -490,11 +488,14 @@ export function v1Routes(deps: V1Deps) {
               ? priceUsd(accept.asset ?? "", BigInt(accept.amount))
               : null,
           payers_30d: listing?.quality?.l30DaysUniquePayers ?? null,
+          health,
           reviews,
         }
       })
       .sort(
         (a, b) =>
+          Number(a.health?.status === "down") -
+            Number(b.health?.status === "down") ||
           rank(a.reviews as Rating) - rank(b.reviews as Rating) ||
           a.relevance - b.relevance
       )
@@ -524,6 +525,11 @@ export function v1Routes(deps: V1Deps) {
     const path = endpoint?.replace(/\/+$/, "")
     const paths = [...new Set(rows.map((row) => row.path))]
     const counted = new Set(latestPerAgent(rows).map((row) => row.id))
+    const healthRows = await deps.store.listHealthByDomains([domain])
+    const known = rows.length > 0 || healthRows.length > 0
+    const profile = known
+      ? (await profilesFor([domain])).get(domain)
+      : undefined
     const reviews = rows
       .filter(
         (row) =>
@@ -535,11 +541,17 @@ export function v1Routes(deps: V1Deps) {
     return c.json({
       domain,
       task: task ?? null,
+      known,
+      profile: profileView(domain, profile),
+      health: domainHealth(healthRows),
       rating: rate(rows, { domain, path: "", task }, prior),
       endpoints: paths.map((p) => ({
         endpoint: p || "/",
         url: `https://${domain}${p}`,
         ...rate(rows, { domain, path: p, task }, prior),
+        health: healthView(
+          healthRows.find((row) => locate(row.url).path === p)
+        ),
       })),
       reviews: reviews.map((row) => publicReview(row, counted.has(row.id))),
     })
@@ -835,6 +847,32 @@ export function v1Routes(deps: V1Deps) {
   // What agents say: the top-rated APIs and the latest verified reviews.
   const refreshing = new Set<string>()
 
+  function profileView(domain: string, profile: ServiceProfile | undefined) {
+    return {
+      name: profile?.name ?? null,
+      description: profile?.description ?? null,
+      icon_url: profile?.iconData
+        ? `${deps.baseUrl}/v1/services/${domain}/icon`
+        : null,
+      url: profile?.siteUrl ?? null,
+    }
+  }
+
+  // Every API with a public page, for the site's sitemap.
+  app.get("/domains", async (c) => {
+    const [recent, checked] = await Promise.all([
+      deps.store.listRecent(5000),
+      deps.store.listHealthDomains(),
+    ])
+    const reviewed = new Set(recent.map((row) => row.domain))
+    return c.json({
+      domains: [...new Set([...reviewed, ...checked])].map((domain) => ({
+        domain,
+        reviewed: reviewed.has(domain),
+      })),
+    })
+  })
+
   // Fills in missing or old profiles, waiting only briefly so a slow seller
   // can't hold up the leaderboard. Whatever isn't ready shows on the next load.
   async function profilesFor(domains: string[]) {
@@ -929,22 +967,21 @@ export function v1Routes(deps: V1Deps) {
         } = entry
         return { rank: index + 1, ...rest }
       })
-    const profiles = await profilesFor(top.map((entry) => entry.domain))
+    const topDomains = top.map((entry) => entry.domain)
+    const profiles = await profilesFor(topDomains)
+    const health = await deps.store.listHealthByDomains(topDomains)
     return c.json({
       updated_at: new Date().toISOString(),
       task: task ?? null,
       total_reviews: rows.length,
       total_apis: byDomain.size,
       top: top.map((entry) => {
-        const profile = profiles.get(entry.domain)
         return {
           ...entry,
-          name: profile?.name ?? null,
-          description: profile?.description ?? null,
-          icon_url: profile?.iconData
-            ? `${deps.baseUrl}/v1/services/${entry.domain}/icon`
-            : null,
-          url: profile?.siteUrl ?? null,
+          ...profileView(entry.domain, profiles.get(entry.domain)),
+          health: domainHealth(
+            health.filter((row) => row.domain === entry.domain)
+          ),
         }
       }),
       recent: rows

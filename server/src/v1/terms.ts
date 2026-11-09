@@ -15,7 +15,25 @@ export interface PaymentTerms {
   error?: string
 }
 
-export type ReadTerms = (url: string) => Promise<PaymentTerms>
+export interface SampleRequest {
+  url: string
+  method: string
+  body?: string
+}
+
+export type ReadTerms = (
+  url: string,
+  sample?: SampleRequest
+) => Promise<PaymentTerms>
+
+// A review is filed against an endpoint and rolled up to its domain.
+export function locate(input: string) {
+  const url = new URL(/^[a-z]+:\/\//i.test(input) ? input : `https://${input}`)
+  // "www." only merges for grouping: the URL itself must stay fetchable.
+  const domain = url.hostname.toLowerCase().replace(/^www\./, "")
+  const path = url.pathname.replace(/\/+$/, "")
+  return { domain, path, url: `https://${url.host.toLowerCase()}${path}` }
+}
 
 const X402_V1_NETWORKS: Record<string, string> = {
   base: BASE,
@@ -121,6 +139,8 @@ const rejectedInput = (terms: PaymentTerms) =>
 const MAX_SPEC_BYTES = 16_000_000
 const MAX_SAMPLE_BYTES = 16_000
 const MAX_SAMPLE_DEPTH = 4
+const SAMPLE_FRESH_MS = 24 * 60 * 60_000
+const MAX_CACHED_SAMPLES = 2000
 
 function sampleValue(schema: any, depth: number): unknown {
   if (schema?.example !== undefined) return schema.example
@@ -183,9 +203,14 @@ function sampleRequest(spec: any, url: string) {
 
 export function termsReader(
   fetcher: typeof fetch = fetch,
-  assertPublic: (url: string) => Promise<void> = assertPublicHttps
+  assertPublic: (url: string) => Promise<void> = assertPublicHttps,
+  { specs = true }: { specs?: boolean } = {}
 ): ReadTerms {
   const cache = new Map<string, { at: number; terms: PaymentTerms }>()
+  const specSamples = new Map<
+    string,
+    { at: number; sample: SampleRequest | null }
+  >()
 
   async function readSpec(url: string) {
     const res = await fetcher(`${new URL(url).origin}/openapi.json`, {
@@ -208,6 +233,17 @@ export function termsReader(
       chunks.push(value)
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"))
+  }
+
+  // Specs can be many megabytes, so each endpoint's sample is built once a day.
+  async function sampleFromSpec(url: string) {
+    const known = specSamples.get(url)
+    if (known && Date.now() - known.at < SAMPLE_FRESH_MS) return known.sample
+    const spec = await readSpec(url).catch(() => null)
+    const sample = spec ? sampleRequest(spec, url) : null
+    if (specSamples.size >= MAX_CACHED_SAMPLES) specSamples.clear()
+    specSamples.set(url, { at: Date.now(), sample })
+    return sample
   }
 
   async function attempt(
@@ -248,19 +284,32 @@ export function termsReader(
     }
   }
 
-  return async (url) => {
+  return async (url, listed) => {
     const cached = cache.get(url)
     if (cached && Date.now() - cached.at < 300_000) return cached.terms
     try {
       await assertPublic(url)
+      if (listed) {
+        // One request, when a directory has said what a valid call looks like.
+        const direct = await attempt(listed.url, listed.method, listed.body)
+        if (direct.status === 402 || (direct.status ?? 0) >= 500) {
+          if (direct.accepts.length > 0) {
+            cache.set(url, { at: Date.now(), terms: direct })
+          }
+          return direct
+        }
+      }
       // Many paid routes only answer POST, and most return 402 before they
       // look at the body.
       const viaGet = await attempt(url, "GET")
       let terms = viaGet
       if (terms.status !== 402) terms = await attempt(url, "POST")
-      if (terms.status !== 402 && [viaGet, terms].some(rejectedInput)) {
-        const spec = await readSpec(url).catch(() => null)
-        const sample = spec && sampleRequest(spec, url)
+      if (
+        specs &&
+        terms.status !== 402 &&
+        [viaGet, terms].some(rejectedInput)
+      ) {
+        const sample = await sampleFromSpec(url)
         if (sample)
           terms = await attempt(sample.url, sample.method, sample.body)
       }

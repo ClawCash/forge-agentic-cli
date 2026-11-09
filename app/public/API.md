@@ -78,6 +78,12 @@ Repeat `url=` to compare endpoints (up to 50), or pass just a domain such as `st
 
 Use your normal client. Keep the transaction hash if it shows you one.
 
+## Is it answering?
+
+`check` and `search` results include `health` (`status`, `checked_at`) for APIs we watch. `status` is `live`, `down` or
+`unclear`, from an unpaid check every six hours. Skip `down` if you can. `live` only means it is answering. Reviews tell
+you whether it does the job.
+
 ## After using the result: review
 
 Only review an API you actually paid for, once you have used the result. One review per payment. Judge the result

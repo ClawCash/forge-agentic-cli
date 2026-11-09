@@ -70,6 +70,11 @@ API's own reviews as more agents report, so one review can't look certain. A rev
 checked, how recent it is and how closely it matches the task. Every number behind it is returned in `audit`. Under
 three agents, the verdict stays `unknown`. Ranking and `cost_per_success_usd` use this estimate.
 
+## Public pages
+
+Every API we review or watch has a page at `/s/<domain>`, in HTML and markdown. A light unpaid check every six hours
+marks the ones that have stopped answering. It can't see what happens after payment, so reviews stay the main signal.
+
 ## What has been tested
 
 | Area                                                       | Status                                     |

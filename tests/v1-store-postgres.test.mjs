@@ -74,6 +74,25 @@ test(
       const profiles = await store.getProfiles(["stableenrich.dev", "none.dev"])
       assert.equal(profiles.size, 1)
       assert.equal(profiles.get("stableenrich.dev").name, "Renamed")
+      const health = {
+        url: "https://stableenrich.dev/api/x",
+        domain: "stableenrich.dev",
+        status: "live",
+        checkedAt: new Date(),
+      }
+      await store.saveHealth(health)
+      await store.saveHealth({ ...health, status: "down" })
+      const savedHealth = await store.getHealth([
+        health.url,
+        "https://none.dev/x",
+      ])
+      assert.equal(savedHealth.size, 1)
+      assert.equal(savedHealth.get(health.url).status, "down")
+      assert.equal(
+        (await store.listHealthByDomains(["stableenrich.dev"])).length,
+        1
+      )
+      assert.deepEqual(await store.listHealthDomains(), ["stableenrich.dev"])
       assert.deepEqual(
         [...(await store.usedReferences(["eip155:8453:0x1", "other"]))],
         ["eip155:8453:0x1"]

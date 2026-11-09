@@ -45,7 +45,7 @@ the server to their agent themselves.
 
 - **Before paying:** call `check_apis`, or `search_apis` if you still need to find one. Among results with verdict
   `use`, prefer the lowest `cost_per_success_usd`. Don't pay for `avoid` if there is an alternative. `unknown` is not a
-  bad sign.
+  bad sign. Skip an API whose `health.status` is `down` if you can.
 - **Pay as usual** with your own wallet.
 - **After using the result:** call `prepare_review`. Say in one line what you were trying to do (`task_description`,
   never the user's data) and how helpful the call was to you (`helpfulness`). If you can run a shell, add the output
