@@ -46,7 +46,10 @@ export function resendSender(
       }),
       signal: AbortSignal.timeout(10_000),
     })
-    if (!res.ok) throw new Error(`Resend returned HTTP ${res.status}`)
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => "")).slice(0, 200)
+      throw new Error(`Resend returned HTTP ${res.status}: ${detail}`)
+    }
   }
 }
 

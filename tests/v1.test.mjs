@@ -742,3 +742,17 @@ test("an empty leaderboard is an honest empty list", async () => {
   assert.deepEqual(board.top, [])
   assert.equal(board.total_reviews, 0)
 })
+
+test("a failed signup email reports why, without the key", async () => {
+  const { resendSender } = await import("../server/src/v1/accounts.ts")
+  const send = resendSender(
+    { RESEND_API_KEY: "re_not_real", RESEND_FROM_EMAIL: "a@example.com" },
+    async () =>
+      Response.json({ message: "The domain is not verified" }, { status: 403 })
+  )
+  await assert.rejects(send("b@example.com", "123456"), (error) => {
+    assert.match(error.message, /403.*not verified/)
+    assert.doesNotMatch(error.message, /re_not_real/)
+    return true
+  })
+})
