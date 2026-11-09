@@ -11,6 +11,7 @@ import { profileReader } from "../server/src/v1/profiles.ts"
 import { rate, screenNote, taskPrior } from "../server/src/v1/rating.ts"
 import { locate } from "../server/src/v1/routes.ts"
 import { memoryApiReviewStore } from "../server/src/v1/store.ts"
+import { termsReader } from "../server/src/v1/terms.ts"
 import { assertPublicHttps } from "../server/src/v1/terms.ts"
 
 // Wallet proof runs the real x402 and MPP client libraries against the real
@@ -911,6 +912,168 @@ test("a site with no page falls back to its API description", async () => {
   const profile = await read("seller.example")
   assert.equal(profile.name, "Seller API")
   assert.equal(profile.description, "Weather for agents.")
+})
+
+const QUOTE = {
+  x402Version: 2,
+  accepts: [{ network: BASE, asset: USDC_BASE, payTo: SELLER, amount: "1000" }],
+}
+
+// A seller that only quotes a price for a request it considers valid.
+function strictSeller({ spec, valid }) {
+  const calls = []
+  const fetcher = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: init.body })
+    if (String(url).endsWith("/openapi.json")) {
+      return spec
+        ? new Response(JSON.stringify(spec), { status: 200 })
+        : new Response("no", { status: 404 })
+    }
+    return valid(String(url), init)
+      ? Response.json(QUOTE, { status: 402 })
+      : Response.json({ error: "invalid input" }, { status: 400 })
+  }
+  return { calls, read: termsReader(fetcher, async () => {}) }
+}
+
+const PAID_POST = "https://seller.example/v1/run"
+
+test("terms are read with the sample from a seller's own spec", async () => {
+  const { calls, read } = strictSeller({
+    spec: {
+      paths: {
+        "/v1/run": {
+          post: {
+            requestBody: {
+              content: { "application/json": { example: { handle: "a" } } },
+            },
+          },
+        },
+      },
+    },
+    valid: (_, init) => init.body === '{"handle":"a"}',
+  })
+  const terms = await read(PAID_POST)
+  assert.equal(terms.status, 402)
+  assert.equal(terms.accepts[0].payTo, SELLER)
+  assert.equal(calls.at(-1).body, '{"handle":"a"}')
+})
+
+test("a valid request is built from required fields when there is no example", async () => {
+  const { calls, read } = strictSeller({
+    spec: {
+      paths: {
+        "/v1/run": {
+          post: {
+            requestBody: {
+              content: {
+                "application/json": {
+                  schema: {
+                    required: ["url", "limit", "mode", "tags"],
+                    properties: {
+                      url: { type: "string", format: "uri" },
+                      limit: { type: "integer", minimum: 5 },
+                      mode: { enum: ["fast", "deep"] },
+                      tags: { type: "array", minItems: 1, items: {} },
+                      optional: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    valid: (_, init) => init.body !== "{}" && Boolean(init.body),
+  })
+  assert.equal((await read(PAID_POST)).status, 402)
+  assert.deepEqual(JSON.parse(calls.at(-1).body), {
+    url: "https://example.com",
+    limit: 5,
+    mode: "fast",
+    tags: ["x"],
+  })
+})
+
+test("required query parameters come from the spec too", async () => {
+  const { read } = strictSeller({
+    spec: {
+      paths: {
+        "/v1/run": {
+          get: {
+            parameters: [
+              {
+                in: "query",
+                name: "q",
+                required: true,
+                schema: { type: "string" },
+              },
+              { in: "query", name: "page", schema: { type: "integer" } },
+            ],
+          },
+        },
+      },
+    },
+    valid: (url, init) => init.method === "GET" && url.endsWith("?q=x"),
+  })
+  assert.equal((await read(PAID_POST)).status, 402)
+})
+
+test("a seller that quotes straight away never has its spec fetched", async () => {
+  const { calls, read } = strictSeller({ spec: {}, valid: () => true })
+  assert.equal((await read(PAID_POST)).status, 402)
+  assert.deepEqual(
+    calls.map((call) => call.method),
+    ["GET"]
+  )
+})
+
+test("a seller with no usable spec is reported as it was", async () => {
+  const none = strictSeller({ valid: () => false })
+  const terms = await none.read(PAID_POST)
+  assert.equal(terms.status, 400)
+  assert.deepEqual(terms.accepts, [])
+  const unrelated = strictSeller({
+    spec: { paths: { "/other": { post: {} } } },
+    valid: () => false,
+  })
+  assert.equal((await unrelated.read(PAID_POST)).status, 400)
+})
+
+test("an endpoint that needs auth doesn't trigger a spec fetch", async () => {
+  const calls = []
+  const read = termsReader(
+    async (url) => {
+      calls.push(String(url))
+      return new Response("no", { status: 401 })
+    },
+    async () => {}
+  )
+  assert.equal((await read(PAID_POST)).status, 401)
+  assert.ok(!calls.some((url) => url.endsWith("/openapi.json")))
+})
+
+test("a redirected or oversized spec is ignored", async () => {
+  const redirecting = termsReader(
+    async (url) =>
+      String(url).endsWith("/openapi.json")
+        ? new Response(null, {
+            status: 302,
+            headers: { location: "https://internal.example/" },
+          })
+        : Response.json({}, { status: 400 }),
+    async () => {}
+  )
+  assert.equal((await redirecting(PAID_POST)).status, 400)
+  const oversized = termsReader(
+    async (url) =>
+      String(url).endsWith("/openapi.json")
+        ? new Response(new Uint8Array(17_000_000))
+        : Response.json({}, { status: 400 }),
+    async () => {}
+  )
+  assert.equal((await oversized(PAID_POST)).status, 400)
 })
 
 test("a failed signup email reports why, without the key", async () => {

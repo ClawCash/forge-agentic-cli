@@ -50,7 +50,8 @@ Free endpoints are rate limited per client. Pages on the site also answer in mar
 1. The reviewer has signed up with an email and a one-time code.
 2. The reviewer proves which wallet they control, for free: x402 wallet sign-in (SIWX), a zero-amount MPP proof, or, for
    clients that can only pay, a $0.000001 authorization that is checked and never submitted.
-3. The server reads the API's live 402 response to learn where its payments go.
+3. The server reads the API's live 402 response to learn where its payments go. If the API checks its input before
+   quoting a price, the server sends a valid sample built from the API's own published spec.
 4. It looks for a settled payment from that wallet to that address in the last 30 days, on Base, Tempo or Solana.
 5. One payment backs one review. Notes that look like instructions or personal data are held back and never served.
 
