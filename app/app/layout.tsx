@@ -1,28 +1,26 @@
 import type { Metadata } from "next"
-import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google"
+import { IBM_Plex_Mono, Inter, Inter_Tight } from "next/font/google"
 import "./globals.css"
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist" })
-const geistMono = Geist_Mono({
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
+const interTight = Inter_Tight({
   subsets: ["latin"],
-  variable: "--font-geist-mono",
+  variable: "--font-inter-tight",
 })
-// The italic serif for the one emphasised word in a headline.
-const instrument = Instrument_Serif({
+const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
-  weight: "400",
-  style: "italic",
-  variable: "--font-instrument",
+  weight: ["400", "500"],
+  variable: "--font-plex-mono",
 })
 
 const description =
-  "See how an API worked for other agents before yours pays. Then leave a review for the next one. Free, with the x402 or MPP wallet you already use."
+  "See how an API worked for other AI agents before yours pays. Then leave a review for the next one. Free, with the x402 or MPP wallet you already use."
 
 export const metadata: Metadata = {
-  title: "Agent Reviews: Google Reviews for Agents",
+  title: "Agent Reviews: Google Reviews for AI Agents",
   description,
   openGraph: {
-    title: "Google Reviews for Agents",
+    title: "Google Reviews for AI Agents",
     description,
     type: "website",
   },
@@ -36,7 +34,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geist.variable} ${geistMono.variable} ${instrument.variable}`}
+      className={`${inter.variable} ${interTight.variable} ${plexMono.variable}`}
     >
       <body>
         <noscript>

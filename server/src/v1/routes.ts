@@ -15,6 +15,7 @@ import {
   type SendCode,
 } from "./accounts.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
+import type { ReadProfile } from "./profiles.ts"
 import { type WalletProof, walletProver } from "./proof.ts"
 import { type Rating, rate, screenNote, taskPrior } from "./rating.ts"
 import {
@@ -87,6 +88,7 @@ export interface V1Deps {
   findPayments: FindPayments
   sendCode: SendCode | null
   readTerms: ReadTerms
+  readProfile?: ReadProfile
   fetch?: typeof fetch
   // Overrides wallet proof in tests that exercise only the rating flow.
   proveWallet?: (request: Request) => Promise<WalletProof>
@@ -154,10 +156,42 @@ const LIMITS: Record<string, number> = {
   account: 60,
 }
 
+const ICONS_PER_MINUTE = 600
+const DAY_MS = 86_400_000
+const PROFILE_FRESH_MS = 7 * DAY_MS
+const EMPTY_PROFILE_FRESH_MS = DAY_MS
+const PROFILE_WAIT_MS = 2500
+const PROFILES_PER_REQUEST = 6
+
 export function v1Routes(deps: V1Deps) {
   const app = new Hono<{ Variables: { user: ApiUser | null } }>()
 
   const hit = rateLimiter()
+
+  // Ahead of the limits and tracking below: a page of logos isn't API usage.
+  app.get("/services/:domain/icon", async (c) => {
+    const client = clientIp((name) => c.req.header(name))
+    if (!hit(`icon:${client}`, ICONS_PER_MINUTE).allowed) {
+      return c.body(null, 429)
+    }
+    const domain = c.req.param("domain").toLowerCase()
+    const profile = (await deps.store.getProfiles([domain])).get(domain)
+    if (!profile?.iconData || !profile.iconType) return c.body(null, 404)
+    return new Response(
+      new Uint8Array(Buffer.from(profile.iconData, "base64")),
+      {
+        headers: {
+          "Content-Type": profile.iconType,
+          "Cache-Control": "public, max-age=86400",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy":
+            "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+          "Cross-Origin-Resource-Policy": "cross-origin",
+        },
+      }
+    )
+  })
+
   app.use("*", async (c, next) => {
     const kind = USAGE_KINDS.find(([path]) => path.test(c.req.path))?.[1]
     if (!kind) return next()
@@ -616,6 +650,64 @@ export function v1Routes(deps: V1Deps) {
   })
 
   // What agents say: the top-rated APIs and the latest verified reviews.
+  const refreshing = new Set<string>()
+
+  // Fills in missing or old profiles, waiting only briefly so a slow seller
+  // can't hold up the leaderboard. Whatever isn't ready shows on the next load.
+  async function profilesFor(domains: string[]) {
+    const profiles = await deps.store.getProfiles(domains)
+    const readProfile = deps.readProfile
+    if (!readProfile) return profiles
+    const now = Date.now()
+    const stale = domains
+      .filter((domain) => {
+        if (refreshing.has(domain)) return false
+        const known = profiles.get(domain)
+        if (!known) return true
+        const fresh =
+          known.name || known.description
+            ? PROFILE_FRESH_MS
+            : EMPTY_PROFILE_FRESH_MS
+        return now - known.fetchedAt.getTime() > fresh
+      })
+      .slice(0, PROFILES_PER_REQUEST)
+    if (stale.length === 0) return profiles
+
+    const refresh = Promise.all(
+      stale.map(async (domain) => {
+        refreshing.add(domain)
+        try {
+          const read = await readProfile(domain)
+          const known = profiles.get(domain)
+          const icon = read.iconData ? read : known
+          const profile = {
+            domain,
+            name: read.name ?? known?.name ?? null,
+            description: read.description ?? known?.description ?? null,
+            iconType: icon?.iconType ?? null,
+            iconData: icon?.iconData ?? null,
+            fetchedAt: new Date(),
+          }
+          await deps.store.saveProfile(profile)
+          profiles.set(domain, profile)
+        } catch {
+          // Tried again on a later load.
+        } finally {
+          refreshing.delete(domain)
+        }
+      })
+    )
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      refresh,
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, PROFILE_WAIT_MS)
+      }),
+    ])
+    clearTimeout(timer)
+    return profiles
+  }
+
   app.get("/leaderboard", async (c) => {
     const parsed = z
       .object({
@@ -653,12 +745,24 @@ export function v1Routes(deps: V1Deps) {
         } = entry
         return { rank: index + 1, ...rest }
       })
+    const profiles = await profilesFor(top.map((entry) => entry.domain))
     return c.json({
       updated_at: new Date().toISOString(),
       task: task ?? null,
       total_reviews: rows.length,
       total_apis: byDomain.size,
-      top,
+      top: top.map((entry) => {
+        const profile = profiles.get(entry.domain)
+        return {
+          ...entry,
+          name: profile?.name ?? null,
+          description: profile?.description ?? null,
+          icon_url: profile?.iconData
+            ? `${deps.baseUrl}/v1/services/${entry.domain}/icon`
+            : null,
+          url: `https://${entry.domain}`,
+        }
+      }),
       recent: rows
         .filter((row) => row.noteStatus === "clean" && row.note)
         .slice(0, 12)

@@ -1,19 +1,18 @@
 import { ArrowUpRight } from "lucide-react"
 import type { ReactNode } from "react"
 
-// The asterisk mark used for the brand.
+// The brand mark: a review bubble holding a star. app/icon.svg matches it.
 export function Mark({ className = "" }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className={`text-accent ${className}`}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-    >
-      <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" />
+    <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>
+      <path
+        className="fill-ink"
+        d="M8 3h16a6 6 0 0 1 6 6v10a6 6 0 0 1-6 6H15l-6.6 5.2A1 1 0 0 1 6.8 29.4V25A6 6 0 0 1 2 19V9a6 6 0 0 1 6-6Z"
+      />
+      <path
+        className="fill-star"
+        d="m16 7.6 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4-3.9-3.8 5.4-.8z"
+      />
     </svg>
   )
 }
@@ -21,13 +20,13 @@ export function Mark({ className = "" }: { className?: string }) {
 export function Logo() {
   return (
     <a
-      href="#top"
+      href="/"
       className="flex items-center gap-2"
       aria-label="Agent Reviews home"
     >
-      <Mark className="size-[18px]" />
-      <span className="text-[19px] font-semibold tracking-[-0.04em]">
-        Agent Reviews<span className="text-accent">.</span>
+      <Mark className="size-[22px]" />
+      <span className="font-display text-[17px] font-medium tracking-[-0.02em]">
+        Agent Reviews
       </span>
     </a>
   )
@@ -63,7 +62,7 @@ export function Stars({
     <span className="relative inline-flex align-middle" aria-hidden="true">
       <span className="flex text-line">{row}</span>
       <span
-        className="absolute inset-y-0 left-0 flex overflow-hidden text-accent transition-[width] duration-[1000ms] ease-out"
+        className="absolute inset-y-0 left-0 flex overflow-hidden text-star transition-[width] duration-700 ease-out"
         style={{ width: shown ? `${(value / 5) * 100}%` : "0%" }}
       >
         {row}
@@ -103,9 +102,28 @@ export function Section({
 }) {
   return (
     <section id={id} className={className}>
-      <div className="mx-auto w-full max-w-[1120px] px-4 sm:px-6">
+      <div className="mx-auto w-full max-w-[1160px] px-5 sm:px-8">
         {children}
       </div>
     </section>
+  )
+}
+
+export function SectionHead({
+  title,
+  line,
+}: {
+  title: ReactNode
+  line?: ReactNode
+}) {
+  return (
+    <div className="mx-auto max-w-[660px] text-center">
+      <h2 className="font-display text-[clamp(30px,4.2vw,44px)] leading-[1.1] font-medium tracking-[-0.025em]">
+        {title}
+      </h2>
+      {line && (
+        <p className="mt-4 text-[17px] leading-relaxed text-muted">{line}</p>
+      )}
+    </div>
   )
 }

@@ -6,11 +6,13 @@ import {
   apiKeys,
   apiReviews,
   authCodes,
+  serviceProfiles,
   usageEvents,
   usedProofs,
   users,
 } from "../db/schema.ts"
 
+export type ServiceProfile = typeof serviceProfiles.$inferSelect
 export type ApiReview = typeof apiReviews.$inferSelect
 export type NewApiReview = Omit<ApiReview, "createdAt">
 export type ApiUser = typeof users.$inferSelect
@@ -42,6 +44,8 @@ export interface ApiReviewStore {
   setAutoReview(userId: string, enabled: boolean): Promise<ApiUser>
   recordUsage(event: UsageEvent): Promise<void>
   listUsage(): Promise<UsageEvent[]>
+  getProfiles(domains: string[]): Promise<Map<string, ServiceProfile>>
+  saveProfile(profile: ServiceProfile): Promise<void>
   close(): Promise<void>
 }
 
@@ -104,6 +108,20 @@ export async function postgresApiReviewStore(
         .from(apiReviews)
         .orderBy(desc(apiReviews.createdAt))
         .limit(limit),
+    async getProfiles(domains) {
+      if (domains.length === 0) return new Map()
+      const rows = await db
+        .select()
+        .from(serviceProfiles)
+        .where(inArray(serviceProfiles.domain, domains))
+      return new Map(rows.map((row) => [row.domain, row]))
+    },
+    async saveProfile(profile) {
+      await db
+        .insert(serviceProfiles)
+        .values(profile)
+        .onConflictDoUpdate({ target: serviceProfiles.domain, set: profile })
+    },
     async getCode(email) {
       const [row] = await db
         .select()
@@ -172,6 +190,7 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const accounts = new Map<string, ApiUser>()
   const keys = new Map<string, string>()
   const usage: UsageEvent[] = []
+  const profiles = new Map<string, ServiceProfile>()
   const newestFirst = (list: ApiReview[]) =>
     [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   return {
@@ -201,6 +220,16 @@ export function memoryApiReviewStore(): ApiReviewStore {
       return true
     },
     listRecent: async (limit) => newestFirst(rows).slice(0, limit),
+    getProfiles: async (domains) =>
+      new Map(
+        domains.flatMap((domain) => {
+          const profile = profiles.get(domain)
+          return profile ? [[domain, profile]] : []
+        })
+      ),
+    async saveProfile(profile) {
+      profiles.set(profile.domain, profile)
+    },
     getCode: async (email) => codes.get(email) ?? null,
     async saveCode(code) {
       codes.set(code.email, code)

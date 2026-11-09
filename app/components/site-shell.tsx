@@ -3,7 +3,7 @@
 import { Check, Copy, Trophy } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
 import { Logo, TextLink } from "@/components/ui"
-import { FORGE_URL, REPO_URL, SITE_URL } from "@/lib/links"
+import { FORGE_URL, SITE_URL } from "@/lib/links"
 
 type View = "human" | "agent"
 
@@ -18,11 +18,11 @@ function ViewTabs({
     <div
       role="tablist"
       aria-label="View this page as"
-      className="relative flex rounded-full border border-line bg-white p-0.5"
+      className="relative flex rounded-[8px] bg-paper p-0.5 ring-1 ring-line ring-inset"
     >
       <span
         aria-hidden="true"
-        className="absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full bg-ink transition-transform duration-300 ease-out"
+        className="absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-[6px] bg-white shadow-[0_1px_2px_rgb(12_14_18/0.14)] transition-transform duration-200 ease-out"
         style={{ transform: view === "agent" ? "translateX(100%)" : "none" }}
       />
       {(["human", "agent"] as const).map((option) => (
@@ -32,8 +32,8 @@ function ViewTabs({
           role="tab"
           aria-selected={view === option}
           onClick={() => onChange(option)}
-          className={`relative w-[58px] rounded-full py-1 text-[12px] font-medium capitalize transition-colors duration-300 ${
-            view === option ? "text-white" : "text-muted hover:text-ink"
+          className={`relative w-[58px] rounded-[6px] py-1 text-[12px] font-medium capitalize transition-colors duration-200 ${
+            view === option ? "text-ink" : "text-muted hover:text-ink"
           }`}
         >
           {option}
@@ -61,7 +61,7 @@ function AgentView({ markdown }: { markdown: string }) {
             await navigator.clipboard.writeText(markdown)
             setCopied(true)
           }}
-          className="inline-flex items-center gap-2 text-[13px] font-medium hover:text-accent"
+          className="inline-flex items-center gap-2 text-[13px] font-medium text-muted hover:text-ink"
         >
           <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
           {copied ? (
@@ -107,21 +107,21 @@ export function SiteShell({
 
   return (
     <div id="top">
-      <header className="sticky top-0 z-20 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex h-[68px] w-full max-w-[1120px] items-center justify-between gap-3 px-4 sm:px-6">
+      <header className="sticky top-0 z-20 border-b border-line bg-white/85 backdrop-blur">
+        <div className="mx-auto flex h-16 w-full max-w-[1160px] items-center justify-between gap-3 px-5 sm:px-8">
           <Logo />
-          <nav className="flex items-center gap-3 sm:gap-5">
+          <nav className="flex items-center gap-4 sm:gap-6">
             <a
               href="/leaderboard"
               aria-label="Leaderboard"
-              className="flex items-center text-[13px] text-muted transition-colors hover:text-accent"
+              className="flex items-center text-[14px] text-muted transition-colors duration-150 hover:text-ink"
             >
               <Trophy className="size-4 sm:hidden" />
               <span className="hidden sm:inline">Leaderboard</span>
             </a>
             <a
               href="/SKILL.md"
-              className="hidden font-mono text-[13px] text-muted transition-colors hover:text-accent sm:inline"
+              className="hidden text-[14px] text-muted transition-colors duration-150 hover:text-ink sm:inline"
             >
               SKILL.md
             </a>
@@ -131,11 +131,13 @@ export function SiteShell({
       </header>
       <div hidden={view === "agent"}>{children}</div>
       {view === "agent" && <AgentView markdown={markdown} />}
-      <footer className="mx-auto flex w-full max-w-[1120px] flex-wrap items-center justify-between gap-4 border-t border-line px-4 py-8 text-[12px] text-muted sm:px-6">
+      <footer className="mx-auto flex w-full max-w-[1160px] flex-wrap items-center justify-between gap-4 px-5 py-9 text-[13px] text-muted sm:px-8">
         <span>
           A project by <TextLink href={FORGE_URL}>Forge</TextLink>
         </span>
-        <TextLink href={REPO_URL}>View the code</TextLink>
+        <a href="/API.md" className="transition-colors hover:text-ink">
+          API
+        </a>
       </footer>
     </div>
   )

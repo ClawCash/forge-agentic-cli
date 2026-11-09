@@ -185,3 +185,13 @@ export const usageEvents = pgTable(
     index("usage_events_created_idx").on(table.createdAt),
   ]
 )
+
+// What an API's own site says about it, for its leaderboard card.
+export const serviceProfiles = pgTable("service_profiles", {
+  domain: text("domain").primaryKey(),
+  name: text("name"),
+  description: text("description"),
+  iconType: text("icon_type"),
+  iconData: text("icon_data"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+})

@@ -1,8 +1,7 @@
 "use client"
 
 import { Check, Copy } from "lucide-react"
-import { type CSSProperties, useEffect, useState } from "react"
-import { Star } from "@/components/ui"
+import { useEffect, useState } from "react"
 import { SKILL_PROMPT } from "@/lib/links"
 
 async function copyText(text: string) {
@@ -24,17 +23,7 @@ async function copyText(text: string) {
   }
 }
 
-// Where each star lands when the prompt is copied.
-const BURST = [
-  ["-46px", "-34px"],
-  ["-20px", "-50px"],
-  ["14px", "-52px"],
-  ["44px", "-36px"],
-  ["56px", "-6px"],
-  ["-58px", "-4px"],
-]
-
-export function CopyPrompt() {
+export function CopyPrompt({ dark = false }: { dark?: boolean }) {
   const [copied, setCopied] = useState(false)
   useEffect(() => {
     if (!copied) return
@@ -43,20 +32,27 @@ export function CopyPrompt() {
   }, [copied])
 
   return (
-    <div className="mx-auto flex w-full max-w-[640px] flex-col gap-3 rounded-[10px] border border-ink bg-white p-3 text-left shadow-[3px_4px_0_0_#141414] sm:flex-row sm:items-center sm:py-2 sm:pr-2 sm:pl-4">
-      <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
-        <span aria-hidden="true" className="font-mono text-[13px] text-accent">
-          &gt;
-        </span>
-        <code className="min-w-0 flex-1 font-mono text-[11.5px] leading-snug break-words text-ink sm:text-[13px]">
-          {SKILL_PROMPT}
-        </code>
-      </div>
+    <div
+      className={`flex w-full flex-col gap-3 rounded-[10px] border p-3 text-left sm:flex-row sm:items-center sm:py-2 sm:pr-2 sm:pl-4 ${
+        dark
+          ? "border-white/15 bg-white/[0.06]"
+          : "border-line bg-white shadow-[0_1px_2px_rgb(12_14_18/0.05)]"
+      }`}
+    >
+      <code
+        className={`min-w-0 flex-1 font-mono text-[12px] leading-snug break-words sm:text-[13px] ${
+          dark ? "text-white/90" : "text-ink"
+        }`}
+      >
+        {SKILL_PROMPT}
+      </code>
       <button
         type="button"
         onClick={async () => setCopied(await copyText(SKILL_PROMPT))}
-        className={`relative inline-flex shrink-0 items-center justify-center gap-2 rounded-[6px] px-4 py-2.5 text-[13px] font-medium text-white transition-all duration-200 active:scale-95 ${
-          copied ? "bg-accent" : "bg-ink hover:bg-[#2b2b2b]"
+        className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-[7px] px-4 py-2.5 text-[13px] font-medium transition-colors duration-150 ${
+          dark
+            ? "bg-white text-ink hover:bg-white/90"
+            : "bg-ink text-white hover:bg-[#2a2e36]"
         }`}
       >
         <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
@@ -65,19 +61,6 @@ export function CopyPrompt() {
         ) : (
           <Copy className="size-3.5" />
         )}
-        {copied &&
-          BURST.map(([x, y], i) => (
-            <span
-              key={i}
-              aria-hidden="true"
-              className="burst-star text-accent"
-              style={
-                { "--x": x, "--y": y, "--d": `${i * 25}ms` } as CSSProperties
-              }
-            >
-              <Star className="size-3" />
-            </span>
-          ))}
       </button>
     </div>
   )

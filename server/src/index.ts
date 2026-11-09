@@ -13,6 +13,7 @@ import { chainFinder } from "./v1/chains.ts"
 import { mcpRoutes } from "./v1/mcp.ts"
 import { type V1Deps, v1Routes } from "./v1/routes.ts"
 import { memoryApiReviewStore, postgresApiReviewStore } from "./v1/store.ts"
+import { profileReader } from "./v1/profiles.ts"
 import { termsReader } from "./v1/terms.ts"
 import { DEMO_APIS } from "./demo-apis.ts"
 import { extractInvoice } from "./invoice.ts"
@@ -117,6 +118,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     findPayments: chainFinder(env),
     sendCode: resendSender(env),
     readTerms: termsReader(),
+    readProfile: profileReader(),
   }
   const hedera = createPublicClient({
     chain: HEDERA_TESTNET.evmChain,

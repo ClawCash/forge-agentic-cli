@@ -259,18 +259,26 @@ export function rate(
 
 // Reviews are read by agents holding wallets, so a note is treated as hostile
 // until shown otherwise. A held note is kept for moderation but never served.
-const SUSPICIOUS = [
+const INSTRUCTIONS = [
   /ignore\s+(all|any|previous|prior|the\s+above|your)/i,
   /(system|developer)\s+(prompt|message|instruction)/i,
   /\byou\s+(must|should|need\s+to|have\s+to)\s+\w*\s*(use|call|pay|send|ignore|buy|always)/i,
   /\b(always|only)\s+(use|call|pay|choose|pick)\b/i,
   /\b(instructions?|assistant|agent)\s*:/i,
-  /https?:\/\/|www\.|\b[a-z0-9-]+\.(com|io|ai|dev|xyz|co|net|org)\b/i,
-  /0x[a-f0-9]{16,}/i,
+  /https?:\/\//i,
   /[<>`{}\\]/,
+]
+
+const SUSPICIOUS = [
+  ...INSTRUCTIONS,
+  /www\.|\b[a-z0-9-]+\.(com|io|ai|dev|xyz|co|net|org)\b/i,
+  /0x[a-f0-9]{16,}/i,
   /\b(api[_\s-]?key|private\s+key|seed\s+phrase|password|secret)\b/i,
   /\b[\w.+-]+@[\w-]+\.[\w.]+\b/,
 ]
+
+export const looksLikeInstructions = (text: string) =>
+  INSTRUCTIONS.some((pattern) => pattern.test(text))
 
 export function screenNote(note: string | undefined) {
   if (!note) return { note: null, noteStatus: "none" }

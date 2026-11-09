@@ -60,6 +60,19 @@ test(
       assert.equal((await store.listByDomains(["stableenrich.dev"])).length, 1)
       assert.equal((await store.listByTask("enrichment")).length, 1)
       assert.equal((await store.listRecent(10)).length, 1)
+      const profile = {
+        domain: "stableenrich.dev",
+        name: "StableEnrich",
+        description: "Data for agents.",
+        iconType: "image/png",
+        iconData: "aWNvbg==",
+        fetchedAt: new Date(),
+      }
+      await store.saveProfile(profile)
+      await store.saveProfile({ ...profile, name: "Renamed" })
+      const profiles = await store.getProfiles(["stableenrich.dev", "none.dev"])
+      assert.equal(profiles.size, 1)
+      assert.equal(profiles.get("stableenrich.dev").name, "Renamed")
       assert.deepEqual(
         [...(await store.usedReferences(["eip155:8453:0x1", "other"]))],
         ["eip155:8453:0x1"]

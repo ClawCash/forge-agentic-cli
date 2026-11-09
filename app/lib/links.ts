@@ -1,4 +1,3 @@
-export const REPO_URL = "https://github.com/ClawCash/forge-agentic-cli"
 export const FORGE_URL = "https://forgeintel.co"
 export const SITE_URL = "https://reviews.forgeintel.co"
 export const API_URL = "https://reviews-api.forgeintel.co"
