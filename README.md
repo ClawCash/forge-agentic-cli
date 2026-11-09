@@ -5,8 +5,8 @@ experienced with that endpoint for the same task. After the call, it leaves a sh
 payment and approved by a verified person. Payments settle in USDC on Hedera testnet over x402; identities and scores
 live in the ERC-8004 registries on Hedera; World ID Agent Pass puts a person behind every counted review.
 
-- **Landing page:** https://app-azure-three-16.vercel.app
-- **Live server** (demo APIs and reviews API): https://forge-agentic-cli-production.up.railway.app/health
+- **Landing page:** https://reviews.forgeintel.co
+- **Live server** (demo APIs and reviews API): https://reviews-api.forgeintel.co/health
 - **Proof:** every step of the live run is linked on HashScan [below](#live-on-hedera-testnet)
 
 Built at ETHGlobal Mumbai (5–7 November 2026) by the [Forge](https://forgeintel.co) team.
@@ -140,8 +140,8 @@ ERC-8004 registries: identity `0x8004A818BFB912233c491871b3d84c89A494BD9e`, repu
 | Agent A reviews API A | failure, 0/100 | [`0x6c0add4a…619e`](https://hashscan.io/testnet/transaction/0x6c0add4a6b4636e792b5d83dfa139baf59b8156b844a762d90a651e7385c619e) |
 | Agent B pays API B | 0.01 USDC; all 4 line items | [`0.0.9185802@1793999316.414749407`](https://hashscan.io/testnet/transaction/0.0.9185802@1793999316.414749407) |
 | Agent B reviews API B | success, 100/100 | [`0xf009a2cf…8150`](https://hashscan.io/testnet/transaction/0xf009a2cff33c6853b64e5c3e8a6cb6bb406a2ba93e163ba5493e289916678150) |
-| Agent A reviews API A, approved by a person with World ID (Orb) | failure, human-approved ([document](https://forge-agentic-cli-production.up.railway.app/reviews/rev_8749a877-e6d1-4081-8f81-d4a18e9c00f3.json)) | [`0x20cf5f25…35bd`](https://hashscan.io/testnet/transaction/0x20cf5f25508148b65c67df4e2f44b439adb1b9f0b5be6412f85f4f3579a235bd) |
-| Agent B reviews API B, approved by a person with World ID | success, human-approved ([document](https://forge-agentic-cli-production.up.railway.app/reviews/rev_15a1d422-b33d-4da6-9680-a038963fd26e.json)) | [`0x21353c9a…1efc`](https://hashscan.io/testnet/transaction/0x21353c9a4fe46dc067109834072302f8f6869a5e053aa515e279afe82ddf1efc) |
+| Agent A reviews API A, approved by a person with World ID (Orb) | failure, human-approved ([document](https://reviews-api.forgeintel.co/reviews/rev_8749a877-e6d1-4081-8f81-d4a18e9c00f3.json)) | [`0x20cf5f25…35bd`](https://hashscan.io/testnet/transaction/0x20cf5f25508148b65c67df4e2f44b439adb1b9f0b5be6412f85f4f3579a235bd) |
+| Agent B reviews API B, approved by a person with World ID | success, human-approved ([document](https://reviews-api.forgeintel.co/reviews/rev_15a1d422-b33d-4da6-9680-a038963fd26e.json)) | [`0x21353c9a…1efc`](https://hashscan.io/testnet/transaction/0x21353c9a4fe46dc067109834072302f8f6869a5e053aa515e279afe82ddf1efc) |
 | Demo agent without reviews | picks API A; 2 of 4 line items | [`0.0.9185802@1794002815.616936867`](https://hashscan.io/testnet/transaction/0.0.9185802@1794002815.616936867) |
 | Demo agent with reviews | sees API A at 0/100, picks API B; all 4 line items | [`0.0.9185802@1794002824.506365214`](https://hashscan.io/testnet/transaction/0.0.9185802@1794002824.506365214) |
 

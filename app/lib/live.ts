@@ -2,7 +2,7 @@
 
 export const REPO_URL = "https://github.com/ClawCash/forge-agentic-cli"
 export const FORGE_URL = "https://forgeintel.co"
-export const SERVER_URL = "https://forge-agentic-cli-production.up.railway.app"
+export const SERVER_URL = "https://reviews-api.forgeintel.co"
 
 const hashscan = (id: string) => `https://hashscan.io/testnet/transaction/${id}`
 
