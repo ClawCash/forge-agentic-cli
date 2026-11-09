@@ -94,6 +94,7 @@ test("an agent is told when to act, and sees the tools", async () => {
     "prepare_review",
     "probe_api",
     "search_apis",
+    "set_auto_review",
     "sign_up",
     "top_apis",
     "verify_code",
@@ -209,4 +210,40 @@ test("tool calls share the API's limits and are tracked as MCP use", async () =>
 test("the endpoint has no session stream to open", async () => {
   const { app } = await setup()
   assert.equal((await app.request("/mcp")).status, 405)
+})
+
+test("auto-review is off until the user turns it on", async () => {
+  const context = await setup()
+  const { call } = context
+  const api_key = await signUp(context)
+
+  const off = await call("prepare_review", { ...REVIEW, api_key })
+  assert.equal(off.data.auto_review, false)
+  assert.match(off.data.next, /only if they agree/)
+
+  const on = await call("set_auto_review", { api_key, enabled: true })
+  assert.equal(on.data.auto_review, true)
+  const auto = await call("prepare_review", { ...REVIEW, api_key })
+  assert.equal(auto.data.auto_review, true)
+  assert.match(auto.data.next, /without asking/)
+
+  await call("set_auto_review", { api_key, enabled: false })
+  const stopped = await call("prepare_review", { ...REVIEW, api_key })
+  assert.equal(stopped.data.auto_review, false)
+})
+
+test("a bad key can't change settings or skip signup", async () => {
+  const { call, app } = await setup()
+  const set = await call("set_auto_review", {
+    api_key: "ark_made_up",
+    enabled: true,
+  })
+  assert.equal(set.isError, true)
+  const prepared = await call("prepare_review", {
+    ...REVIEW,
+    api_key: "ark_made_up",
+  })
+  assert.equal(prepared.data.ready, false)
+  assert.equal(prepared.data.auto_review, false)
+  assert.equal((await app.request("/v1/account")).status, 401)
 })

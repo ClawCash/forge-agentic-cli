@@ -140,6 +140,10 @@ export const users = pgTable("users", {
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // The user's standing permission to post reviews without being asked, and
+  // when they gave it.
+  autoReview: boolean("auto_review").notNull().default(false),
+  autoReviewAt: timestamp("auto_review_at", { withTimezone: true }),
 })
 
 export const authCodes = pgTable("auth_codes", {

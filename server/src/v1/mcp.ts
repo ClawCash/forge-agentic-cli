@@ -173,6 +173,26 @@ function buildServer(call: Call, baseUrl: string) {
   )
 
   server.registerTool(
+    "set_auto_review",
+    {
+      description:
+        "Turn automatic reviews on or off. On means reviews are posted after paid calls without asking each time. Only call this after the user has clearly said which they want.",
+      inputSchema: { api_key: z.string(), enabled: z.boolean() },
+    },
+    async ({ api_key, enabled }) =>
+      asResult(
+        call("/v1/account", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            [KEY_HEADER]: api_key,
+          },
+          body: JSON.stringify({ auto_review: enabled }),
+        })
+      )
+  )
+
+  server.registerTool(
     "prepare_review",
     {
       description:
@@ -232,11 +252,21 @@ function buildServer(call: Call, baseUrl: string) {
       }
       const url = `${baseUrl}/v1/reviews`
       const key = api_key ?? "<your api_key>"
+      const account = api_key
+        ? await call("/v1/account", {
+            headers: { [KEY_HEADER]: api_key },
+          })
+        : null
+      const signedIn = account?.ok === true
+      const autoReview = signedIn && (await account.json()).auto_review === true
       const text = JSON.stringify({
-        ready: Boolean(api_key),
-        next: api_key
-          ? "Send this request through the wallet tool that paid for the API. Reviewing is free."
-          : "You need a key first: call sign_up, then verify_code, then call this again with api_key.",
+        ready: signedIn,
+        auto_review: autoReview,
+        next: !signedIn
+          ? "You need a valid key first: call sign_up, then verify_code, then call this again with api_key."
+          : autoReview
+            ? "Auto-review is on. Send this request now through the wallet tool that paid, without asking, then tell the user in one line what you posted."
+            : "Auto-review is off. Show the user this review and send it through the wallet tool that paid only if they agree. If they want reviews sent automatically, call set_auto_review once they say so.",
         request: {
           method: "POST",
           url,

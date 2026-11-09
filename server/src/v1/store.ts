@@ -39,6 +39,7 @@ export interface ApiReviewStore {
   upsertUser(user: { id: string; email: string }): Promise<ApiUser>
   insertKey(keyHash: string, userId: string): Promise<void>
   userForKey(keyHash: string): Promise<ApiUser | null>
+  setAutoReview(userId: string, enabled: boolean): Promise<ApiUser>
   recordUsage(event: UsageEvent): Promise<void>
   listUsage(): Promise<UsageEvent[]>
   close(): Promise<void>
@@ -147,6 +148,14 @@ export async function postgresApiReviewStore(
         .where(eq(apiKeys.keyHash, keyHash))
       return row?.user ?? null
     },
+    async setAutoReview(userId, enabled) {
+      const [row] = await db
+        .update(users)
+        .set({ autoReview: enabled, autoReviewAt: new Date() })
+        .where(eq(users.id, userId))
+        .returning()
+      return row
+    },
     async recordUsage(event) {
       await db.insert(usageEvents).values(event)
     },
@@ -210,6 +219,8 @@ export function memoryApiReviewStore(): ApiReviewStore {
         email,
         createdAt: now,
         lastSeenAt: now,
+        autoReview: false,
+        autoReviewAt: null,
       }
       accounts.set(email, { ...user, lastSeenAt: now })
       return accounts.get(email) as ApiUser
@@ -219,6 +230,13 @@ export function memoryApiReviewStore(): ApiReviewStore {
     },
     userForKey: async (keyHash) =>
       [...accounts.values()].find((u) => u.id === keys.get(keyHash)) ?? null,
+    async setAutoReview(userId, enabled) {
+      const user = [...accounts.values()].find((u) => u.id === userId)
+      if (!user) throw new Error(`No user ${userId}`)
+      const updated = { ...user, autoReview: enabled, autoReviewAt: new Date() }
+      accounts.set(user.email, updated)
+      return updated
+    },
     async recordUsage(event) {
       usage.push(event)
     },

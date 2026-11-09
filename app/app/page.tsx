@@ -120,19 +120,22 @@ function ClientStrip() {
       <div className="label pb-5 text-center text-[10px]">
         Works with your wallet or CLI
       </div>
-      <div className="marquee" style={{ animationDuration: "80s" }}>
+      <div
+        className="marquee items-center"
+        style={{ animationDuration: "60s" }}
+      >
         {[0, 1, 2, 3].map((copy) =>
-          CLIENTS.map((name) => (
-            <div
+          CLIENTS.map(({ name, logo, height }) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               key={`${copy}-${name}`}
+              src={`/logos/clients/${logo}`}
+              alt={copy === 0 ? name : ""}
+              title={name}
               aria-hidden={copy > 0 || undefined}
-              className="flex shrink-0 items-center"
-            >
-              <span className="text-[clamp(20px,3vw,28px)] font-semibold tracking-[-0.03em] whitespace-nowrap">
-                {name}
-              </span>
-              <Star className="mx-7 size-3 text-accent sm:mx-10" />
-            </div>
+              style={{ height }}
+              className="mx-8 w-auto shrink-0 sm:mx-12"
+            />
           ))
         )}
       </div>

@@ -139,6 +139,7 @@ const USAGE_KINDS: [RegExp, string][] = [
   [/\/v1\/reviews$/, "review"],
   [/\/v1\/leaderboard$/, "leaderboard"],
   [/\/v1\/services\//, "service"],
+  [/\/v1\/account$/, "account"],
 ]
 
 // Requests per minute, per client. Search and probe cost more because each one
@@ -150,6 +151,7 @@ const LIMITS: Record<string, number> = {
   search: 30,
   probe: 20,
   review: 30,
+  account: 60,
 }
 
 export function v1Routes(deps: V1Deps) {
@@ -580,6 +582,37 @@ export function v1Routes(deps: V1Deps) {
       }
       throw error
     }
+  })
+
+  // The signed-in user's settings. Auto-review is their standing permission to
+  // post reviews without being asked each time.
+  const accountView = (user: ApiUser) => ({
+    email: user.email,
+    auto_review: user.autoReview,
+  })
+  const SIGN_IN_FIRST = "Send your key as X-Reviews-Key, or sign up first"
+
+  app.get("/account", (c) => {
+    const user = c.get("user")
+    return user
+      ? c.json(accountView(user))
+      : c.json({ error: SIGN_IN_FIRST }, 401)
+  })
+
+  app.post("/account", bodyLimit({ maxSize: 2048 }), async (c) => {
+    const user = c.get("user")
+    if (!user) return c.json({ error: SIGN_IN_FIRST }, 401)
+    const body = z
+      .object({ auto_review: z.boolean() })
+      .safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json({ error: 'Send {"auto_review": true} or false' }, 400)
+    }
+    const updated = await deps.store.setAutoReview(
+      user.id,
+      body.data.auto_review
+    )
+    return c.json(accountView(updated))
   })
 
   // What agents say: the top-rated APIs and the latest verified reviews.
