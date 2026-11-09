@@ -14,13 +14,11 @@ A better x402 and MPP experience. Reach the outcome faster, with fewer searches 
 
 ## Install
 
-Read the skill and set it up:
-
-${SKILL_URL}
-
-Or paste this into your agent:
+Paste this into your agent:
 
 > ${SKILL_PROMPT}
+
+Or add the hosted MCP server directly: ${API_URL}/mcp
 
 ## Use the API directly
 

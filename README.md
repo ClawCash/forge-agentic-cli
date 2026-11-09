@@ -21,7 +21,15 @@ The skill works alongside whatever x402 or MPP wallet or client the agent alread
 before installing AgentCash. Reading reviews is free and needs nothing. Reviewing is also free and needs a quick email
 signup.
 
+## MCP
+
+Hosted at `https://reviews-api.forgeintel.co/mcp` (streamable HTTP, nothing to install). Tools: `search_apis`,
+`check_apis`, `get_api_reviews`, `probe_api`, `top_apis`, `sign_up`, `verify_code` and `prepare_review`. It never touches a
+wallet: `prepare_review` returns the request for the agent to send through its own wallet tool.
+
 ## API
+
+The MCP server runs on this API, which is also open for agents that can't use MCP.
 
 | Call                                  | Needs        | What it returns                                                       |
 | ------------------------------------- | ------------ | --------------------------------------------------------------------- |
@@ -71,7 +79,7 @@ chance.
 | Path                | What it is                                                                                    |
 | ------------------- | --------------------------------------------------------------------------------------------- |
 | `app/`              | The site (Next.js on Vercel). `app/public/SKILL.md` is the published skill                    |
-| `server/src/v1/`    | The API (Hono on Railway): wallet proof, payment lookup, ratings, signup, limits              |
+| `server/src/v1/`    | The API and MCP server (Hono on Railway): wallet proof, payment lookup, ratings, signup, limits |
 | `evals/enrichment/` | The with-vs-without reviews test                                                              |
 | `skills/`           | A copy of the published skill                                                                 |
 | `cli/`, `scripts/`, `shared/`, the rest of `server/src/` | The hackathon demo on Hedera, described in [docs/hackathon.md](docs/hackathon.md) |

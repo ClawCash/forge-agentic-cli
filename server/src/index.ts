@@ -10,6 +10,7 @@ import { loadConfig, publicBaseUrl, type ServerConfig } from "./config.ts"
 import { memoryStore, postgresStore } from "./db/store.ts"
 import { resendSender } from "./v1/accounts.ts"
 import { chainFinder } from "./v1/chains.ts"
+import { mcpRoutes } from "./v1/mcp.ts"
 import { type V1Deps, v1Routes } from "./v1/routes.ts"
 import { memoryApiReviewStore, postgresApiReviewStore } from "./v1/store.ts"
 import { termsReader } from "./v1/terms.ts"
@@ -43,7 +44,16 @@ export function createApp(
 
   app.get("/health", (c) => c.json({ ok: true }))
 
-  if (deps.v1) app.route("/v1", v1Routes(deps.v1))
+  if (deps.v1) {
+    app.route("/v1", v1Routes(deps.v1))
+    app.route(
+      "/mcp",
+      mcpRoutes({
+        baseUrl: deps.v1.baseUrl,
+        call: (path, init) => app.request(path, init),
+      })
+    )
+  }
   if (!config) return app
 
   app.get("/.well-known/agent-registration.json", (c) =>

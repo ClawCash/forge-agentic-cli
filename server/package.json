@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@hono/node-server": "^1.19.6",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@x402/core": "2.30.0",
     "@x402/extensions": "2.30.0",
     "@x402/hono": "2.30.0",

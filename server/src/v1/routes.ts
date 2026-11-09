@@ -47,7 +47,7 @@ const Task = z.enum(TASKS)
 const REVIEW_WINDOW_DAYS = 30
 const MAX_URLS = 50
 
-const ReviewBody = z.object({
+export const ReviewBody = z.object({
   url: z.url({ protocol: /^https$/ }),
   task: Task,
   result: z.enum(["full", "partial", "none", "not_checked"]),
