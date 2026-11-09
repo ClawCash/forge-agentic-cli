@@ -72,8 +72,8 @@ chance.
 | ---------------------------------------------------------- | ------------------------------------------ |
 | AgentCash                                                  | Real payment and review on production      |
 | `@x402/fetch` sign-in and pay-only proof, `mppx` proof     | Real client libraries, in the test suite   |
-| Payment lookup on Base                                     | Checked against real transactions          |
-| Payment lookup on Tempo and Solana                         | Written, not yet run on real payments      |
+| Payment lookup on Base and Tempo                           | Checked against real transactions          |
+| Payment lookup on Solana                                   | Written, not yet run on real payments      |
 | `awal`, pay.sh and other clients and agents                | Expected to work, not yet tested           |
 
 ## Layout

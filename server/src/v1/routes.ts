@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
+import { cors } from "hono/cors"
 import { z } from "zod"
 import {
   ChainUnavailableError,
@@ -167,6 +168,9 @@ export function v1Routes(deps: V1Deps) {
   const app = new Hono<{ Variables: { user: ApiUser | null } }>()
 
   const hit = rateLimiter()
+
+  // Public reviews, read directly by the site's review panel.
+  app.use("/services/*", cors({ origin: "*", allowMethods: ["GET"] }))
 
   // Ahead of the limits and tracking below: a page of logos isn't API usage.
   app.get("/services/:domain/icon", async (c) => {

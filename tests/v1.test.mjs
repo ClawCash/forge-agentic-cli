@@ -1076,6 +1076,15 @@ test("a redirected or oversized spec is ignored", async () => {
   assert.equal((await oversized(PAID_POST)).status, 400)
 })
 
+test("a service's reviews can be read from a browser", async () => {
+  const { app } = await setup()
+  const res = await app.request("/v1/services/stableenrich.dev", {
+    headers: { Origin: "https://reviews.forgeintel.co" },
+  })
+  assert.equal(res.status, 200)
+  assert.equal(res.headers.get("access-control-allow-origin"), "*")
+})
+
 test("a failed signup email reports why, without the key", async () => {
   const { resendSender } = await import("../server/src/v1/accounts.ts")
   const send = resendSender(
