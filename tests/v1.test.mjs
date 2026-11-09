@@ -553,7 +553,7 @@ test("urls group by domain and keep the endpoint", () => {
   assert.deepEqual(locate("https://www.StableEnrich.dev/api/x/?a=1#b"), {
     domain: "stableenrich.dev",
     path: "/api/x",
-    url: "https://stableenrich.dev/api/x",
+    url: "https://www.stableenrich.dev/api/x",
   })
   assert.equal(locate("stableenrich.dev").path, "")
 })

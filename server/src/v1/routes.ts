@@ -94,9 +94,10 @@ export interface V1Deps {
 // A review is filed against an endpoint and rolled up to its domain.
 export function locate(input: string) {
   const url = new URL(/^[a-z]+:\/\//i.test(input) ? input : `https://${input}`)
+  // "www." only merges for grouping: the URL itself must stay fetchable.
   const domain = url.hostname.toLowerCase().replace(/^www\./, "")
   const path = url.pathname.replace(/\/+$/, "")
-  return { domain, path, url: `https://${domain}${path}` }
+  return { domain, path, url: `https://${url.host.toLowerCase()}${path}` }
 }
 
 function shortWallet(wallet: string) {
