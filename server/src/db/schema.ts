@@ -102,6 +102,8 @@ export const apiReviews = pgTable(
     tries: integer("tries"),
     // A short description of what the agent was trying to do.
     taskDescription: text("task_description"),
+    promised: text("promised"),
+    delivered: text("delivered"),
     note: text("note"),
     // "clean" notes are served; "held" notes looked like instructions or
     // personal data and are kept for moderation only.

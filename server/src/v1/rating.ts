@@ -206,6 +206,17 @@ export interface Rating {
   typical_tries: number | null
   top_problem: string | null
   notes: string[]
+  // Only from reviews that said what was promised and what came back.
+  listing_accuracy: {
+    accurate: number
+    overstated: number
+    misleading: number
+  } | null
+  promised_vs_delivered: {
+    promised: string
+    delivered: string
+    listing: string
+  }[]
   domain_rating: {
     stars: number
     works_for_task: number
@@ -238,6 +249,8 @@ const EMPTY: Rating = {
   typical_tries: null,
   top_problem: null,
   notes: [],
+  listing_accuracy: null,
+  promised_vs_delivered: [],
   domain_rating: null,
   audit: null,
 }
@@ -249,6 +262,37 @@ function latestNotes(evidence: Scored[]) {
       row.note && row.noteStatus === "clean" ? [row.note] : []
     )
     .slice(0, 3)
+}
+
+const comparisons = (evidence: Scored[]) =>
+  evidence.flatMap(({ row }) => (row.promised && row.delivered ? [row] : []))
+
+function listingAccuracy(evidence: Scored[]) {
+  const rows = comparisons(evidence)
+  if (rows.length === 0) return null
+  const count = (listing: string) =>
+    rows.filter((row) => row.listing === listing).length
+  return {
+    accurate: count("accurate"),
+    overstated: count("overstated"),
+    misleading: count("misleading"),
+  }
+}
+
+// Broken promises first: they are what an agent most needs to see.
+function promisedVsDelivered(evidence: Scored[]) {
+  return comparisons(evidence)
+    .sort(
+      (a, b) =>
+        Number(a.listing === "accurate") - Number(b.listing === "accurate") ||
+        b.createdAt.getTime() - a.createdAt.getTime()
+    )
+    .slice(0, 3)
+    .map((row) => ({
+      promised: row.promised as string,
+      delivered: row.delivered as string,
+      listing: row.listing,
+    }))
 }
 
 // `rows` is every review for the domain; `prior` is taskPrior for the task.
@@ -304,6 +348,8 @@ export function rate(
     scope,
     matched: [task, ...constraints].join(", "),
     notes: latestNotes(evidence),
+    listing_accuracy: listingAccuracy(evidence),
+    promised_vs_delivered: promisedVsDelivered(evidence),
     domain_rating: {
       stars: round(averageValue(scored) * 5, 1),
       works_for_task: round(shrink(scored, prior, TASK_PRIOR_WEIGHT)),

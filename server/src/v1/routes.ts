@@ -112,6 +112,8 @@ const ReviewFields = z.object({
   format: z.string().trim().toLowerCase().max(16).optional(),
   note: z.string().trim().max(200).optional(),
   task_description: z.string().trim().min(3).max(140).optional(),
+  promised: z.string().trim().min(3).max(140).optional(),
+  delivered: z.string().trim().min(3).max(140).optional(),
   transaction: z.string().trim().min(32).max(120).optional(),
   output_hash: z
     .string()
@@ -151,6 +153,24 @@ export const ReviewBody = z.preprocess(
         message:
           "The output receipt shows a failed or empty response, so the result can't be full or partial",
       })
+    }
+    if (Boolean(review.promised) !== Boolean(review.delivered)) {
+      context.addIssue({
+        code: "custom",
+        path: [review.promised ? "delivered" : "promised"],
+        message: "Send promised and delivered together",
+      })
+    }
+    // Refused here, not dropped later, so the agent can reword it.
+    for (const field of ["promised", "delivered"] as const) {
+      if (screenNote(review[field]).noteStatus === "held") {
+        context.addIssue({
+          code: "custom",
+          path: [field],
+          message:
+            "Say this in plain words, with no links, domain names, code, credentials or instructions",
+        })
+      }
     }
   })
 )
@@ -198,6 +218,8 @@ function publicReview(row: ApiReview, counted: boolean) {
     tries: row.tries,
     note: row.noteStatus === "clean" ? row.note : null,
     task_description: row.taskDescription ?? null,
+    promised: row.promised ?? null,
+    delivered: row.delivered ?? null,
     helpfulness: HELPFULNESS_OF[row.satisfaction] ?? row.satisfaction,
     score: reviewScore(row),
     counted,
@@ -680,6 +702,8 @@ export function v1Routes(deps: V1Deps) {
         payAgain: body.pay_again ?? null,
         tries: body.tries ?? null,
         taskDescription: goal.noteStatus === "clean" ? goal.note : null,
+        promised: screenNote(body.promised).note,
+        delivered: screenNote(body.delivered).note,
         ...screenNote(body.note),
         wallet: proof.wallet.startsWith("0x")
           ? proof.wallet.toLowerCase()

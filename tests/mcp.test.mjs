@@ -18,6 +18,8 @@ const SELLER = "0x1111111111111111111111111111111111111111"
 const REVIEW = {
   url: ENDPOINT,
   task: "enrichment",
+  promised: "Work emails for any LinkedIn profile",
+  delivered: "All 7 profiles matched with current emails",
   result: "full",
   listing: "accurate",
   satisfaction: "satisfied",
@@ -167,6 +169,14 @@ test("without a key, prepare_review says to sign up first", async () => {
   const { data } = await call("prepare_review", REVIEW)
   assert.equal(data.ready, false)
   assert.match(data.next, /sign_up/)
+})
+
+test("prepare_review needs what was promised and what came back", async () => {
+  const { call } = await setup()
+  const { promised: _, ...missing } = REVIEW
+  const { data, isError } = await call("prepare_review", missing)
+  assert.equal(isError, true)
+  assert.match(String(data), /promised/)
 })
 
 test("an invalid review is refused before anything is sent", async () => {
