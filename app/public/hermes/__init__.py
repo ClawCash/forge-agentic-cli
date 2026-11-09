@@ -13,10 +13,13 @@ from pathlib import Path
 WALLET_TOOL = re.compile(
     r"^mcp__.*(agentcash|bazaar|search_resources|search_skills|search_services"
     r"|list_services|recommend_services|search_offers|get_service|x402|402index"
-    r"|agent-?tools|decixa)",
+    r"|agent-?tools|decixa|services_search|services_list|services_show"
+    r"|list_mpp_services|listPayableServices|boltzpay)",
     re.IGNORECASE,
 )
-WALLET_COMMAND = re.compile(r"\b(awal|agentcash|pay\s+skills|tempo\s+wallet)\b")
+WALLET_COMMAND = re.compile(
+    r"\b(awal|agentcash|pay\s+skills|tempo\s+wallet|spongewallet|ksearch|boltzpay)\b"
+)
 TIMEOUT_SECONDS = 4
 
 

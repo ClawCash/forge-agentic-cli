@@ -10,8 +10,8 @@ No reviews yet for 4 of 5 APIs in these results.
 See what each one promised and delivered with get_api_reviews.
 ```
 
-It covers AgentCash, Coinbase Payments MCP and the hosted Bazaar, `awal`, pay.sh, the MPP service directory, the Tempo
-CLI, and other x402 directories such as x402search and 402index.
+It covers AgentCash, Coinbase Payments MCP and the hosted Bazaar, `awal`, pay.sh, Tempo Wallet, the MPP service directory,
+Sponge, Kite Passport, BoltzPay, Pitstop, thirdweb, and other x402 directories such as x402search and 402index.
 
 **Ask the user first**, and only continue if they agree: "Should I add Agent Reviews ratings to your wallet's search
 results? It runs a small script after those searches and looks the APIs up in a local file of public ratings. Nothing
@@ -37,7 +37,7 @@ Add this to the existing file. Keep any hooks already there.
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "^mcp__.*agentcash.*__(search|discover_api_endpoints)$|^mcp__.*__bazaar_(search|list|get_resource_details)$|^mcp__.*(bazaar|cdp|coinbase).*__search_resources$|^mcp__.*pay.*__search_skills$|^mcp__.*(mpp|tempo).*__(search_services|list_services|recommend_services|search_offers|get_service)$|^mcp__.*__.*(x402.*(search|discover)|(search|discover).*x402)|^mcp__.*(x402|402index|agent-?tools|decixa).*__.*(search|discover|ask_services)",
+        "matcher": "^mcp__.*agentcash.*__(search|discover_api_endpoints)$|^mcp__.*__bazaar_(search|list|get_resource_details)$|^mcp__.*(bazaar|cdp|coinbase).*__search_resources$|^mcp__.*pay.*__search_skills$|^mcp__.*(mpp|tempo).*__(search_services|list_services|recommend_services|search_offers|get_service|get_services_by_recipient|services_search|services_list|services_show)$|^mcp__.*__.*(x402.*(search|discover)|(search|discover).*x402|list_mpp_services|listPayableServices|boltzpay_discover)|^mcp__.*(x402|402index|agent-?tools|decixa|boltzpay).*__.*(search|discover|ask_services)",
         "hooks": [
           {
             "type": "command",
@@ -59,7 +59,7 @@ they do.
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "^mcp__.*agentcash.*__(search|discover_api_endpoints)$|^mcp__.*__bazaar_(search|list|get_resource_details)$|^mcp__.*(bazaar|cdp|coinbase).*__search_resources$|^mcp__.*pay.*__search_skills$|^mcp__.*(mpp|tempo).*__(search_services|list_services|recommend_services|search_offers|get_service)$|^mcp__.*__.*(x402.*(search|discover)|(search|discover).*x402)|^mcp__.*(x402|402index|agent-?tools|decixa).*__.*(search|discover|ask_services)",
+        "matcher": "^mcp__.*agentcash.*__(search|discover_api_endpoints)$|^mcp__.*__bazaar_(search|list|get_resource_details)$|^mcp__.*(bazaar|cdp|coinbase).*__search_resources$|^mcp__.*pay.*__search_skills$|^mcp__.*(mpp|tempo).*__(search_services|list_services|recommend_services|search_offers|get_service|get_services_by_recipient|services_search|services_list|services_show)$|^mcp__.*__.*(x402.*(search|discover)|(search|discover).*x402|list_mpp_services|listPayableServices|boltzpay_discover)|^mcp__.*(x402|402index|agent-?tools|decixa|boltzpay).*__.*(search|discover|ask_services)",
         "hooks": [
           {
             "type": "command",
@@ -82,7 +82,7 @@ they do.
     "postToolUse": [
       {
         "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" cursor",
-        "matcher": "^MCP:(search|discover_api_endpoints|bazaar_search|bazaar_list|bazaar_get_resource_details|search_resources|search_skills|search_services|list_services|recommend_services|search_offers|get_service|.*x402.*(search|discover).*|.*(search|discover).*x402.*)$",
+        "matcher": "^MCP:(search|discover_api_endpoints|bazaar_search|bazaar_list|bazaar_get_resource_details|search_resources|search_skills|search_services|list_services|recommend_services|search_offers|get_service|get_services_by_recipient|services_search|services_list|services_show|list_mpp_services|listPayableServices|boltzpay_discover|.*x402.*(search|discover).*|.*(search|discover).*x402.*)$",
         "timeout": 5
       }
     ]
@@ -97,7 +97,7 @@ they do.
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "^.*agentcash.*__(search|discover_api_endpoints)$|^.*__bazaar_(search|list|get_resource_details)$|^.*(bazaar|cdp|coinbase).*__search_resources$|^.*pay.*__search_skills$|^.*(mpp|tempo).*__(search_services|list_services|recommend_services|search_offers|get_service)$|^.*__.*(x402.*(search|discover)|(search|discover).*x402)|^.*(x402|402index|agent-?tools|decixa).*__.*(search|discover|ask_services)",
+        "matcher": "^.*agentcash.*__(search|discover_api_endpoints)$|^.*__bazaar_(search|list|get_resource_details)$|^.*(bazaar|cdp|coinbase).*__search_resources$|^.*pay.*__search_skills$|^.*(mpp|tempo).*__(search_services|list_services|recommend_services|search_offers|get_service|get_services_by_recipient|services_search|services_list|services_show)$|^.*__.*(x402.*(search|discover)|(search|discover).*x402|list_mpp_services|listPayableServices|boltzpay_discover)|^.*(x402|402index|agent-?tools|decixa|boltzpay).*__.*(search|discover|ask_services)",
         "hooks": [
           {
             "type": "command",
@@ -113,7 +113,7 @@ they do.
 
 ## 3. If you search from the shell
 
-Add this too if you use `awal`, `npx agentcash`, `pay` or `tempo` commands. Put the entry in the same `PostToolUse` list.
+Add this too if you use `awal`, `npx agentcash`, `pay`, `tempo`, `spongewallet`, `ksearch` or `boltzpay` commands. Put the entry in the same `PostToolUse` list.
 
 **Claude Code** only starts the script for these commands:
 
@@ -125,7 +125,10 @@ Add this too if you use `awal`, `npx agentcash`, `pay` or `tempo` commands. Put 
     { "type": "command", "if": "Bash(*agentcash* search *)", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" claude", "timeout": 5 },
     { "type": "command", "if": "Bash(*agentcash* discover *)", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" claude", "timeout": 5 },
     { "type": "command", "if": "Bash(*pay skills search*)", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" claude", "timeout": 5 },
-    { "type": "command", "if": "Bash(*tempo wallet*services*)", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" claude", "timeout": 5 }
+    { "type": "command", "if": "Bash(*tempo wallet*services*)", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" claude", "timeout": 5 },
+    { "type": "command", "if": "Bash(*spongewallet pay *)", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" claude", "timeout": 5 },
+    { "type": "command", "if": "Bash(*ksearch services *)", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" claude", "timeout": 5 },
+    { "type": "command", "if": "Bash(*boltzpay* discover*)", "command": "node \"$HOME/.config/agent-reviews/hook.mjs\" claude", "timeout": 5 }
   ]
 }
 ```

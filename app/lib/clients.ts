@@ -18,60 +18,70 @@ export const AGENTS = [
   { name: "OpenCode", logo: "opencode.svg", url: "https://opencode.ai" },
 ]
 
-// What an agent might already be paying with. `height` evens out logos of very
+// What an agent might already be paying with. `url` is where to get the client:
+// a tile without one has no client to get yet. `height` evens out logos of very
 // different shapes. `wordmark` logos already spell the name, so only the others
 // get it written beside them.
-export const CLIENTS = [
+export const CLIENTS: {
+  name: string
+  logo: string
+  height: number
+  wordmark?: boolean
+  url?: string
+}[] = [
   {
     name: "Coinbase MCP",
     logo: "coinbase.png",
     height: 22,
-    url: "https://docs.cdp.coinbase.com/agentic-wallet/mcp/welcome",
+    url: "https://docs.cdp.coinbase.com/agentic-wallet/mcp/quickstart",
   },
   {
     name: "Cloudflare",
     logo: "cloudflare.svg",
     height: 24,
-    url: "https://developers.cloudflare.com/agents/tools/payments/x402/",
   },
   {
     name: "Vercel",
     logo: "vercel.svg",
     height: 18,
-    url: "https://vercel.com/blog/introducing-x402-mcp-open-protocol-payments-for-mcp-tools",
   },
   {
     name: "AgentCash",
     logo: "agentcash.svg",
     height: 15,
     wordmark: true,
-    url: "https://agentcash.dev",
+    url: "https://agentcash.dev/install",
   },
   {
     name: "thirdweb",
     logo: "thirdweb.svg",
     height: 20,
-    url: "https://thirdweb.com",
+    url: "https://portal.thirdweb.com/x402/agents",
   },
-  { name: "pay.sh", logo: "payshell.svg", height: 22, url: "https://pay.sh" },
+  {
+    name: "pay.sh",
+    logo: "payshell.svg",
+    height: 22,
+    url: "https://pay.sh/docs/toolchain/install",
+  },
   {
     name: "lobster.cash",
     logo: "lobster.svg",
     height: 22,
-    url: "https://www.lobster.cash",
+    url: "https://www.lobster.cash/install",
   },
   {
     name: "MPP",
     logo: "mpp.svg",
     height: 18,
     wordmark: true,
-    url: "https://mpp.dev",
+    url: "https://mpp.dev/tools/wallet",
   },
   {
     name: "x402",
     logo: "x402.svg",
     height: 24,
     wordmark: true,
-    url: "https://x402.org",
+    url: "https://docs.x402.org/getting-started/quickstart-for-buyers",
   },
 ]

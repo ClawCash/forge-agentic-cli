@@ -201,6 +201,51 @@ test("reads pay.sh and the MPP directory", () => {
   )
 })
 
+test("reads Tempo Wallet and the other MPP clients", () => {
+  assert.deepEqual(
+    domainsIn({
+      tool_name: "mcp__tempo-wallet__services_search",
+      tool_response: {
+        services: [
+          { url: "https://a.example", service_url: "https://api.a.example" },
+        ],
+      },
+    }),
+    ["api.a.example"]
+  )
+  assert.deepEqual(
+    domainsIn({
+      tool_name: "mcp__pitstop__list_mpp_services",
+      tool_response: { services: [{ url: "https://b.example" }] },
+    }),
+    ["b.example"]
+  )
+  assert.deepEqual(
+    domainsIn({
+      tool_name: "mcp__thirdweb__listPayableServices",
+      tool_response: { items: [{ resource: "https://c.example/x" }] },
+    }),
+    ["c.example"]
+  )
+  assert.deepEqual(
+    domainsIn({
+      tool_name: "mcp__boltzpay__boltzpay_discover",
+      tool_response: [{ type: "text", text: "1. Name\nhttps://d.example/x" }],
+    }),
+    ["d.example"]
+  )
+  // Cursor leaves out the server's name, so the shape has to match too.
+  assert.deepEqual(
+    domainsIn({
+      tool_name: "MCP:services_list",
+      tool_output: JSON.stringify({
+        services: [{ url: "https://internal.example" }],
+      }),
+    }),
+    []
+  )
+})
+
 test("reads other x402 directories, including plain text", () => {
   assert.deepEqual(
     domainsIn({
@@ -273,6 +318,22 @@ test("reads wallet search commands run from the shell", () => {
     ),
     ["aisa.one", "fal.mpp.tempo.xyz"]
   )
+})
+
+test("reads the newer wallet search commands", () => {
+  const stdout = "name,url\nA,https://a.example"
+  for (const line of [
+    'tempo wallet services search "web"',
+    "tempo wallet -t services list",
+    'npx spongewallet pay discover "news"',
+    "ksearch services list --query news",
+    "npx @boltzpay/cli discover --protocol mpp",
+  ]) {
+    assert.deepEqual(domainsIn(shell(line, stdout)), ["a.example"], line)
+  }
+  for (const line of ["npx spongewallet pay send", "boltzpay status"]) {
+    assert.deepEqual(domainsIn(shell(line, stdout)), [], line)
+  }
 })
 
 test("reads Cursor's and Codex's shell results", () => {
@@ -646,6 +707,10 @@ test("the install guide's matchers fit the search tools and nothing else", () =>
       "mcp__x402search__search_x402_apis",
       "mcp__x402-discovery__x402_discover",
       "mcp__402index__search",
+      "mcp__tempo-wallet__services_search",
+      "mcp__pitstop__list_mpp_services",
+      "mcp__thirdweb__listPayableServices",
+      "mcp__boltzpay__boltzpay_discover",
     ]) {
       assert.ok(matcher.test(name), name)
     }

@@ -21,11 +21,17 @@ const TOOLS = [
   "list_services",
   "recommend_services",
   "search_offers",
+  "get_services_by_recipient",
   "get_service",
+  "services_search",
+  "services_list",
+  "services_show",
   "search",
 ]
-const DIRECTORY = /x402|402index|agent-?tools|decixa/i
-const WALLET_COMMAND = /\b(awal|agentcash|pay\s+skills|tempo\s+wallet)\b/
+const DIRECTORY =
+  /x402|402index|agent-?tools|decixa|boltzpay|list_mpp_services|listPayableServices/i
+const WALLET_COMMAND =
+  /\b(awal|agentcash|pay\s+skills|tempo\s+wallet|spongewallet|ksearch|boltzpay)\b/
 
 function toolName(name) {
   const tool = TOOLS.find((known) => name.endsWith(`_${known}`))

@@ -47,7 +47,21 @@ function Hero({ scenes, real }: { scenes: Scene[]; real: boolean }) {
   )
 }
 
-function Tile({ href, children }: { href: string; children: ReactNode }) {
+function Tile({ href, children }: { href?: string; children: ReactNode }) {
+  if (!href) {
+    return (
+      <li>
+        <div className="flex h-[84px] flex-col items-center justify-center gap-1.5 rounded-[12px] border border-line px-2 text-center text-[12px] leading-tight font-medium tracking-[-0.01em] sm:h-[72px] sm:gap-2.5 sm:px-3 sm:text-[14px] bg-transparent">
+          <span className="flex items-center gap-2 opacity-50 grayscale">
+            {children}
+          </span>
+          <span className="text-[11px] leading-none text-muted">
+            Coming soon
+          </span>
+        </div>
+      </li>
+    )
+  }
   return (
     <li>
       <a

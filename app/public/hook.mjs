@@ -83,11 +83,11 @@ const TOOLS = [
   ],
   // MPP's service directory
   [
-    /^(mcp__.*(mpp|tempo).*__|MCP:)(search_services|list_services|recommend_services|search_offers|get_service)$/,
+    /^(mcp__.*(mpp|tempo).*__|MCP:)(search_services|list_services|recommend_services|search_offers|get_service|get_services_by_recipient|services_search|services_list|services_show)$/,
     (node) =>
       node.integration !== undefined
         ? (node.serviceUrl ?? node.url)
-        : undefined,
+        : node.service_url,
   ],
 ]
 
@@ -105,7 +105,7 @@ const listed = (node) => [
 
 // Other x402 directories vary too much to list field by field.
 const DIRECTORY =
-  /^(mcp__.*__|MCP:).*(x402.*(search|discover)|(search|discover).*x402)|^mcp__.*(x402|402index|agent-?tools|decixa).*__.*(search|discover|ask_services)/
+  /^(mcp__.*__|MCP:).*(x402.*(search|discover)|(search|discover).*x402|list_mpp_services|listPayableServices|boltzpay_discover)|^mcp__.*(x402|402index|agent-?tools|decixa|boltzpay).*__.*(search|discover|ask_services)/
 
 // Wallet search commands, only where the command itself runs.
 const LAUNCH = String.raw`(?:^|[;&|(]\s*)(?:\w+=\S*\s+)*(?:npx\s+(?:-\S+\s+)*|bunx\s+|pnpm\s+dlx\s+|yarn\s+dlx\s+)?(?:\S*\/)?`
@@ -116,6 +116,9 @@ const COMMANDS = [
   command("agentcash", String.raw`(?:search|discover)\b`),
   command("pay", String.raw`skills\s+search\b`),
   command("tempo", String.raw`wallet\s+(?:-\S+\s+)*services\b`),
+  command("spongewallet", String.raw`pay\s+(?:discover|service)\b`),
+  command("ksearch", String.raw`services\s+(?:list|get)\b`),
+  command("(?:@boltzpay\\/cli|boltzpay)", String.raw`discover\b`),
 ]
 
 // Picks the rating for the job at hand. This only reads the search on this
