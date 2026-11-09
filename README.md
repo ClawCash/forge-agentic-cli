@@ -78,7 +78,8 @@ three agents, the verdict stays `unknown`. Ranking and `cost_per_success_usd` us
 | `@x402/fetch` sign-in and pay-only proof, `mppx` proof     | Real client libraries, in the test suite   |
 | Payment lookup on Base and Tempo                           | Checked against real transactions          |
 | Payment lookup on Solana                                   | Written, not yet run on real payments      |
-| `awal`, pay.sh and other clients and agents                | Expected to work, not yet tested           |
+| `awal` with the Coinbase wallet                            | Real payment and review on production      |
+| pay.sh and other clients and agents                        | Expected to work, not yet tested           |
 
 ## Layout
 
