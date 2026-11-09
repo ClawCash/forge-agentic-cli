@@ -17,7 +17,7 @@ import { profileReader } from "../server/src/v1/profiles.ts"
 import { rate, screenNote, taskPrior } from "../server/src/v1/rating.ts"
 import { locate } from "../server/src/v1/routes.ts"
 import { memoryApiReviewStore } from "../server/src/v1/store.ts"
-import { termsReader } from "../server/src/v1/terms.ts"
+import { advertisedReader, termsReader } from "../server/src/v1/terms.ts"
 import { assertPublicHttps } from "../server/src/v1/terms.ts"
 
 // Wallet proof runs the real x402 and MPP client libraries against the real
@@ -53,7 +53,13 @@ const payment = (overrides = {}) => ({
 let apiKey
 const KEY = "X-Reviews-Key"
 
-async function setup({ paid = () => [payment()], fetcher, readProfile } = {}) {
+async function setup({
+  paid = () => [payment()],
+  fetcher,
+  readProfile,
+  advertised,
+  readAdvertised,
+} = {}) {
   const store = memoryApiReviewStore()
   const inbox = []
   const app = createApp(null, {
@@ -68,7 +74,9 @@ async function setup({ paid = () => [payment()], fetcher, readProfile } = {}) {
         accepts: [
           { network: BASE, asset: USDC_BASE, payTo: SELLER, amount: "10000" },
         ],
+        advertised,
       }),
+      readAdvertised,
       findPayments: async ({ wallet }) => paid(wallet),
       sendCode: async (email, code) => inbox.push({ email, code }),
       fetch: fetcher,
@@ -1712,20 +1720,49 @@ test("a brief is one line per API, in numbers and fixed words", async () => {
   assert.equal(brief.unreviewed, 1)
   assert.match(
     brief.text,
-    /stableenrich\.dev: 5\/5 from 1 agent, about \d+% likely to work, matched its listing 0 of 1, top problem stale/
+    /stableenrich\.dev: 1 full from 1 agent \(latest \d{4}-\d\d-\d\d\), too early to tell\. Matched its listing in 0 of 1 reviews\. Top problem: stale\./
   )
   assert.match(brief.text, /No reviews yet for 1 of 2 APIs/)
   assert.match(brief.text, /get_api_reviews/)
   assert.doesNotMatch(brief.text, /Ignore this|Some of the emails|nobody/)
 })
 
-test("a brief gives the same numbers as the API's page", async () => {
+test("a brief gives the same counts as the API's page", async () => {
   const { app, store } = await setup()
   await store.insert(row())
+  await store.insert(row({ result: "partial" }))
   const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
   const page = await (await app.request("/v1/services/stableenrich.dev")).json()
-  const percent = Math.round(page.rating.works_for_task * 100)
-  assert.ok(brief.text.includes(`about ${percent}% likely to work`))
+  assert.deepEqual(page.rating.outcomes, {
+    full: 1,
+    partial: 1,
+    none: 0,
+    not_checked: 0,
+  })
+  assert.ok(brief.text.includes("1 full, 1 partial from 2 agents"))
+})
+
+test("a brief gives a verdict and real cost once three agents have paid", async () => {
+  const { app, store } = await setup()
+  for (let i = 0; i < 3; i++) await store.insert(row())
+  const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
+  assert.match(brief.text, /3 full from 3 agents .*, verdict \w+\./)
+  assert.match(brief.text, /About \$0\.\d+ per success\./)
+  assert.doesNotMatch(brief.text, /too early|likely to work/)
+})
+
+test("a brief flags a payment that returned nothing", async () => {
+  const { app, store } = await setup()
+  await store.insert(
+    row({
+      result: "none",
+      satisfaction: "not_satisfied",
+      problems: ["paid_no_result"],
+    })
+  )
+  const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
+  assert.match(brief.text, /1 nothing from 1 agent/)
+  assert.match(brief.text, /Charged with no result: 1\./)
 })
 
 test("a brief says when an unreviewed API has stopped answering", async () => {
@@ -1743,7 +1780,7 @@ test("a brief finds reviews filed under a company's API host", async () => {
   await store.insert(row({ domain: "api.aisa.one" }))
   const brief = await (await askBrief(app, ["aisa.one"])).json()
   assert.equal(brief.reviewed, 1)
-  assert.match(brief.text, /aisa\.one: 5\/5/)
+  assert.match(brief.text, /aisa\.one: 1 full/)
 })
 
 test("a brief prefers reviews of the exact domain listed", async () => {
@@ -1753,7 +1790,7 @@ test("a brief prefers reviews of the exact domain listed", async () => {
   )
   await store.insert(row({ domain: "api.aisa.one" }))
   const brief = await (await askBrief(app, ["aisa.one"])).json()
-  assert.match(brief.text, /aisa\.one: 0\/5/)
+  assert.match(brief.text, /aisa\.one: 1 nothing/)
 })
 
 test("a brief doesn't match a lookalike domain", async () => {
@@ -1782,9 +1819,160 @@ test("the ratings file holds every rating and every dead API", async () => {
   const file = await (await app.request("/v1/ratings")).json()
   assert.equal(file.version, 1)
   assert.ok(file.generated_at)
-  assert.match(file.rated["stableenrich.dev"], /^5\/5 from 1 agent/)
+  assert.match(file.rated["stableenrich.dev"], /^1 full from 1 agent/)
+  assert.match(
+    file.tasks["stableenrich.dev"].enrichment,
+    /^1 full from 1 agent/
+  )
   assert.deepEqual(file.down, ["gone.example"])
   assert.doesNotMatch(JSON.stringify(file), /Ignore this|fine\.example/)
+})
+
+test("a rating counts how paid calls went", () => {
+  const rating = rate(
+    [
+      row(),
+      row({ result: "partial" }),
+      row({
+        result: "none",
+        satisfaction: "not_satisfied",
+        problems: ["paid_no_result"],
+      }),
+    ],
+    QUERY,
+    0.6
+  )
+  assert.deepEqual(rating.outcomes, {
+    full: 1,
+    partial: 1,
+    none: 1,
+    not_checked: 0,
+  })
+  assert.equal(rating.charged_no_result, 1)
+  assert.ok(rating.last_reviewed_at)
+})
+
+test("a rating checks advertised fields against what came back", () => {
+  const shape = (fields) => ({ fields })
+  const rating = rate(
+    [
+      row({
+        advertisedFields: ["a", "b"],
+        outputShape: shape(["a", "b", "c"]),
+      }),
+      row({ advertisedFields: ["a", "b"], outputShape: shape(["a"]) }),
+      row({ outputShape: shape(["a"]) }),
+    ],
+    QUERY,
+    0.6
+  )
+  assert.deepEqual(rating.schema_match, {
+    all_fields_returned: 1,
+    checked: 2,
+    missing: ["b"],
+  })
+  assert.equal(rate([row()], QUERY, 0.6).schema_match, null)
+})
+
+test("a domain's cost per success uses its typical price", () => {
+  const rating = rate(
+    [row({ priceUsd: 0.01 }), row({ priceUsd: 0.02 }), row({ priceUsd: 0.9 })],
+    { domain: "stableenrich.dev", path: "" },
+    0.6
+  )
+  assert.ok(rating.cost_per_success_usd > 0.02)
+  assert.ok(rating.cost_per_success_usd < 0.05)
+})
+
+test("a review keeps what the seller advertised, and its proof", async () => {
+  const { app, appFetch } = await setup({ advertised: ["results", "total"] })
+  const { submit_url } = await prepare(appFetch, {
+    ...REVIEW,
+    output_status: 200,
+    output_shape: { fields: ["results"] },
+  })
+  const paying = x402Fetch(appFetch, newAccount(), { signIn: true })
+  assert.equal((await paying(submit_url)).status, 201)
+  const review = await servedReview(app)
+  assert.deepEqual(review.advertised_fields, ["results", "total"])
+  assert.equal(review.proof_method, "siwx")
+  assert.match(review.id, /^rev_/)
+  const page = await (await app.request("/v1/services/stableenrich.dev")).json()
+  assert.deepEqual(page.rating.schema_match, {
+    all_fields_returned: 0,
+    checked: 1,
+    missing: ["total"],
+  })
+})
+
+test("advertised fields come from the seller's spec if the 402 has none", async () => {
+  const { app, appFetch } = await setup({
+    readAdvertised: async () => ["results"],
+  })
+  const { submit_url } = await prepare(appFetch, {
+    ...REVIEW,
+    output_shape: { fields: ["results"] },
+  })
+  const paying = x402Fetch(appFetch, newAccount(), { signIn: true })
+  assert.equal((await paying(submit_url)).status, 201)
+  assert.deepEqual((await servedReview(app)).advertised_fields, ["results"])
+})
+
+test("a failed lookup of advertised fields never blocks a review", async () => {
+  const { app, appFetch } = await setup({
+    readAdvertised: async () => {
+      throw new Error("spec is down")
+    },
+  })
+  const { submit_url } = await prepare(appFetch, {
+    ...REVIEW,
+    output_shape: { fields: ["results"] },
+  })
+  const paying = x402Fetch(appFetch, newAccount(), { signIn: true })
+  assert.equal((await paying(submit_url)).status, 201)
+  assert.equal((await servedReview(app)).advertised_fields, null)
+})
+
+test("payment terms carry the fields a seller advertises", async () => {
+  const read = termsReader(
+    async () =>
+      Response.json(
+        {
+          ...QUOTE,
+          extensions: {
+            bazaar: {
+              info: { output: { example: { results: [], total: 1 } } },
+            },
+          },
+        },
+        { status: 402 }
+      ),
+    async () => {}
+  )
+  assert.deepEqual((await read(PAID_POST)).advertised, ["results", "total"])
+})
+
+test("a spec's required fields beat its optional ones", async () => {
+  const spec = (schema) => ({
+    paths: {
+      "/run": {
+        post: {
+          responses: { 200: { content: { "application/json": { schema } } } },
+        },
+      },
+    },
+  })
+  const read = (schema) =>
+    advertisedReader(
+      async () => Response.json(spec(schema)),
+      async () => {}
+    )("https://x.example/run")
+  assert.deepEqual(
+    await read({ required: ["a"], properties: { a: {}, b: {} } }),
+    ["a"]
+  )
+  assert.deepEqual(await read({ properties: { a: {}, b: {} } }), ["a", "b"])
+  assert.deepEqual(await read({ type: "string" }), [])
 })
 
 test("a brief needs at least one real domain", async () => {

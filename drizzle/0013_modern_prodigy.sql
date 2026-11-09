@@ -1,0 +1,1 @@
+ALTER TABLE "api_reviews" ADD COLUMN "advertised_fields" jsonb;

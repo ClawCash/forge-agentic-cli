@@ -12,6 +12,8 @@ export interface PaymentTerms {
   status: number | null
   protocols: string[]
   accepts: (PaymentTarget & { amount: string | null })[]
+  // The top-level fields the seller says a successful response contains.
+  advertised?: string[]
   error?: string
 }
 
@@ -201,6 +203,81 @@ function sampleRequest(spec: any, url: string) {
     : null
 }
 
+const FIELD_NAME = /^[\w.$\[\]-]{1,64}$/
+const MAX_ADVERTISED_FIELDS = 40
+const MAX_CACHED_SPECS = 2000
+
+const cleanFields = (names: unknown[]) =>
+  names
+    .filter((n): n is string => typeof n === "string" && FIELD_NAME.test(n))
+    .slice(0, MAX_ADVERTISED_FIELDS)
+
+function advertisedIn(required: any) {
+  const bazaar = required?.extensions?.bazaar
+  const example = bazaar?.info?.output?.example
+  if (example && typeof example === "object" && !Array.isArray(example)) {
+    return cleanFields(Object.keys(example))
+  }
+  return cleanFields(
+    Object.keys(
+      bazaar?.schema?.properties?.output?.properties?.example?.properties ?? {}
+    )
+  )
+}
+
+async function fetchSpec(fetcher: typeof fetch, url: string) {
+  const res = await fetcher(`${new URL(url).origin}/openapi.json`, {
+    redirect: "manual",
+    headers: { Accept: "application/json", "User-Agent": "agent-reviews/1" },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!res.ok || !res.body) return null
+  const chunks: Uint8Array[] = []
+  let size = 0
+  const reader = res.body.getReader()
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.length
+    if (size > MAX_SPEC_BYTES) {
+      await reader.cancel()
+      return null
+    }
+    chunks.push(value)
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"))
+}
+
+// Required fields when the spec names them, because optional ones may
+// legitimately be absent from a response.
+function fieldsFromSpec(spec: any, url: string) {
+  const route = spec?.paths?.[new URL(url).pathname]
+  const schema = (route?.post ?? route?.get)?.responses?.["200"]?.content?.[
+    "application/json"
+  ]?.schema
+  if (Array.isArray(schema?.required) && schema.required.length > 0) {
+    return cleanFields(schema.required)
+  }
+  return cleanFields(Object.keys(schema?.properties ?? {}))
+}
+
+export function advertisedReader(
+  fetcher: typeof fetch = fetch,
+  assertPublic: (url: string) => Promise<void> = assertPublicHttps
+) {
+  const cache = new Map<string, { at: number; fields: string[] }>()
+  return async (url: string) => {
+    const known = cache.get(url)
+    if (known && Date.now() - known.at < SAMPLE_FRESH_MS) return known.fields
+    await assertPublic(url)
+    const spec = await fetchSpec(fetcher, url).catch(() => null)
+    const fields = spec ? fieldsFromSpec(spec, url) : []
+    if (cache.size >= MAX_CACHED_SPECS) cache.clear()
+    cache.set(url, { at: Date.now(), fields })
+    return fields
+  }
+}
+
 export function termsReader(
   fetcher: typeof fetch = fetch,
   assertPublic: (url: string) => Promise<void> = assertPublicHttps,
@@ -212,34 +289,11 @@ export function termsReader(
     { at: number; sample: SampleRequest | null }
   >()
 
-  async function readSpec(url: string) {
-    const res = await fetcher(`${new URL(url).origin}/openapi.json`, {
-      redirect: "manual",
-      headers: { Accept: "application/json", "User-Agent": "agent-reviews/1" },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok || !res.body) return null
-    const chunks: Uint8Array[] = []
-    let size = 0
-    const reader = res.body.getReader()
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      size += value.length
-      if (size > MAX_SPEC_BYTES) {
-        await reader.cancel()
-        return null
-      }
-      chunks.push(value)
-    }
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"))
-  }
-
   // Specs can be many megabytes, so each endpoint's sample is built once a day.
   async function sampleFromSpec(url: string) {
     const known = specSamples.get(url)
     if (known && Date.now() - known.at < SAMPLE_FRESH_MS) return known.sample
-    const spec = await readSpec(url).catch(() => null)
+    const spec = await fetchSpec(fetcher, url).catch(() => null)
     const sample = spec ? sampleRequest(spec, url) : null
     if (specSamples.size >= MAX_CACHED_SAMPLES) specSamples.clear()
     specSamples.set(url, { at: Date.now(), sample })
@@ -281,6 +335,7 @@ export function termsReader(
         ...(mpp.length ? ["mpp"] : []),
       ],
       accepts: [...x402, ...mpp],
+      advertised: advertisedIn(required),
     }
   }
 

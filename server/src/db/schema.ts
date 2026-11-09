@@ -124,6 +124,7 @@ export const apiReviews = pgTable(
     outputStatus: integer("output_status"),
     outputType: text("output_type"),
     outputBytes: integer("output_bytes"),
+    advertisedFields: jsonb("advertised_fields").$type<string[]>(),
     outputShape: jsonb("output_shape").$type<{
       fields: string[]
       items?: number

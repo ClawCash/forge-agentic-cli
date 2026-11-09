@@ -25,6 +25,7 @@ test(
       store = await postgresApiReviewStore(scopedUrl.toString())
       const review = {
         id: "rev_1",
+        advertisedFields: ["emails"],
         promised: "Work emails for any profile",
         delivered: "4 of 7 profiles matched",
         domain: "stableenrich.dev",
@@ -54,6 +55,7 @@ test(
         userId: null,
       }
       const row = await store.insert(review)
+      assert.deepEqual(row.advertisedFields, ["emails"])
       assert.equal(row.promised, "Work emails for any profile")
       assert.equal(row.delivered, "4 of 7 profiles matched")
       assert.deepEqual(row.problems, ["stale"])

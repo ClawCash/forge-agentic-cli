@@ -15,7 +15,7 @@ import { type V1Deps, v1Routes } from "./v1/routes.ts"
 import { memoryApiReviewStore, postgresApiReviewStore } from "./v1/store.ts"
 import { healthChecker } from "./v1/health.ts"
 import { profileReader } from "./v1/profiles.ts"
-import { termsReader } from "./v1/terms.ts"
+import { advertisedReader, termsReader } from "./v1/terms.ts"
 import { DEMO_APIS } from "./demo-apis.ts"
 import { extractInvoice } from "./invoice.ts"
 import { demoApiPaywall } from "./payments.ts"
@@ -119,6 +119,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     findPayments: chainFinder(env),
     sendCode: resendSender(env),
     readTerms: termsReader(),
+    readAdvertised: advertisedReader(),
     readProfile: profileReader(),
   }
   const hedera = createPublicClient({

@@ -217,6 +217,15 @@ export interface Rating {
     delivered: string
     listing: string
   }[]
+  // How the paid calls went, as plain counts.
+  outcomes: Record<"full" | "partial" | "none" | "not_checked", number> | null
+  charged_no_result: number
+  last_reviewed_at: string | null
+  schema_match: {
+    all_fields_returned: number
+    checked: number
+    missing: string[]
+  } | null
   domain_rating: {
     stars: number
     works_for_task: number
@@ -251,6 +260,10 @@ const EMPTY: Rating = {
   notes: [],
   listing_accuracy: null,
   promised_vs_delivered: [],
+  outcomes: null,
+  charged_no_result: 0,
+  last_reviewed_at: null,
+  schema_match: null,
   domain_rating: null,
   audit: null,
 }
@@ -295,6 +308,59 @@ function promisedVsDelivered(evidence: Scored[]) {
     }))
 }
 
+function outcomes(evidence: Scored[]) {
+  const count = (result: string) =>
+    evidence.filter(({ row }) => row.result === result).length
+  return {
+    full: count("full"),
+    partial: count("partial"),
+    none: count("none"),
+    not_checked: count("not_checked"),
+  }
+}
+
+// Whether what the seller advertised actually came back. Measured from field
+// names, so it doesn't depend on a reviewer's opinion.
+function schemaMatch(evidence: Scored[]) {
+  const checked = evidence.flatMap(({ row }) =>
+    row.advertisedFields?.length && row.outputShape?.fields.length
+      ? [
+          {
+            advertised: row.advertisedFields,
+            returned: row.outputShape.fields,
+          },
+        ]
+      : []
+  )
+  if (checked.length === 0) return null
+  const missing = new Map<string, number>()
+  let complete = 0
+  for (const { advertised, returned } of checked) {
+    const absent = advertised.filter((field) => !returned.includes(field))
+    if (absent.length === 0) complete += 1
+    for (const field of absent)
+      missing.set(field, (missing.get(field) ?? 0) + 1)
+  }
+  return {
+    all_fields_returned: complete,
+    checked: checked.length,
+    missing: [...missing]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([field]) => field),
+  }
+}
+
+function typicalPrice(evidence: Scored[], onEndpoint: Scored[], path: string) {
+  const priced = (path ? onEndpoint : evidence)
+    .map(({ row }) => row)
+    .filter((row) => row.priceUsd !== null)
+  if (priced.length === 0) return null
+  if (!path) return median(priced.map((row) => row.priceUsd as number))
+  return priced.sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime())[0]
+    .priceUsd as number
+}
+
 // `rows` is every review for the domain; `prior` is taskPrior for the task.
 export function rate(
   rows: ApiReview[],
@@ -330,9 +396,7 @@ export function rate(
   const evidence = scope === "endpoint" ? onEndpoint : scored
   const summary = summarize(scored, chance)
   const here = summarize(evidence, chance)
-  const priced = [...(query.path ? onEndpoint : [])]
-    .filter((e) => e.row.priceUsd !== null)
-    .sort((a, b) => b.row.paidAt.getTime() - a.row.paidAt.getTime())[0]
+  const price = typicalPrice(evidence, onEndpoint, query.path)
   const constraints = [query.language, query.format].filter(Boolean)
   const task = usingOtherTasks ? "overall" : (query.task ?? "overall")
 
@@ -342,14 +406,21 @@ export function rate(
     satisfied: here.satisfied,
     typical_tries: here.typical_tries,
     top_problem: topProblem(evidence) ?? summary.top_problem,
-    cost_per_success_usd: priced
-      ? round((priced.row.priceUsd as number) / Math.max(chance, 0.01), 4)
-      : null,
+    cost_per_success_usd:
+      price === null ? null : round(price / Math.max(chance, 0.01), 4),
     scope,
     matched: [task, ...constraints].join(", "),
     notes: latestNotes(evidence),
     listing_accuracy: listingAccuracy(evidence),
     promised_vs_delivered: promisedVsDelivered(evidence),
+    outcomes: outcomes(evidence),
+    charged_no_result: evidence.filter(({ row }) =>
+      row.problems.includes("paid_no_result")
+    ).length,
+    last_reviewed_at: new Date(
+      Math.max(...evidence.map(({ row }) => row.createdAt.getTime()))
+    ).toISOString(),
+    schema_match: schemaMatch(evidence),
     domain_rating: {
       stars: round(averageValue(scored) * 5, 1),
       works_for_task: round(shrink(scored, prior, TASK_PRIOR_WEIGHT)),

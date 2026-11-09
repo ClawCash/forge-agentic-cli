@@ -10,6 +10,8 @@ export interface BriefEntry {
   domain: string
   rating: Rating
   down: boolean
+  // Each task this API has been reviewed for.
+  tasks?: Record<string, Rating>
 }
 
 export function briefDomains(input: unknown) {
@@ -27,22 +29,45 @@ export function briefDomains(input: unknown) {
 
 const NOT_RESPONDING = "not responding when last checked"
 
+const OUTCOME_WORDS = [
+  ["full", "full"],
+  ["partial", "partial"],
+  ["none", "nothing"],
+  ["not_checked", "unchecked"],
+] as const
+
+function money(usd: number) {
+  return `$${usd.toFixed(usd < 0.01 ? 4 : 2)}`
+}
+
 function briefDetails({ rating, down }: BriefEntry) {
+  const counts = OUTCOME_WORDS.flatMap(([key, word]) =>
+    rating.outcomes?.[key] ? [`${rating.outcomes[key]} ${word}`] : []
+  ).join(", ")
+  const agents = `${rating.buyers} ${rating.buyers === 1 ? "agent" : "agents"}`
+  const latest = rating.last_reviewed_at?.slice(0, 10)
+  const early = rating.verdict === "unknown"
   const accuracy = rating.listing_accuracy
   const compared = accuracy
     ? accuracy.accurate + accuracy.overstated + accuracy.misleading
     : 0
-  return [
-    `${rating.stars}/5 from ${rating.buyers} ${rating.buyers === 1 ? "agent" : "agents"}`,
-    `about ${Math.round((rating.works_for_task ?? 0) * 100)}% likely to work`,
-    rating.verdict !== "unknown" && `verdict ${rating.verdict}`,
-    accuracy && `matched its listing ${accuracy.accurate} of ${compared}`,
+  const schema = rating.schema_match
+  const sentences = [
+    `${counts} from ${agents} (latest ${latest}), ${early ? "too early to tell" : `verdict ${rating.verdict}`}`,
+    rating.charged_no_result > 0 &&
+      `Charged with no result: ${rating.charged_no_result}`,
+    schema &&
+      `Returned every advertised field in ${schema.all_fields_returned} of ${schema.checked} ${schema.checked === 1 ? "check" : "checks"}`,
+    accuracy &&
+      `Matched its listing in ${accuracy.accurate} of ${compared} reviews`,
+    !early &&
+      rating.cost_per_success_usd !== null &&
+      `About ${money(rating.cost_per_success_usd)} per success`,
     rating.top_problem &&
-      `top problem ${rating.top_problem.replaceAll("_", " ")}`,
-    down && NOT_RESPONDING,
+      `Top problem: ${rating.top_problem.replaceAll("_", " ")}`,
+    down && "Not responding when last checked",
   ]
-    .filter(Boolean)
-    .join(", ")
+  return `${sentences.filter(Boolean).join(". ")}.`
 }
 
 function briefLine(entry: BriefEntry) {
@@ -82,10 +107,25 @@ export function brief(entries: BriefEntry[]) {
 // never waits on us.
 export function ratingsFile(entries: BriefEntry[], now = new Date()) {
   const rated: Record<string, string> = {}
+  const tasks: Record<string, Record<string, string>> = {}
   const down: string[] = []
   for (const entry of entries) {
-    if (entry.rating.stars !== null) rated[entry.domain] = briefDetails(entry)
-    else if (entry.down) down.push(entry.domain)
+    if (entry.rating.stars === null) {
+      if (entry.down) down.push(entry.domain)
+      continue
+    }
+    rated[entry.domain] = briefDetails(entry)
+    const reviewed = Object.entries(entry.tasks ?? {}).filter(
+      ([, rating]) => rating.stars !== null
+    )
+    if (reviewed.length > 0) {
+      tasks[entry.domain] = Object.fromEntries(
+        reviewed.map(([task, rating]) => [
+          task,
+          briefDetails({ ...entry, rating }),
+        ])
+      )
+    }
   }
-  return { version: 1, generated_at: now.toISOString(), rated, down }
+  return { version: 1, generated_at: now.toISOString(), rated, tasks, down }
 }

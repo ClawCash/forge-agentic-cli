@@ -36,7 +36,7 @@ import {
   PaymentAlreadyReviewedError,
   type ServiceProfile,
 } from "./store.ts"
-import { locate, type ReadTerms } from "./terms.ts"
+import { locate, type PaymentTerms, type ReadTerms } from "./terms.ts"
 
 // The free reviews API. Search, check, probe and the leaderboard need nothing.
 // Writing a review needs a quick email signup and proof that the writer's
@@ -186,6 +186,7 @@ export interface V1Deps {
   findPayments: FindPayments
   sendCode: SendCode | null
   readTerms: ReadTerms
+  readAdvertised?: (url: string) => Promise<string[]>
   readProfile?: ReadProfile
   fetch?: typeof fetch
   // Overrides wallet proof in tests that exercise only the rating flow.
@@ -205,6 +206,7 @@ const HELPFULNESS_OF: Record<string, string> = Object.fromEntries(
 function publicReview(row: ApiReview, counted: boolean) {
   const transaction = row.paymentReference.split(":").at(-1) as string
   return {
+    id: row.id,
     endpoint: row.path || "/",
     task: row.task,
     language: row.language,
@@ -221,6 +223,8 @@ function publicReview(row: ApiReview, counted: boolean) {
     task_description: row.taskDescription ?? null,
     promised: row.promised ?? null,
     delivered: row.delivered ?? null,
+    advertised_fields: row.advertisedFields ?? null,
+    proof_method: row.proofMethod,
     helpfulness: HELPFULNESS_OF[row.satisfaction] ?? row.satisfaction,
     score: reviewScore(row),
     counted,
@@ -514,22 +518,38 @@ export function v1Routes(deps: V1Deps) {
       priorFor(undefined),
     ])
     const health = await deps.store.listHealthByDomains(healthDomains)
+    const priors = new Map(
+      await Promise.all(
+        [...new Set(rows.map((row) => row.task))].map(
+          async (task) => [task, await priorFor(task)] as const
+        )
+      )
+    )
     const domains = [
-      ...new Set([...rows.map((r) => r.domain), ...healthDomains]),
+      ...new Set([...rows.map((row) => row.domain), ...healthDomains]),
     ]
     return c.json(
       ratingsFile(
-        domains.map((domain) => ({
-          domain,
-          rating: rate(
-            rows.filter((row) => row.domain === domain),
-            { domain, path: "" },
-            prior
-          ),
-          down:
-            domainHealth(health.filter((row) => row.domain === domain))
-              ?.status === "down",
-        }))
+        domains.map((domain) => {
+          const reviews = rows.filter((row) => row.domain === domain)
+          return {
+            domain,
+            rating: rate(reviews, { domain, path: "" }, prior),
+            down:
+              domainHealth(health.filter((row) => row.domain === domain))
+                ?.status === "down",
+            tasks: Object.fromEntries(
+              [...new Set(reviews.map((row) => row.task))].map((task) => [
+                task,
+                rate(
+                  reviews,
+                  { domain, path: "", task },
+                  priors.get(task) as number
+                ),
+              ])
+            ),
+          }
+        })
       )
     )
   })
@@ -667,6 +687,12 @@ export function v1Routes(deps: V1Deps) {
     })
   })
 
+  // Kept with the review, so a later change to the listing can't rewrite it.
+  async function advertisedFields(url: string, terms?: PaymentTerms) {
+    if (terms?.advertised?.length) return terms.advertised
+    return (await deps.readAdvertised?.(url).catch(() => [])) ?? []
+  }
+
   async function findUnreviewedPayment(
     wallet: string,
     url: string,
@@ -697,7 +723,7 @@ export function v1Routes(deps: V1Deps) {
     const open = found
       .filter((payment) => !used.has(payment.reference))
       .sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime())[0]
-    if (open) return { payment: open }
+    if (open) return { payment: open, terms }
     return {
       problem:
         found.length > 0
@@ -748,6 +774,9 @@ export function v1Routes(deps: V1Deps) {
     }
     const payment = lookup.payment as FoundPayment
     const goal = screenNote(body.task_description)
+    const advertised = body.output_shape
+      ? await advertisedFields(where.url, lookup.terms)
+      : []
 
     try {
       const row = await deps.store.insert({
@@ -786,6 +815,7 @@ export function v1Routes(deps: V1Deps) {
         outputType: body.output_type ?? null,
         outputBytes: body.output_bytes ?? null,
         outputShape: body.output_shape ?? null,
+        advertisedFields: advertised.length > 0 ? advertised : null,
         latencyMs: body.latency_ms ?? null,
       })
       const response = Response.json(
