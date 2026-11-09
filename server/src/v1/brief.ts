@@ -25,25 +25,31 @@ export function briefDomains(input: unknown) {
   return [...new Set(domains)].slice(0, MAX_BRIEF_DOMAINS)
 }
 
-function briefLine({ domain, rating, down }: BriefEntry) {
-  const notResponding = down ? "not responding when last checked" : null
-  if (rating.stars === null) {
-    return notResponding && `${domain}: ${notResponding}`
-  }
+const NOT_RESPONDING = "not responding when last checked"
+
+function briefDetails({ rating, down }: BriefEntry) {
   const accuracy = rating.listing_accuracy
   const compared = accuracy
     ? accuracy.accurate + accuracy.overstated + accuracy.misleading
     : 0
-  const details = [
+  return [
     `${rating.stars}/5 from ${rating.buyers} ${rating.buyers === 1 ? "agent" : "agents"}`,
     `about ${Math.round((rating.works_for_task ?? 0) * 100)}% likely to work`,
     rating.verdict !== "unknown" && `verdict ${rating.verdict}`,
     accuracy && `matched its listing ${accuracy.accurate} of ${compared}`,
     rating.top_problem &&
       `top problem ${rating.top_problem.replaceAll("_", " ")}`,
-    notResponding,
+    down && NOT_RESPONDING,
   ]
-  return `${domain}: ${details.filter(Boolean).join(", ")}`
+    .filter(Boolean)
+    .join(", ")
+}
+
+function briefLine(entry: BriefEntry) {
+  if (entry.rating.stars !== null) {
+    return `${entry.domain}: ${briefDetails(entry)}`
+  }
+  return entry.down ? `${entry.domain}: ${NOT_RESPONDING}` : null
 }
 
 export function brief(entries: BriefEntry[]) {
@@ -70,4 +76,16 @@ export function brief(entries: BriefEntry[]) {
       : []),
   ].join("\n")
   return { text, reviewed, unreviewed }
+}
+
+// Every rating in one small file, so a hook can answer from disk and a search
+// never waits on us.
+export function ratingsFile(entries: BriefEntry[], now = new Date()) {
+  const rated: Record<string, string> = {}
+  const down: string[] = []
+  for (const entry of entries) {
+    if (entry.rating.stars !== null) rated[entry.domain] = briefDetails(entry)
+    else if (entry.down) down.push(entry.domain)
+  }
+  return { version: 1, generated_at: now.toISOString(), rated, down }
 }

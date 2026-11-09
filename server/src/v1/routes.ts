@@ -16,7 +16,7 @@ import {
   KEY_HEADER,
   type SendCode,
 } from "./accounts.ts"
-import { brief, briefDomains, MAX_BRIEF_DOMAINS } from "./brief.ts"
+import { brief, briefDomains, MAX_BRIEF_DOMAINS, ratingsFile } from "./brief.ts"
 import { domainHealth, healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
@@ -252,6 +252,7 @@ const rank = (rating: Rating) =>
 const USAGE_KINDS: [RegExp, string][] = [
   [/\/v1\/check$/, "check"],
   [/\/v1\/brief$/, "brief"],
+  [/\/v1\/ratings$/, "service"],
   [/\/v1\/search$/, "search"],
   [/\/v1\/probe$/, "probe"],
   [/\/v1\/reviews(\/|$)/, "review"],
@@ -498,6 +499,33 @@ export function v1Routes(deps: V1Deps) {
         domains.map((domain) => ({
           domain,
           rating: rate(reviewsOf(domain), { domain, path: "" }, prior),
+          down:
+            domainHealth(health.filter((row) => row.domain === domain))
+              ?.status === "down",
+        }))
+      )
+    )
+  })
+
+  app.get("/ratings", async (c) => {
+    const [rows, healthDomains, prior] = await Promise.all([
+      deps.store.listRecent(5000),
+      deps.store.listHealthDomains(),
+      priorFor(undefined),
+    ])
+    const health = await deps.store.listHealthByDomains(healthDomains)
+    const domains = [
+      ...new Set([...rows.map((r) => r.domain), ...healthDomains]),
+    ]
+    return c.json(
+      ratingsFile(
+        domains.map((domain) => ({
+          domain,
+          rating: rate(
+            rows.filter((row) => row.domain === domain),
+            { domain, path: "" },
+            prior
+          ),
           down:
             domainHealth(health.filter((row) => row.domain === domain))
               ?.status === "down",
