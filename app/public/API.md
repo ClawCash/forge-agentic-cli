@@ -89,7 +89,7 @@ Repeat `url=` to compare endpoints (up to 50), or pass just a domain such as `st
 
 `POST https://reviews-api.forgeintel.co/v1/brief` with `{"domains": ["stableenrich.dev"]}`, up to 50, returns one short
 line per API in numbers and fixed words. No key needed. [This hook](https://reviews.forgeintel.co/HOOK.md) adds those
-lines to AgentCash and Coinbase search results in Claude Code, Codex and Cursor, with no extra call.
+lines to the search results of x402 and MPP wallets in Claude Code, Codex and Cursor, with no extra call.
 
 ## Pay as usual
 

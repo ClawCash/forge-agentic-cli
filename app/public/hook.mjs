@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Agent Reviews: adds ratings to a wallet's API search results.
+// Agent Reviews: adds ratings to the API search results of x402 and MPP wallets.
 //
-// It runs after a wallet's search tool, reads the domains of the APIs in the
-// result, and adds one short line per API to what the agent sees. Those domains
-// are all it ever sends: never your query, files, keys or wallet details.
-// If anything goes wrong it stays silent, so it can't get in your agent's way.
+// It runs after a wallet's search tool or search command, reads the domains of
+// the APIs in the result, and adds one short line per API to what the agent
+// sees. Those domains are all it ever sends: never your query, files, keys or
+// wallet details. If anything goes wrong it stays silent, so it can't get in
+// your agent's way.
 
 import { realpathSync } from "node:fs"
 import { pathToFileURL } from "node:url"
@@ -16,8 +17,27 @@ const MAX_DEPTH = 12
 const MAX_TEXT = 4000
 const TIMEOUT_MS = 2500
 
-// Each wallet tool, and the only place in its result an API address is read.
-const READERS = [
+const ADDRESS = String.raw`https:\/\/[^\s"'<>)\]\x00-\x1f]+`
+const TLD = "com|dev|io|ai|xyz|co|net|org|app|sh|to|one|gg|so|fun|cash|cloud"
+
+// Coinbase's hosted Bazaar returns each API as a tool. Its address is in the
+// tool's metadata when given, and otherwise encoded in the tool's name.
+function bazaarTool(node) {
+  const terms = node._meta?.["x402/payment-required"]
+  if (!terms) return undefined
+  if (terms.extensions?.agentkit?.info?.uri) {
+    return terms.extensions.agentkit.info.uri
+  }
+  const host = new RegExp(
+    `^x402_[a-z]+_https___((?:[a-z0-9-]+_)+?(?:${TLD}))(?:_|$)`
+  ).exec(node.name ?? "")?.[1]
+  return host && `https://${host.replaceAll("_", ".")}`
+}
+
+// Each search tool, and the only place in its result an API address is read.
+// Cursor leaves out the server's name, so these readers also check the shape.
+const TOOLS = [
+  // AgentCash
   [
     /^mcp__.*agentcash.*__search$|^MCP:search$/,
     (node) => (typeof node.path === "string" ? node.origin?.url : undefined),
@@ -26,7 +46,56 @@ const READERS = [
     /^mcp__.*agentcash.*__discover_api_endpoints$|^MCP:discover_api_endpoints$/,
     (node) => (Array.isArray(node.endpoints) ? node.origin : undefined),
   ],
-  [/^mcp__.*__bazaar_search$|^MCP:bazaar_search$/, (node) => node.resource],
+  // Coinbase Payments MCP
+  [
+    /^(mcp__.*__|MCP:)bazaar_(search|list|get_resource_details)$/,
+    (node) => node.resource,
+  ],
+  // Coinbase's hosted Bazaar
+  [
+    /^mcp__.*(bazaar|cdp|coinbase).*__search_resources$|^MCP:search_resources$/,
+    bazaarTool,
+  ],
+  // pay.sh
+  [
+    /^mcp__.*pay.*__search_skills$|^MCP:search_skills$/,
+    (node) => node.service_url,
+  ],
+  // MPP's service directory
+  [
+    /^(mcp__.*(mpp|tempo).*__|MCP:)(search_services|list_services|recommend_services|search_offers|get_service)$/,
+    (node) =>
+      node.integration !== undefined
+        ? (node.serviceUrl ?? node.url)
+        : undefined,
+  ],
+]
+
+// The fields directories use for an API's address.
+const listed = (node) => [
+  node.resource,
+  node.service_url,
+  node.serviceUrl,
+  node.endpoint_url,
+  node.endpointUrl,
+  typeof node.path === "string" ? node.origin?.url : undefined,
+  Array.isArray(node.endpoints) ? node.origin : undefined,
+  node.integration !== undefined ? node.url : undefined,
+]
+
+// Other x402 directories vary too much to list field by field.
+const DIRECTORY =
+  /^(mcp__.*__|MCP:).*(x402.*(search|discover)|(search|discover).*x402)|^mcp__.*(x402|402index|agent-?tools|decixa).*__.*(search|discover|ask_services)/
+
+// Wallet search commands, only where the command itself runs.
+const LAUNCH = String.raw`(?:^|[;&|(]\s*)(?:\w+=\S*\s+)*(?:npx\s+(?:-\S+\s+)*|bunx\s+|pnpm\s+dlx\s+|yarn\s+dlx\s+)?(?:\S*\/)?`
+const command = (name, rest) =>
+  new RegExp(`${LAUNCH}${name}(?:@\\S+)?\\s+${rest}`)
+const COMMANDS = [
+  command("awal", String.raw`(?:x402\s+)?bazaar\s+(?:search|list)\b`),
+  command("agentcash", String.raw`(?:search|discover)\b`),
+  command("pay", String.raw`skills\s+search\b`),
+  command("tempo", String.raw`wallet\s+(?:-\S+\s+)*services\b`),
 ]
 
 // Hosts wrap a tool's result differently, and some send it as a JSON string.
@@ -59,17 +128,60 @@ function domainOf(address) {
   }
 }
 
+const unique = (addresses) =>
+  [...new Set(addresses.flatMap((a) => domainOf(a) ?? []))].slice(
+    0,
+    MAX_DOMAINS
+  )
+
+const read = (value, reader) => unique([...objects(value)].flatMap(reader))
+
+function addressesInText(text) {
+  const named = [
+    ...text.matchAll(new RegExp(`\\bendpoint\\b[*:\\s\`]*(${ADDRESS})`, "gi")),
+  ].map((match) => match[1])
+  if (named.length > 0) return named
+  const first = new RegExp(ADDRESS)
+  return text.split("\n").flatMap((line) => first.exec(line)?.[0] ?? [])
+}
+
+function readText(value) {
+  const texts =
+    typeof value === "string"
+      ? [value]
+      : [...objects(value)].flatMap((node) =>
+          [node.text, node.result, node.stdout].filter(
+            (text) => typeof text === "string"
+          )
+        )
+  return unique(texts.flatMap(addressesInText))
+}
+
+function stdoutOf(response) {
+  for (const node of objects(response)) {
+    if (typeof node.stdout === "string") return node.stdout
+  }
+  return typeof response === "string" ? response : ""
+}
+
+const orText = (found, value) => (found.length > 0 ? found : readText(value))
+
 export function domainsIn(event) {
   const name = String(event?.tool_name ?? "")
-  const read = READERS.find(([tool]) => tool.test(name))?.[1]
-  if (!read) return []
-  const found = new Set()
-  for (const node of objects(event.tool_response ?? event.tool_output)) {
-    const domain = domainOf(read(node))
-    if (domain) found.add(domain)
-    if (found.size >= MAX_DOMAINS) break
+  const response = event?.tool_response ?? event?.tool_output
+  if (name === "Bash" || name === "Shell") {
+    const line = String(event?.tool_input?.command ?? "")
+    if (!COMMANDS.some((pattern) => pattern.test(line))) return []
+    const stdout = stdoutOf(response)
+    return orText(read(stdout, listed), stdout)
   }
-  return [...found]
+  const tool = TOOLS.find(([pattern]) => pattern.test(name))
+  if (tool) return read(response, tool[1])
+  if (!DIRECTORY.test(name)) return []
+  return orText(
+    read(response, (node) => [...listed(node), node.url]),
+    response
+  )
 }
 
 export function hookOutput(host, text) {
