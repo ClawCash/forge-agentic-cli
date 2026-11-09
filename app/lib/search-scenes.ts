@@ -7,6 +7,7 @@ export interface SceneResult {
   price: string
   stars: number
   worked: number
+  estimate?: boolean
 }
 
 export interface Scene {
@@ -217,6 +218,7 @@ interface CheckResult {
   url: string
   stars: number | null
   works_for_task: number | null
+  verdict: string
 }
 
 async function liveRatings(urls: string[]) {
@@ -253,6 +255,7 @@ export async function getScenes(): Promise<{
           host: url.replace("https://", ""),
           stars: rating.stars,
           worked: Math.round(rating.works_for_task * 100),
+          estimate: rating.verdict === "unknown",
         },
       ]
     })

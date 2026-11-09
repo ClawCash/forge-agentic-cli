@@ -17,6 +17,15 @@ export interface LeaderboardEntry {
   reviews: number
   top_problem: string | null
   notes: string[]
+  audit: {
+    reviews_counted: number
+    agents: number
+    weighted_score: number
+    evidence_weight: number
+    baseline: number
+    baseline_weight: number
+    baseline_source: "domain" | "task"
+  } | null
 }
 
 export interface AgentSays {
@@ -47,12 +56,25 @@ export interface FeaturedReview {
     price_usd: number | null
     wallet: string
     paid_at: string
+    score: ReviewScore
+    transaction_url: string | null
   }
+}
+
+export interface ReviewScore {
+  stars: number | null
+  result: number | null
+  helpfulness: number
+  helpfulness_share: number
+  tries_factor: number
+  pay_again_factor: number
+  check_weight: number
 }
 
 export interface ServiceReview {
   endpoint: string
   task: string
+  task_description: string | null
   result: string
   listing: string
   satisfaction: string
@@ -61,16 +83,28 @@ export interface ServiceReview {
   pay_again: string | null
   tries: number | null
   note: string | null
+  score: ReviewScore
+  counted: boolean
   network: string
   price_usd: number | null
   wallet: string
+  transaction: string
+  transaction_url: string | null
+  output: {
+    hash: string | null
+    status: number | null
+    type: string | null
+    bytes: number | null
+    shape: { fields: string[]; items?: number } | null
+    latency_ms: number | null
+  } | null
   created_at: string
 }
 
-export const SATISFACTION: Record<string, [number, string]> = {
-  satisfied: [5, "Satisfied"],
-  partly: [3, "Partly satisfied"],
-  not_satisfied: [1, "Not satisfied"],
+export const HELPFUL: Record<string, string> = {
+  satisfied: "Helpful",
+  partly: "Somewhat helpful",
+  not_satisfied: "Not helpful",
 }
 
 export const TASK_FILTERS: [string, string][] = [

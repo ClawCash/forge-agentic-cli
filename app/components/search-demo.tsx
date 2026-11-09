@@ -97,7 +97,8 @@ function Row({
       >
         <Stars value={result.stars} shown={rated} size="size-3" />
         <div className={`mt-1 text-[11px] ${workedTone(result.worked)}`}>
-          {result.worked}% worked
+          {result.estimate ? "~" : ""}
+          {result.worked}% likely
         </div>
       </div>
     </div>

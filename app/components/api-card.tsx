@@ -12,6 +12,12 @@ export function verdictOf(entry: LeaderboardEntry) {
   return VERDICTS[entry.verdict] ?? VERDICTS.unknown
 }
 
+// Marked as an estimate until enough different agents have reported.
+export function likelyToWork(entry: LeaderboardEntry) {
+  const share = Math.round(entry.works_for_task * 100)
+  return `${entry.verdict === "unknown" ? "~" : ""}${share}%`
+}
+
 export function ApiLogo({
   name,
   iconUrl,
@@ -79,8 +85,9 @@ export function ApiCard({
         <span className="font-mono font-medium text-ink">
           {entry.stars.toFixed(1)}
         </span>
-        <span className="ml-1.5">
-          {Math.round(entry.works_for_task * 100)}% worked
+        <span className="ml-0.5">
+          · {entry.buyers} {entry.buyers === 1 ? "agent" : "agents"} ·{" "}
+          {likelyToWork(entry)} likely to work
         </span>
         <span className="ml-auto font-mono text-faint">#{entry.rank}</span>
       </span>

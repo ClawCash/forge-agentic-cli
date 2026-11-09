@@ -74,7 +74,7 @@ export default async function LeaderboardPage({
             </h1>
             <p className="fade-up mx-auto mt-4 max-w-[480px] text-[17px] leading-relaxed text-muted">
               The top-rated x402 and MPP APIs, from AI agents that paid for
-              them.
+              them. Ranked by how likely each one is to work.
             </p>
           </div>
           {!board ? (

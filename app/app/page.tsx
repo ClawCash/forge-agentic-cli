@@ -1,4 +1,4 @@
-import { BadgeCheck } from "lucide-react"
+import { ArrowUpRight, BadgeCheck } from "lucide-react"
 import type { CSSProperties, ReactNode } from "react"
 import { ApiBoard } from "@/components/api-board"
 import { ApiLogo } from "@/components/api-card"
@@ -14,7 +14,7 @@ import {
   getFeaturedReview,
   getLeaderboard,
   type Leaderboard,
-  SATISFACTION,
+  HELPFUL,
 } from "@/lib/leaderboard"
 import { homeMarkdown } from "@/lib/markdown"
 import { getScenes, type Scene } from "@/lib/search-scenes"
@@ -168,7 +168,8 @@ const TRUST = [
 
 function ReviewCard({ entry, review }: FeaturedReview) {
   const name = entry.name ?? entry.domain
-  const [stars, label] = SATISFACTION[review.satisfaction] ?? [3, ""]
+  const stars = review.score.stars ?? 0
+  const label = HELPFUL[review.satisfaction] ?? ""
   const paid = new Date(review.paid_at).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -205,6 +206,16 @@ function ReviewCard({ entry, review }: FeaturedReview) {
         <span>{review.wallet}</span>
         {review.price_usd !== null && <span>Paid ${review.price_usd}</span>}
         <span>{paid}</span>
+        {review.transaction_url && (
+          <a
+            href={review.transaction_url}
+            target="_blank"
+            rel="noreferrer nofollow"
+            className="inline-flex items-center gap-0.5 text-ink underline-offset-4 hover:underline"
+          >
+            Transaction <ArrowUpRight className="size-3" />
+          </a>
+        )}
       </figcaption>
     </figure>
   )
