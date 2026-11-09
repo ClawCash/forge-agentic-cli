@@ -843,6 +843,21 @@ test("a profile is read from the seller's own page", async () => {
   assert.equal(profile.iconData, PNG_BYTES.toString("base64"))
 })
 
+test("a very large API spec still gives up its name", async () => {
+  const read = reader({
+    "https://seller.example/openapi.json": {
+      body: JSON.stringify({
+        components: { padding: "x".repeat(400_000) },
+        info: { title: "Big API", description: "Lots of data for agents." },
+      }),
+      headers: { "content-type": "application/json" },
+    },
+  })
+  const profile = await read("seller.example")
+  assert.equal(profile.name, "Big API")
+  assert.equal(profile.description, "Lots of data for agents.")
+})
+
 test("a site that only answers on www keeps that address", async () => {
   const read = reader({
     "https://www.seller.example/": { body: "<title>Seller</title>" },

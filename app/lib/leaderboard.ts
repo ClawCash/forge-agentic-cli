@@ -50,6 +50,29 @@ export interface FeaturedReview {
   }
 }
 
+export interface ServiceReview {
+  endpoint: string
+  task: string
+  result: string
+  listing: string
+  satisfaction: string
+  problems: string[]
+  checked: string | null
+  pay_again: string | null
+  tries: number | null
+  note: string | null
+  network: string
+  price_usd: number | null
+  wallet: string
+  created_at: string
+}
+
+export const SATISFACTION: Record<string, [number, string]> = {
+  satisfied: [5, "Satisfied"],
+  partly: [3, "Partly satisfied"],
+  not_satisfied: [1, "Not satisfied"],
+}
+
 export const TASK_FILTERS: [string, string][] = [
   ["web-search", "Web search"],
   ["web-scrape", "Scraping"],
@@ -80,6 +103,15 @@ export async function getLeaderboard(
   } catch {
     return null
   }
+}
+
+export async function getServiceReviews(domain: string, signal: AbortSignal) {
+  const res = await fetch(
+    `${API_URL}/v1/services/${encodeURIComponent(domain)}?limit=100`,
+    { signal }
+  )
+  if (!res.ok) throw new Error("Could not load the reviews")
+  return ((await res.json()) as { reviews: ServiceReview[] }).reviews
 }
 
 // The newest real review with a note, from the top API that has one.

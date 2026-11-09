@@ -57,6 +57,13 @@
       "when": 1794243689917,
       "tag": "0007_noisy_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794245725122,
+      "tag": "0008_retry_empty_profiles",
+      "breakpoints": true
     }
   ]
 }

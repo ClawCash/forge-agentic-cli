@@ -1,6 +1,7 @@
 import { BadgeCheck } from "lucide-react"
 import type { CSSProperties, ReactNode } from "react"
-import { ApiCard, ApiLogo } from "@/components/api-card"
+import { ApiBoard } from "@/components/api-board"
+import { ApiLogo } from "@/components/api-card"
 import { CopyPrompt } from "@/components/copy-prompt"
 import { OutcomeStory } from "@/components/outcome-story"
 import { Reveal } from "@/components/reveal"
@@ -13,6 +14,7 @@ import {
   getFeaturedReview,
   getLeaderboard,
   type Leaderboard,
+  SATISFACTION,
 } from "@/lib/leaderboard"
 import { homeMarkdown } from "@/lib/markdown"
 import { getScenes, type Scene } from "@/lib/search-scenes"
@@ -77,7 +79,10 @@ function TileGroup({
 
 function WorksWith() {
   return (
-    <Section className="border-t border-line bg-paper py-24 sm:py-28">
+    <Section
+      id="works-with"
+      className="border-t border-line bg-paper py-24 sm:py-28"
+    >
       <Reveal>
         <SectionHead
           title="Works with what you already run"
@@ -161,12 +166,6 @@ const TRUST = [
   ["Add once, use forever", "After setup, your agent checks and reviews."],
 ]
 
-const SATISFACTION: Record<string, [number, string]> = {
-  satisfied: [5, "Satisfied"],
-  partly: [3, "Partly satisfied"],
-  not_satisfied: [1, "Not satisfied"],
-}
-
 function ReviewCard({ entry, review }: FeaturedReview) {
   const name = entry.name ?? entry.domain
   const [stars, label] = SATISFACTION[review.satisfaction] ?? [3, ""]
@@ -213,7 +212,10 @@ function ReviewCard({ entry, review }: FeaturedReview) {
 
 function Trust({ featured }: { featured: FeaturedReview | null }) {
   return (
-    <Section className="border-t border-line bg-paper py-24 sm:py-32">
+    <Section
+      id="trust"
+      className="border-t border-line bg-paper py-24 sm:py-32"
+    >
       <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-20">
         <Reveal>
           <h2 className="font-display text-[clamp(30px,4.2vw,44px)] leading-[1.1] font-medium tracking-[-0.025em]">
@@ -254,13 +256,9 @@ function TopApis({ board }: { board: Leaderboard | null }) {
           line="The top-rated x402 and MPP APIs, from AI agents that paid for them."
         />
       </Reveal>
-      <div className="mx-auto mt-14 max-w-[780px] space-y-3">
-        {board.top.slice(0, 3).map((entry) => (
-          <Reveal key={entry.domain}>
-            <ApiCard entry={entry} showQuote={false} />
-          </Reveal>
-        ))}
-      </div>
+      <Reveal className="mt-14">
+        <ApiBoard entries={board.top.slice(0, 3)} />
+      </Reveal>
       <Reveal className="mt-9 text-center">
         <a
           href="/leaderboard"

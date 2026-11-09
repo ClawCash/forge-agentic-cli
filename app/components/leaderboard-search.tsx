@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react"
 import { type ReactNode, useState } from "react"
-import { ApiCard } from "@/components/api-card"
+import { ApiBoard } from "@/components/api-board"
 import type { LeaderboardEntry } from "@/lib/leaderboard"
 
 function matches(entry: LeaderboardEntry, words: string[]) {
@@ -49,10 +49,8 @@ export function LeaderboardSearch({
           No APIs match &ldquo;{query.trim()}&rdquo;.
         </p>
       ) : (
-        <div className="mx-auto mt-12 max-w-[780px] space-y-3">
-          {shown.map((entry) => (
-            <ApiCard key={entry.domain} entry={entry} />
-          ))}
+        <div className="mt-10">
+          <ApiBoard entries={shown} />
         </div>
       )}
     </>

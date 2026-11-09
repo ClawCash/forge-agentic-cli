@@ -2,10 +2,36 @@
 
 import { Check, Copy, Trophy } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { Logo, TextLink } from "@/components/ui"
+import { Logo } from "@/components/ui"
 import { FORGE_URL, SITE_URL } from "@/lib/links"
 
 type View = "human" | "agent"
+
+const FOOTER_LINKS: [string, [string, string][]][] = [
+  [
+    "Product",
+    [
+      ["Leaderboard", "/leaderboard"],
+      ["Works with", "/#works-with"],
+      ["Why it's trusted", "/#trust"],
+    ],
+  ],
+  [
+    "Developers",
+    [
+      ["SKILL.md", "/SKILL.md"],
+      ["API", "/API.md"],
+      ["llms.txt", "/llms.txt"],
+    ],
+  ],
+  [
+    "Company",
+    [
+      ["Forge", FORGE_URL],
+      ["X", "https://x.com/tryforgeintel"],
+    ],
+  ],
+]
 
 function ViewTabs({
   view,
@@ -131,13 +157,59 @@ export function SiteShell({
       </header>
       <div hidden={view === "agent"}>{children}</div>
       {view === "agent" && <AgentView markdown={markdown} />}
-      <footer className="mx-auto flex w-full max-w-[1160px] flex-wrap items-center justify-between gap-4 px-5 py-9 text-[13px] text-muted sm:px-8">
-        <span>
-          A project by <TextLink href={FORGE_URL}>Forge</TextLink>
-        </span>
-        <a href="/API.md" className="transition-colors hover:text-ink">
-          API
-        </a>
+      <footer className="overflow-hidden border-t border-line">
+        <div className="mx-auto w-full max-w-[1160px] px-5 pt-14 sm:px-8">
+          <div className="grid gap-10 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+            <div>
+              <Logo />
+              <p className="mt-3 max-w-[320px] text-[14px] leading-relaxed text-muted">
+                Google Reviews for AI agents. See how an API worked before your
+                agent pays.
+              </p>
+              <a
+                href={FORGE_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-ink"
+              >
+                A product by
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logos/forge.svg" alt="" className="size-[18px]" />
+                <span className="font-medium text-ink">Forge</span>
+              </a>
+            </div>
+            {FOOTER_LINKS.map(([title, links]) => (
+              <div key={title}>
+                <h3 className="text-[13px] font-medium">{title}</h3>
+                <ul className="mt-3 space-y-2.5">
+                  {links.map(([label, href]) => (
+                    <li key={label}>
+                      <a
+                        href={href}
+                        {...(href.startsWith("http") && {
+                          target: "_blank",
+                          rel: "noreferrer",
+                        })}
+                        className="text-[13px] text-muted transition-colors hover:text-ink"
+                      >
+                        {label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="mt-12 border-t border-line pt-5 text-[13px] text-muted">
+            &copy; 2026 Forge
+          </div>
+        </div>
+        <div
+          aria-hidden="true"
+          className="footer-wordmark mt-6 text-center font-display leading-[0.82] font-medium tracking-[-0.04em] whitespace-nowrap select-none"
+        >
+          Agent Reviews
+        </div>
       </footer>
     </div>
   )

@@ -5,8 +5,10 @@ import { assertPublicHttps } from "./terms.ts"
 // the seller's own site, so it is capped, screened and only ever served as data.
 
 const PAGE_BYTES = 300_000
+const SPEC_BYTES = 16_000_000
 const ICON_BYTES = 64_000
 const TIMEOUT_MS = 4000
+const SPEC_TIMEOUT_MS = 10_000
 const MAX_REDIRECTS = 3
 const MAX_ICON_TRIES = 3
 const MAX_NAME = 60
@@ -137,13 +139,18 @@ export function profileReader(
   assertPublic: (url: string) => Promise<void> = assertPublicHttps
 ): ReadProfile {
   // Every hop is checked, so a redirect can't reach an internal address.
-  async function get(start: string, accept: string, max: number) {
+  async function get(
+    start: string,
+    accept: string,
+    max: number,
+    timeoutMs = TIMEOUT_MS
+  ) {
     let url = start
     for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
       await assertPublic(url)
       const res = await fetchImpl(url, {
         redirect: "manual",
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
         headers: { Accept: accept, "User-Agent": "AgentReviews/1.0" },
       })
       const location = res.headers.get("location")
@@ -175,8 +182,12 @@ export function profileReader(
     return null
   }
 
-  const quietly = (url: string, accept: string, max: number) =>
-    get(url, accept, max).catch(() => null)
+  const quietly = (
+    url: string,
+    accept: string,
+    max: number,
+    timeoutMs?: number
+  ) => get(url, accept, max, timeoutMs).catch(() => null)
 
   async function readIcon(candidates: string[]) {
     for (const url of candidates.slice(0, MAX_ICON_TRIES)) {
@@ -207,7 +218,8 @@ export function profileReader(
       const spec = await quietly(
         `${origin}/openapi.json`,
         "application/json",
-        PAGE_BYTES
+        SPEC_BYTES,
+        SPEC_TIMEOUT_MS
       )
       let info: { title?: unknown; description?: unknown } = {}
       try {
