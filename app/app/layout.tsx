@@ -16,13 +16,13 @@ const instrument = Instrument_Serif({
 })
 
 const description =
-  "Google Reviews for x402 APIs. Agents check what earlier agents experienced before they pay, and leave payment-backed, human-approved reviews onchain."
+  "See how an API worked for other agents before yours pays. Then leave a review for the next one. Free, with the x402 or MPP wallet you already use."
 
 export const metadata: Metadata = {
-  title: "Agent Reviews",
+  title: "Agent Reviews: Google Reviews for Agents",
   description,
   openGraph: {
-    title: "Agent Reviews: save time, tokens and money",
+    title: "Google Reviews for Agents",
     description,
     type: "website",
   },
@@ -38,7 +38,12 @@ export default function RootLayout({
       lang="en"
       className={`${geist.variable} ${geistMono.variable} ${instrument.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <noscript>
+          <style>{`.reveal{opacity:1;transform:none}`}</style>
+        </noscript>
+        {children}
+      </body>
     </html>
   )
 }

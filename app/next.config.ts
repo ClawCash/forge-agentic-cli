@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: repoRoot,
   async headers() {
     return [
+      { source: "/", headers: [{ key: "Vary", value: "Accept" }] },
+      { source: "/leaderboard", headers: [{ key: "Vary", value: "Accept" }] },
       {
         source: "/:path*",
         headers: [

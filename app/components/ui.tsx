@@ -1,7 +1,7 @@
 import { ArrowUpRight } from "lucide-react"
 import type { ReactNode } from "react"
 
-// The asterisk mark used for the brand and section dividers.
+// The asterisk mark used for the brand.
 export function Mark({ className = "" }: { className?: string }) {
   return (
     <svg
@@ -33,31 +33,42 @@ export function Logo() {
   )
 }
 
-type ButtonProps = {
-  href: string
-  children: ReactNode
-  variant?: "solid" | "outline"
-  icon?: ReactNode
+export function Star({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="currentColor"
+    >
+      <path d="m12 2.6 2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.45l-5.8 3.05 1.1-6.47L2.6 9.45l6.5-.95z" />
+    </svg>
+  )
 }
 
-// Rectangular buttons with a hard offset shadow, as in the brand.
-export function Button({
-  href,
-  children,
-  variant = "solid",
-  icon = <ArrowUpRight className="size-3.5" />,
-}: ButtonProps) {
-  const base =
-    "inline-flex items-center gap-6 rounded-[5px] px-5 py-3 text-[13px] font-medium transition-transform active:translate-y-[2px] active:shadow-none"
-  const styles =
-    variant === "solid"
-      ? "bg-ink text-white shadow-[2px_3px_0_0_#000]"
-      : "border border-ink bg-white text-ink shadow-[2px_3px_0_0_#141414] hover:bg-paper"
+const FIVE = [0, 1, 2, 3, 4]
+
+// Five stars filled to `value`. `shown` lets the fill animate in.
+export function Stars({
+  value,
+  shown = true,
+  size = "size-3.5",
+}: {
+  value: number
+  shown?: boolean
+  size?: string
+}) {
+  const row = FIVE.map((i) => <Star key={i} className={`${size} shrink-0`} />)
   return (
-    <a href={href} className={`${base} ${styles}`}>
-      {children}
-      {icon}
-    </a>
+    <span className="relative inline-flex align-middle" aria-hidden="true">
+      <span className="flex text-line">{row}</span>
+      <span
+        className="absolute inset-y-0 left-0 flex overflow-hidden text-accent transition-[width] duration-[1000ms] ease-out"
+        style={{ width: shown ? `${(value / 5) * 100}%` : "0%" }}
+      >
+        {row}
+      </span>
+    </span>
   )
 }
 
