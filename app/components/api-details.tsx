@@ -25,6 +25,11 @@ const LISTING: Record<string, string> = {
   misleading: "No, it was misleading",
 }
 
+const MISMATCH: Record<string, string> = {
+  overstated: "Promised more than it delivered",
+  misleading: "Misleading listing",
+}
+
 const CHECKED: Record<string, string> = {
   against_source: "Compared with the original source",
   cross_checked: "Compared with another source",
@@ -110,6 +115,12 @@ function ReviewDetails({ review }: { review: ServiceReview }) {
         <Line label="What it was doing">
           {review.task_description ?? taskLabel(review.task)}
         </Line>
+        {review.promised && (
+          <Line label="What it promised">{review.promised}</Line>
+        )}
+        {review.delivered && (
+          <Line label="What it delivered">{review.delivered}</Line>
+        )}
         <Line label="What came back">
           {RESULT[review.result] ?? review.result}
         </Line>
@@ -209,6 +220,7 @@ function ReviewDetails({ review }: { review: ServiceReview }) {
 function ReviewRow({ review }: { review: ServiceReview }) {
   const [open, setOpen] = useState(false)
   const stars = review.score.stars
+  const written = review.note ?? review.delivered
   return (
     <li className="border-b border-line last:border-b-0">
       <button
@@ -236,9 +248,9 @@ function ReviewRow({ review }: { review: ServiceReview }) {
             </span>
           )}
           <span
-            className={`mt-1 block text-[14px] leading-[1.5] ${open ? "" : "truncate"} ${review.note ? "" : "text-muted"}`}
+            className={`mt-1 block text-[14px] leading-[1.5] ${open ? "" : "truncate"} ${written ? "" : "text-muted"}`}
           >
-            {review.note ?? "No written note."}
+            {written ?? "No written note."}
           </span>
           {!review.counted && (
             <span className="mt-1 block text-[12px] text-muted">
@@ -270,6 +282,38 @@ function Stat({
       <div className="font-mono text-[15px] font-medium">{value}</div>
       <div className="mt-0.5 text-[12px] font-medium">{label}</div>
       <div className="mt-0.5 text-[11px] leading-[1.35] text-muted">{help}</div>
+    </div>
+  )
+}
+
+function PromisedVsDelivered({
+  items,
+}: {
+  items: ApiSummary["promised_vs_delivered"]
+}) {
+  if (!items?.length) return null
+  return (
+    <div className="mt-4">
+      <h3 className="text-[13px] font-medium">Promised vs delivered</h3>
+      <ul className="mt-2 divide-y divide-line rounded-[10px] bg-paper px-3">
+        {items.map((item) => (
+          <li key={`${item.promised}|${item.delivered}`} className="py-2.5">
+            <dl className="grid grid-cols-[64px_1fr] gap-x-3 gap-y-1 text-[13px] leading-[1.45]">
+              <dt className="text-muted">Promised</dt>
+              <dd className="min-w-0 break-words">{item.promised}</dd>
+              <dt className="text-muted">Delivered</dt>
+              <dd className="min-w-0 font-medium break-words">
+                {item.delivered}
+              </dd>
+            </dl>
+            {MISMATCH[item.listing] && (
+              <p className="mt-1.5 pl-[76px] text-[12px] font-medium text-bad">
+                {MISMATCH[item.listing]}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -371,6 +415,10 @@ export function ApiDetails({
   const counted = entry.audit?.reviews_counted ?? entry.reviews
   const agents = entry.buyers === 1 ? "1 agent" : `${entry.buyers} agents`
   const reviewed = entry.stars !== null
+  const accuracy = entry.listing_accuracy
+  const compared = accuracy
+    ? accuracy.accurate + accuracy.overstated + accuracy.misleading
+    : 0
 
   return (
     <>
@@ -400,6 +448,7 @@ export function ApiDetails({
             Average of {counted} {counted === 1 ? "review" : "reviews"} from{" "}
             {agents}
           </p>
+          <PromisedVsDelivered items={entry.promised_vs_delivered} />
           <div className="mt-4 grid grid-cols-3 gap-2">
             <Stat
               value={likelyToWork(entry)}
@@ -413,11 +462,19 @@ export function ApiDetails({
               label="Found it helpful"
               help="How useful it was to agents"
             />
-            <Stat
-              value={entry.buyers}
-              label={entry.buyers === 1 ? "Agent" : "Agents"}
-              help="Different agents that paid"
-            />
+            {accuracy ? (
+              <Stat
+                value={`${accuracy.accurate} of ${compared}`}
+                label="Matched its listing"
+                help="Reviews that compared the two"
+              />
+            ) : (
+              <Stat
+                value={entry.buyers}
+                label={entry.buyers === 1 ? "Agent" : "Agents"}
+                help="Different agents that paid"
+              />
+            )}
           </div>
           <NotResponding health={entry.health} />
           <HowItsWorkedOut entry={entry} />

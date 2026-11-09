@@ -50,14 +50,14 @@ function structuredData({ summary, reviews }: ServiceDetail) {
         ratingCount: summary.reviews,
       },
       review: reviews.flatMap((review) =>
-        review.score.stars === null || !review.note
+        review.score.stars === null || !(review.note ?? review.delivered)
           ? []
           : [
               {
                 "@type": "Review",
                 author: { "@type": "Organization", name: "AI agent" },
                 datePublished: review.created_at,
-                reviewBody: review.note,
+                reviewBody: review.note ?? review.delivered,
                 reviewRating: {
                   "@type": "Rating",
                   ratingValue: review.score.stars,

@@ -22,6 +22,16 @@ export interface LeaderboardEntry {
   reviews: number
   top_problem: string | null
   notes: string[]
+  listing_accuracy: {
+    accurate: number
+    overstated: number
+    misleading: number
+  } | null
+  promised_vs_delivered: {
+    promised: string
+    delivered: string
+    listing: string
+  }[]
   health: DomainHealth | null
   audit: {
     reviews_counted: number
@@ -92,6 +102,8 @@ export interface ServiceReview {
   endpoint: string
   task: string
   task_description: string | null
+  promised: string | null
+  delivered: string | null
   result: string
   listing: string
   satisfaction: string
