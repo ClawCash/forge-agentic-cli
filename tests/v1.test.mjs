@@ -1738,6 +1738,31 @@ test("a brief says when an unreviewed API has stopped answering", async () => {
   assert.doesNotMatch(brief.text, /get_api_reviews/)
 })
 
+test("a brief finds reviews filed under a company's API host", async () => {
+  const { app, store } = await setup()
+  await store.insert(row({ domain: "api.aisa.one" }))
+  const brief = await (await askBrief(app, ["aisa.one"])).json()
+  assert.equal(brief.reviewed, 1)
+  assert.match(brief.text, /aisa\.one: 5\/5/)
+})
+
+test("a brief prefers reviews of the exact domain listed", async () => {
+  const { app, store } = await setup()
+  await store.insert(
+    row({ domain: "aisa.one", result: "none", satisfaction: "not_satisfied" })
+  )
+  await store.insert(row({ domain: "api.aisa.one" }))
+  const brief = await (await askBrief(app, ["aisa.one"])).json()
+  assert.match(brief.text, /aisa\.one: 0\/5/)
+})
+
+test("a brief doesn't match a lookalike domain", async () => {
+  const { app, store } = await setup()
+  await store.insert(row({ domain: "notaisa.one" }))
+  const brief = await (await askBrief(app, ["aisa.one"])).json()
+  assert.equal(brief.reviewed, 0)
+})
+
 test("a brief with nothing to say is one line", async () => {
   const { app } = await setup()
   const brief = await (await askBrief(app, ["nobody.example"])).json()

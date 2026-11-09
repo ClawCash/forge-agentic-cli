@@ -480,20 +480,24 @@ export function v1Routes(deps: V1Deps) {
     if (domains.length === 0) {
       return c.json({ error: `Pass 1 to ${MAX_BRIEF_DOMAINS} domains` }, 400)
     }
-    const [rows, health, prior] = await Promise.all([
+    const [rows, subdomainRows, health, prior] = await Promise.all([
       deps.store.listByDomains(domains),
+      deps.store.listBySubdomains(domains),
       deps.store.listHealthByDomains(domains),
       priorFor(undefined),
     ])
+    // A directory can list a company's site while reviews name its API host.
+    const reviewsOf = (domain: string) => {
+      const exact = rows.filter((row) => row.domain === domain)
+      return exact.length > 0
+        ? exact
+        : subdomainRows.filter((row) => row.domain.endsWith(`.${domain}`))
+    }
     return c.json(
       brief(
         domains.map((domain) => ({
           domain,
-          rating: rate(
-            rows.filter((row) => row.domain === domain),
-            { domain, path: "" },
-            prior
-          ),
+          rating: rate(reviewsOf(domain), { domain, path: "" }, prior),
           down:
             domainHealth(health.filter((row) => row.domain === domain))
               ?.status === "down",

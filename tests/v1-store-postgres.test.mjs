@@ -145,6 +145,17 @@ test(
         client: "test",
       })
       assert.equal((await store.listUsage()).length, 1)
+      assert.equal((await store.listBySubdomains(["enrich.dev"])).length, 0)
+      await store.insert({
+        ...review,
+        id: "rev_sub",
+        domain: "api.stableenrich.dev",
+        paymentReference: "eip155:8453:0xsub",
+      })
+      assert.equal(
+        (await store.listBySubdomains(["stableenrich.dev"])).length,
+        1
+      )
     } finally {
       await store?.close()
       await admin.unsafe(`drop database if exists ${database} with (force)`)

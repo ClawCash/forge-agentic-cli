@@ -1,4 +1,4 @@
-import { desc, eq, inArray, lt, sql } from "drizzle-orm"
+import { desc, eq, inArray, like, lt, or, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import postgres from "postgres"
@@ -32,6 +32,7 @@ export class PaymentAlreadyReviewedError extends Error {
 export interface ApiReviewStore {
   insert(review: NewApiReview): Promise<ApiReview>
   listByDomains(domains: string[]): Promise<ApiReview[]>
+  listBySubdomains(domains: string[]): Promise<ApiReview[]>
   listByTask(task: string): Promise<ApiReview[]>
   usedReferences(references: string[]): Promise<Set<string>>
   // Records a proof as spent. False if it had already been used.
@@ -82,6 +83,20 @@ export async function postgresApiReviewStore(
         throw error
       }
     },
+    listBySubdomains: (domains) =>
+      domains.length
+        ? db
+            .select()
+            .from(apiReviews)
+            .where(
+              or(
+                ...domains.map((domain) =>
+                  like(apiReviews.domain, `%.${domain}`)
+                )
+              )
+            )
+            .orderBy(desc(apiReviews.createdAt))
+        : Promise.resolve([]),
     listByDomains: (domains) =>
       domains.length
         ? db
@@ -262,6 +277,12 @@ export function memoryApiReviewStore(): ApiReviewStore {
       rows.push(row)
       return row
     },
+    listBySubdomains: async (domains) =>
+      newestFirst(
+        rows.filter((row) =>
+          domains.some((domain) => row.domain.endsWith(`.${domain}`))
+        )
+      ),
     listByDomains: async (domains) =>
       newestFirst(rows.filter((row) => domains.includes(row.domain))),
     listByTask: async (task) =>
