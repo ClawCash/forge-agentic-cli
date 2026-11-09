@@ -1,0 +1,98 @@
+{
+ "token-price": [
+  {
+   "url": "https://crypto.apitoll.cloud/v1/crypto/price",
+   "price_usd": 0.001,
+   "description": "Latest crypto token prices by ticker symbol, CoinGecko id, or chain:ad",
+   "method": "GET"
+  },
+  {
+   "url": "https://coingecko.use.x402atlas.com/price",
+   "price_usd": 0.005,
+   "description": "Crypto token price in USD, EUR and more \u2014 real-time spot prices for on",
+   "method": "GET"
+  },
+  {
+   "url": "https://api.zkrobotics.fr/x402/crypto/price",
+   "price_usd": 0.002,
+   "description": "Crypto token price in USD: live price of ETH, BTC (cbBTC), DAI, AERO o",
+   "method": "GET"
+  },
+  {
+   "url": "https://api.anchor-x402.com/v1/price/token",
+   "price_usd": 0.001,
+   "description": "USD token price (POST wrapper, body: {symbol} or {chain, contract}) \u2014 ",
+   "method": "POST"
+  },
+  {
+   "url": "https://x402-seller-pmlm.onrender.com/price",
+   "price_usd": 0.001,
+   "description": "Crypto token price: live USD price, 24h change, total supply and FDV f",
+   "method": "GET"
+  }
+ ],
+ "weather": [
+  {
+   "url": "https://agent-data-tools.revmesh2074.workers.dev/weather/forecast",
+   "price_usd": 0.002,
+   "description": "Weather forecast by city name or coordinates: current temperature, con",
+   "method": "GET"
+  },
+  {
+   "url": "https://netintel.dev/weather/current",
+   "price_usd": 0.002,
+   "description": "Current weather for any city or lat/lon worldwide, plus a 3-day foreca",
+   "method": "GET"
+  },
+  {
+   "url": "https://bess-x402.onrender.com/v1/geo/weather",
+   "price_usd": 0.003,
+   "description": "Current weather and a daily forecast (up to 9 days) for any city, addr",
+   "method": "GET"
+  },
+  {
+   "url": "https://agentsvc.io/api/v1/proxy/weather",
+   "price_usd": 0.002,
+   "description": "Weather forecast and current weather for any city or lat,lon worldwide",
+   "method": "POST"
+  },
+  {
+   "url": "https://apiacre.com/v1/data/current-weather",
+   "price_usd": 0.002,
+   "description": "Get one current weather snapshot for a city/locality name or exact coo",
+   "method": "POST"
+  }
+ ],
+ "web-scrape": [
+  {
+   "url": "https://apexfaucet.xyz/api/x402/page-markdown",
+   "price_usd": 0.002,
+   "description": "HTML to Markdown: any web page, JavaScript rendered, as clean Markdown",
+   "method": "GET"
+  },
+  {
+   "url": "https://agent-data-tools.revmesh2074.workers.dev/extract",
+   "price_usd": 0.002,
+   "description": "Scrape website page to Markdown. Fetch any public web page URL and get",
+   "method": "GET"
+  },
+  {
+   "url": "https://agentsvc.io/api/v1/proxy/web-scrape",
+   "price_usd": 0.0015,
+   "description": "Web page to markdown: read any web page (URL) as clean, LLM-ready Mark",
+   "method": "POST"
+  },
+  {
+   "url": "https://shop.lordevo.com/api/quick/page-markdown",
+   "price_usd": 0.002,
+   "description": "URL to Markdown web scraper: read one public web page as clean, LLM-re",
+   "method": "GET"
+  },
+  {
+   "url": "https://api.stablecoingateways.com/v1/page-to-markdown",
+   "price_usd": 0.002,
+   "description": "Web page to markdown: give a public URL, get its main content as clean",
+   "method": "GET"
+  }
+ ]
+}

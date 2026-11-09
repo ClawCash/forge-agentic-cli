@@ -1,0 +1,46 @@
+[
+ {
+  "id": "seed-plain",
+  "phase": "seed",
+  "kind": "plain",
+  "code": "RVW-4131E73C",
+  "url": "https://reviews.forgeintel.co/eval/a08f388ea667.html"
+ },
+ {
+  "id": "seed-long",
+  "phase": "seed",
+  "kind": "long",
+  "code": "RVW-941760F4",
+  "url": "https://reviews.forgeintel.co/eval/4cc7c71afb43.html"
+ },
+ {
+  "id": "seed-hindi",
+  "phase": "seed",
+  "kind": "hindi",
+  "code": "RVW-481B3ACB",
+  "url": "https://reviews.forgeintel.co/eval/5ac862582c0a.html",
+  "language": "hi"
+ },
+ {
+  "id": "test-plain",
+  "phase": "test",
+  "kind": "plain",
+  "code": "RVW-E5350F87",
+  "url": "https://reviews.forgeintel.co/eval/979327e1b2c1.html"
+ },
+ {
+  "id": "test-long",
+  "phase": "test",
+  "kind": "long",
+  "code": "RVW-F43A9F74",
+  "url": "https://reviews.forgeintel.co/eval/5c842a0635ce.html"
+ },
+ {
+  "id": "test-hindi",
+  "phase": "test",
+  "kind": "hindi",
+  "code": "RVW-5954D46D",
+  "url": "https://reviews.forgeintel.co/eval/e667a3bc7fbb.html",
+  "language": "hi"
+ }
+]
