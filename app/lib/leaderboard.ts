@@ -1,5 +1,10 @@
 import { API_URL } from "@/lib/links"
 
+export interface DomainHealth {
+  status: string
+  checked_at: string
+}
+
 export interface LeaderboardEntry {
   rank: number
   domain: string
@@ -17,6 +22,7 @@ export interface LeaderboardEntry {
   reviews: number
   top_problem: string | null
   notes: string[]
+  health: DomainHealth | null
   audit: {
     reviews_counted: number
     agents: number
@@ -26,6 +32,17 @@ export interface LeaderboardEntry {
     baseline_weight: number
     baseline_source: "domain" | "task"
   } | null
+}
+
+// One API's summary. It can have no reviews yet, unlike a leaderboard entry.
+export type ApiSummary = Omit<
+  LeaderboardEntry,
+  "rank" | "stars" | "works_for_task"
+> & { stars: number | null; works_for_task: number | null }
+
+export interface ServiceDetail {
+  summary: ApiSummary
+  reviews: ServiceReview[]
 }
 
 export interface AgentSays {
@@ -146,6 +163,44 @@ export async function getServiceReviews(domain: string, signal: AbortSignal) {
   )
   if (!res.ok) throw new Error("Could not load the reviews")
   return ((await res.json()) as { reviews: ServiceReview[] }).reviews
+}
+
+export async function getService(
+  domain: string
+): Promise<ServiceDetail | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/v1/services/${encodeURIComponent(domain)}?limit=100`,
+      { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) }
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data.known) return null
+    return {
+      summary: {
+        domain: data.domain,
+        ...data.profile,
+        ...data.rating,
+        health: data.health,
+      },
+      reviews: data.reviews,
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function getDomains() {
+  try {
+    const res = await fetch(`${API_URL}/v1/domains`, {
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return []
+    return ((await res.json()) as { domains: { domain: string }[] }).domains
+  } catch {
+    return []
+  }
 }
 
 // The newest real review with a note, from the top API that has one.

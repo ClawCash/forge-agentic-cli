@@ -33,7 +33,10 @@ export function proxy(request: NextRequest) {
     url.pathname = "/SKILL.md"
     return NextResponse.redirect(url, 308)
   }
-  const target = MARKDOWN_PATHS[request.nextUrl.pathname]
+  const { pathname } = request.nextUrl
+  const target =
+    MARKDOWN_PATHS[pathname] ??
+    (/^\/s\/[^/]+$/.test(pathname) ? `${pathname}/md` : undefined)
   if (target && prefersMarkdown(request.headers.get("accept"))) {
     const url = request.nextUrl.clone()
     url.pathname = target
@@ -44,4 +47,6 @@ export function proxy(request: NextRequest) {
   return response
 }
 
-export const config = { matcher: ["/", "/leaderboard", "/skill.md"] }
+export const config = {
+  matcher: ["/", "/leaderboard", "/skill.md", "/s/:domain"],
+}

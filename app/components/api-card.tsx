@@ -1,5 +1,5 @@
 import { Stars } from "@/components/ui"
-import type { LeaderboardEntry } from "@/lib/leaderboard"
+import type { ApiSummary, LeaderboardEntry } from "@/lib/leaderboard"
 
 const VERDICTS: Record<string, [string, string]> = {
   use: ["Use", "bg-ok/10 text-ok"],
@@ -8,12 +8,15 @@ const VERDICTS: Record<string, [string, string]> = {
   unknown: ["New", "bg-paper text-muted"],
 }
 
-export function verdictOf(entry: LeaderboardEntry) {
+export function verdictOf(entry: Pick<ApiSummary, "verdict">) {
   return VERDICTS[entry.verdict] ?? VERDICTS.unknown
 }
 
 // Marked as an estimate until enough different agents have reported.
-export function likelyToWork(entry: LeaderboardEntry) {
+export function likelyToWork(
+  entry: Pick<ApiSummary, "verdict" | "works_for_task">
+) {
+  if (entry.works_for_task === null) return "n/a"
   const share = Math.round(entry.works_for_task * 100)
   return `${entry.verdict === "unknown" ? "~" : ""}${share}%`
 }
@@ -67,8 +70,13 @@ export function ApiCard({
           <span className="block truncate text-[14px] leading-[18px] font-medium tracking-[-0.01em]">
             {name}
           </span>
-          <span className="block truncate font-mono text-[11px] leading-4 text-muted">
-            {entry.domain}
+          <span className="flex items-center gap-1.5 font-mono text-[11px] leading-4 text-muted">
+            <span className="truncate">{entry.domain}</span>
+            {entry.health?.status === "down" && (
+              <span className="shrink-0 font-sans text-bad">
+                Not responding
+              </span>
+            )}
           </span>
         </span>
         <span
