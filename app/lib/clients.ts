@@ -18,17 +18,11 @@ export const AGENTS = [
   { name: "OpenCode", logo: "opencode.svg", url: "https://opencode.ai" },
 ]
 
-// What an agent might already be paying with. `url` is where to get the client:
-// a tile without one has no client to get yet. `height` evens out logos of very
+// What an agent might already be paying with. `url` is where to get the client.
+// `height` evens out logos of very
 // different shapes. `wordmark` logos already spell the name, so only the others
 // get it written beside them.
-export const CLIENTS: {
-  name: string
-  logo: string
-  height: number
-  wordmark?: boolean
-  url?: string
-}[] = [
+export const CLIENTS = [
   {
     name: "Coinbase MCP",
     logo: "coinbase.png",
@@ -36,14 +30,16 @@ export const CLIENTS: {
     url: "https://docs.cdp.coinbase.com/agentic-wallet/mcp/quickstart",
   },
   {
-    name: "Cloudflare",
-    logo: "cloudflare.svg",
-    height: 24,
+    name: "Coinbase awal",
+    logo: "coinbase.png",
+    height: 22,
+    url: "https://docs.cdp.coinbase.com/agentic-wallet/cli/welcome",
   },
   {
-    name: "Vercel",
-    logo: "vercel.svg",
-    height: 18,
+    name: "Tempo Wallet",
+    logo: "tempo.svg",
+    height: 22,
+    url: "https://tempo.xyz/developers/docs/cli",
   },
   {
     name: "AgentCash",
