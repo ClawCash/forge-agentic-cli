@@ -28,6 +28,9 @@ export type ReadTerms = (
   sample?: SampleRequest
 ) => Promise<PaymentTerms>
 
+// Looks up a directory's example request for one endpoint.
+export type FindListing = (url: string) => Promise<SampleRequest | undefined>
+
 // A review is filed against an endpoint and rolled up to its domain.
 export function locate(input: string) {
   const url = new URL(/^[a-z]+:\/\//i.test(input) ? input : `https://${input}`)
@@ -144,7 +147,31 @@ const MAX_SAMPLE_DEPTH = 4
 const SAMPLE_FRESH_MS = 24 * 60 * 60_000
 const MAX_CACHED_SAMPLES = 2000
 
-function sampleValue(schema: any, depth: number): unknown {
+const MAX_REF_HOPS = 8
+
+// Follows a "#/components/..." pointer within the same spec. Anything else,
+// including a pointer to another document, gives no schema.
+function deref(spec: any, node: any) {
+  for (let hop = 0; hop < MAX_REF_HOPS; hop++) {
+    if (typeof node?.$ref !== "string") return node
+    if (!node.$ref.startsWith("#/")) return undefined
+    node = node.$ref
+      .slice(2)
+      .split("/")
+      .map((key: string) => key.replace(/~1/g, "/").replace(/~0/g, "~"))
+      .reduce(
+        (at: any, key: string) =>
+          at && typeof at === "object" && Object.hasOwn(at, key)
+            ? at[key]
+            : undefined,
+        spec
+      )
+  }
+  return undefined
+}
+
+function sampleValue(spec: any, raw: any, depth: number): unknown {
+  const schema = deref(spec, raw)
   if (schema?.example !== undefined) return schema.example
   if (schema?.default !== undefined) return schema.default
   if (Array.isArray(schema?.enum)) return schema.enum[0]
@@ -157,21 +184,24 @@ function sampleValue(schema: any, depth: number): unknown {
   }
   if (schema?.type === "boolean") return false
   if (schema?.type === "array") {
-    return schema.minItems > 0 ? [sampleValue(schema.items, depth + 1)] : []
+    return schema.minItems > 0
+      ? [sampleValue(spec, schema.items, depth + 1)]
+      : []
   }
-  if (schema?.type === "object") return sampleObject(schema, depth + 1)
+  if (schema?.type === "object") return sampleObject(spec, schema, depth + 1)
   return "x"
 }
 
-function sampleObject(schema: any, depth = 0) {
+function sampleObject(spec: any, raw: any, depth = 0) {
   if (depth > MAX_SAMPLE_DEPTH) return {}
+  const schema = deref(spec, raw)
   const required: string[] = Array.isArray(schema?.required)
     ? schema.required
     : []
   return Object.fromEntries(
     required.map((name) => [
       name,
-      sampleValue(schema.properties?.[name], depth),
+      sampleValue(spec, schema.properties?.[name], depth),
     ])
   )
 }
@@ -182,25 +212,43 @@ function sampleRequest(spec: any, url: string) {
   const target = new URL(url)
   const route = spec?.paths?.[target.pathname]
   if (route?.post) {
-    const content = route.post.requestBody?.content?.["application/json"]
+    const content = deref(spec, route.post.requestBody)?.content?.[
+      "application/json"
+    ]
     if (!content) return null
+    const schema = deref(spec, content.schema)
     const body = JSON.stringify(
-      content.example ?? content.schema?.example ?? sampleObject(content.schema)
+      content.example ?? schema?.example ?? sampleObject(spec, schema)
     )
     return body.length <= MAX_SAMPLE_BYTES
       ? { url, method: "POST", body }
       : null
   }
   if (!Array.isArray(route?.get?.parameters)) return null
-  for (const parameter of route.get.parameters) {
+  for (const raw of route.get.parameters) {
+    const parameter = deref(spec, raw)
     if (parameter?.in === "query" && parameter.required) {
-      const value = parameter.example ?? sampleValue(parameter.schema, 0)
+      const value = parameter.example ?? sampleValue(spec, parameter.schema, 0)
       target.searchParams.set(parameter.name, String(value))
     }
   }
   return target.href.length <= MAX_SAMPLE_BYTES
     ? { url: target.href, method: "GET" }
     : null
+}
+
+// A sample may change the body or the query, never which endpoint is asked:
+// the terms that name the recipient have to come from the API under review.
+function forEndpoint(
+  sample: SampleRequest | null | undefined,
+  url: string
+): SampleRequest | undefined {
+  if (!sample) return undefined
+  try {
+    return locate(sample.url).url === locate(url).url ? sample : undefined
+  } catch {
+    return undefined
+  }
 }
 
 const FIELD_NAME = /^[\w.$\[\]-]{1,64}$/
@@ -281,7 +329,7 @@ export function advertisedReader(
 export function termsReader(
   fetcher: typeof fetch = fetch,
   assertPublic: (url: string) => Promise<void> = assertPublicHttps,
-  { specs = true }: { specs?: boolean } = {}
+  { specs = true, listings }: { specs?: boolean; listings?: FindListing } = {}
 ): ReadTerms {
   const cache = new Map<string, { at: number; terms: PaymentTerms }>()
   const specSamples = new Map<
@@ -344,9 +392,10 @@ export function termsReader(
     if (cached && Date.now() - cached.at < 300_000) return cached.terms
     try {
       await assertPublic(url)
-      if (listed) {
+      const given = forEndpoint(listed, url)
+      if (given) {
         // One request, when a directory has said what a valid call looks like.
-        const direct = await attempt(listed.url, listed.method, listed.body)
+        const direct = await attempt(given.url, given.method, given.body)
         if (direct.status === 402 || (direct.status ?? 0) >= 500) {
           if (direct.accepts.length > 0) {
             cache.set(url, { at: Date.now(), terms: direct })
@@ -357,14 +406,24 @@ export function termsReader(
       // Many paid routes only answer POST, and most return 402 before they
       // look at the body.
       const viaGet = await attempt(url, "GET")
-      let terms = viaGet
-      if (terms.status !== 402) terms = await attempt(url, "POST")
-      if (
-        specs &&
-        terms.status !== 402 &&
-        [viaGet, terms].some(rejectedInput)
-      ) {
-        const sample = await sampleFromSpec(url)
+      const viaPost =
+        viaGet.status === 402 ? viaGet : await attempt(url, "POST")
+      let terms = viaPost
+      // Some check their input before they quote, so they need a valid
+      // request: first one built from their own spec, then the example in
+      // their directory listing. The price and recipient still come from
+      // their own 402.
+      const rejected = [viaGet, viaPost].some(rejectedInput)
+      if (specs && rejected && terms.status !== 402) {
+        const sample = forEndpoint(await sampleFromSpec(url), url)
+        if (sample)
+          terms = await attempt(sample.url, sample.method, sample.body)
+      }
+      if (listings && !given && rejected && terms.status !== 402) {
+        const sample = forEndpoint(
+          await listings(url).catch(() => undefined),
+          url
+        )
         if (sample)
           terms = await attempt(sample.url, sample.method, sample.body)
       }

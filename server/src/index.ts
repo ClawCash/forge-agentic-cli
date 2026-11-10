@@ -13,7 +13,7 @@ import { chainFinder } from "./v1/chains.ts"
 import { mcpRoutes } from "./v1/mcp.ts"
 import { type V1Deps, v1Routes } from "./v1/routes.ts"
 import { memoryApiReviewStore, postgresApiReviewStore } from "./v1/store.ts"
-import { healthChecker } from "./v1/health.ts"
+import { healthChecker, listingFinder } from "./v1/health.ts"
 import { profileReader } from "./v1/profiles.ts"
 import { advertisedReader, termsReader } from "./v1/terms.ts"
 import { DEMO_APIS } from "./demo-apis.ts"
@@ -118,7 +118,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     baseRpcUrl: env.BASE_RPC_URL,
     findPayments: chainFinder(env),
     sendCode: resendSender(env),
-    readTerms: termsReader(),
+    readTerms: termsReader(undefined, undefined, {
+      listings: listingFinder(),
+    }),
     readAdvertised: advertisedReader(),
     readProfile: profileReader(),
   }

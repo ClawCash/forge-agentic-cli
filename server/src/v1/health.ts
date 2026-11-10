@@ -1,5 +1,6 @@
 import type { ApiReviewStore, EndpointHealth } from "./store.ts"
 import {
+  type FindListing,
   locate,
   type PaymentTerms,
   type ReadTerms,
@@ -17,6 +18,8 @@ const MAX_TARGETS = 200
 const MAX_PER_DOMAIN = 5
 const CONCURRENCY = 4
 const MAX_SAMPLE_BYTES = 16_000
+const LISTING_FRESH_MS = 60 * 60_000
+const MAX_CACHED_LISTINGS = 2000
 const DIRECTORY =
   "https://api.cdp.coinbase.com/platform/v2/x402/discovery/search"
 
@@ -73,6 +76,54 @@ export function listingSample(resource: any): SampleRequest | undefined {
       : undefined
   }
   return undefined
+}
+
+function listedAt(resource: any, url: string) {
+  if (typeof resource?.resource !== "string") return false
+  try {
+    return locate(resource.resource).url === url
+  } catch {
+    return false
+  }
+}
+
+// The directory's example request for one endpoint, for a seller that only
+// quotes a price for a valid request. Only a listing for exactly this endpoint
+// counts, and the example is only ever sent to that endpoint: the recipient
+// still comes from the seller's own 402, never from the directory.
+export function listingFinder(fetcher: typeof fetch = fetch): FindListing {
+  const cache = new Map<
+    string,
+    { at: number; sample: SampleRequest | undefined }
+  >()
+  return async (input) => {
+    const { url, domain } = locate(input)
+    const known = cache.get(url)
+    if (known && Date.now() - known.at < LISTING_FRESH_MS) return known.sample
+    let listing: any
+    // The full address usually ranks its own listing first. If similar
+    // endpoints from other sellers crowd it out, the domain narrows it down.
+    for (const query of [url, domain]) {
+      const res = await fetcher(
+        `${DIRECTORY}?${new URLSearchParams({ query, limit: "20" })}`,
+        {
+          headers: {
+            Accept: "application/json",
+            "User-Agent": "agent-reviews/1",
+          },
+          signal: AbortSignal.timeout(10_000),
+        }
+      )
+      if (!res.ok) throw new Error(`The directory answered ${res.status}`)
+      const body = (await res.json()) as { resources?: any[] }
+      listing = (body.resources ?? []).find((r) => listedAt(r, url))
+      if (listing) break
+    }
+    const sample = listing ? listingSample(listing) : undefined
+    if (cache.size >= MAX_CACHED_LISTINGS) cache.clear()
+    cache.set(url, { at: Date.now(), sample })
+    return sample
+  }
 }
 
 // Most-paid-for first, with a cap so one big catalog can't fill the list.

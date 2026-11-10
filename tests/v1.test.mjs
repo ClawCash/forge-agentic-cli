@@ -12,6 +12,7 @@ import {
   chooseTargets,
   healthChecker,
   healthStatus,
+  listingFinder,
   listingSample,
 } from "../server/src/v1/health.ts"
 import { profileReader } from "../server/src/v1/profiles.ts"
@@ -60,6 +61,8 @@ async function setup({
   readProfile,
   advertised,
   readAdvertised,
+  readTerms,
+  findPayments,
 } = {}) {
   const store = memoryApiReviewStore()
   const inbox = []
@@ -68,17 +71,19 @@ async function setup({
       store,
       baseUrl: BASE_URL,
       secret: "test-secret-test-secret-test-secret-00",
-      readTerms: async () => ({
-        live: true,
-        status: 402,
-        protocols: ["x402"],
-        accepts: [
-          { network: BASE, asset: USDC_BASE, payTo: SELLER, amount: "10000" },
-        ],
-        advertised,
-      }),
+      readTerms:
+        readTerms ??
+        (async () => ({
+          live: true,
+          status: 402,
+          protocols: ["x402"],
+          accepts: [
+            { network: BASE, asset: USDC_BASE, payTo: SELLER, amount: "10000" },
+          ],
+          advertised,
+        })),
       readAdvertised,
-      findPayments: async ({ wallet }) => paid(wallet),
+      findPayments: findPayments ?? (async ({ wallet }) => paid(wallet)),
       sendCode: async (email, code) => inbox.push({ email, code }),
       fetch: fetcher,
       readProfile,
@@ -1122,6 +1127,199 @@ test("a redirected or oversized spec is ignored", async () => {
     async () => {}
   )
   assert.equal((await oversized(PAID_POST)).status, 400)
+})
+
+test("a spec that describes its body in components still gives a valid request", async () => {
+  const { calls, read } = strictSeller({
+    spec: {
+      paths: {
+        "/v1/run": {
+          post: {
+            requestBody: { $ref: "#/components/requestBodies/Run" },
+          },
+        },
+      },
+      components: {
+        requestBodies: {
+          Run: {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/RunRequest" },
+              },
+            },
+          },
+        },
+        schemas: {
+          RunRequest: {
+            type: "object",
+            required: ["prompt", "size"],
+            properties: {
+              prompt: { type: "string" },
+              size: { $ref: "#/components/schemas/Size" },
+              model: { type: "string", default: "fast" },
+            },
+          },
+          Size: { enum: ["1K", "2K"] },
+        },
+      },
+    },
+    valid: (_, init) => init.body === '{"prompt":"x","size":"1K"}',
+  })
+  const terms = await read(PAID_POST)
+  assert.equal(terms.status, 402)
+  assert.equal(terms.accepts[0].payTo, SELLER)
+  assert.equal(calls.at(-1).body, '{"prompt":"x","size":"1K"}')
+})
+
+const PICKY = "https://picky.example/image/v1/generations"
+const LISTED_BODY = JSON.stringify({ prompt: "A paper airplane", size: "1K" })
+const OTHER_SELLER = "0x2222222222222222222222222222222222222222"
+const listed = (resource, body) => ({
+  resource,
+  extensions: { bazaar: { info: { input: { method: "POST", body } } } },
+})
+
+// Like PayPerWork: it checks the body before its paywall, so an empty POST
+// gets 400 and GET gets 405. It has no spec, but the directory lists it with
+// a valid example request. The directory also lists a sibling endpoint, whose
+// example must never be used for this one.
+function pickySeller() {
+  const sent = []
+  const fetcher = async (input, init = {}) => {
+    const url = String(input)
+    if (url.startsWith("https://api.cdp.coinbase.com/")) {
+      return Response.json({
+        resources: [
+          listed("https://picky.example/image/v1/edits", { prompt: "edit" }),
+          listed(PICKY, JSON.parse(LISTED_BODY)),
+        ],
+      })
+    }
+    if (url.endsWith("/openapi.json")) return new Response("", { status: 404 })
+    sent.push({ url, method: init.method, body: init.body })
+    if (url !== PICKY) return new Response("", { status: 404 })
+    if (init.method !== "POST") return new Response("", { status: 405 })
+    return init.body === LISTED_BODY
+      ? Response.json(QUOTE, { status: 402 })
+      : Response.json({ error: "prompt is required" }, { status: 400 })
+  }
+  const readTerms = termsReader(fetcher, async () => {}, {
+    listings: listingFinder(fetcher),
+  })
+  return { sent, fetcher, readTerms }
+}
+
+// What the chain knows: who paid whom, in which transaction. A payment only
+// counts toward the recipient the seller's own terms name.
+const chainOf =
+  (transfers) =>
+  async ({ wallet, target, transaction }) =>
+    transfers
+      .filter(
+        (t) =>
+          t.from.toLowerCase() === wallet.toLowerCase() &&
+          t.to.toLowerCase() === target.payTo.toLowerCase() &&
+          (!transaction || t.hash === transaction)
+      )
+      .map((t) =>
+        payment({
+          payTo: t.to,
+          transaction: t.hash,
+          reference: `${BASE}:${t.hash}`,
+        })
+      )
+
+const PICKY_HASH = `0x${"4a".repeat(32)}`
+
+test("a seller that checks input before its paywall can be reviewed by the wallet that paid it", async () => {
+  const account = newAccount()
+  const seller = pickySeller()
+  const { appFetch, store } = await setup({
+    readTerms: seller.readTerms,
+    findPayments: chainOf([
+      { from: account.address, to: SELLER, hash: PICKY_HASH },
+    ]),
+  })
+  const res = await post(x402Fetch(appFetch, account, { signIn: true }), {
+    ...REVIEW,
+    url: PICKY,
+    transaction: PICKY_HASH,
+  })
+  assert.equal(res.status, 201, await res.clone().text())
+  const [row] = await store.listByDomains(["picky.example"])
+  assert.equal(row.paymentReference, `${BASE}:${PICKY_HASH}`)
+  assert.equal(row.wallet, account.address.toLowerCase())
+  // The quote came from the seller itself, asked with its own listed example.
+  assert.deepEqual(seller.sent.at(-1), {
+    url: PICKY,
+    method: "POST",
+    body: LISTED_BODY,
+  })
+  assert.ok(!seller.sent.some((call) => call.body?.includes("edit")))
+})
+
+test("a payment to any other recipient still can't back a review", async () => {
+  const account = newAccount()
+  const seller = pickySeller()
+  const { appFetch } = await setup({
+    readTerms: seller.readTerms,
+    findPayments: chainOf([
+      { from: account.address, to: OTHER_SELLER, hash: PICKY_HASH },
+    ]),
+  })
+  const reviewing = x402Fetch(appFetch, account, { signIn: true })
+  for (const body of [
+    { ...REVIEW, url: PICKY, transaction: PICKY_HASH },
+    { ...REVIEW, url: PICKY },
+  ]) {
+    const res = await post(reviewing, body)
+    assert.equal(res.status, 403)
+    assert.match((await res.json()).error, /wallet that paid/)
+  }
+})
+
+test("only a listing for exactly this endpoint is used", async () => {
+  const { fetcher } = pickySeller()
+  const find = listingFinder(fetcher)
+  assert.equal((await find(PICKY)).body, LISTED_BODY)
+  assert.equal(
+    await find("https://picky.example/image/v1/variations"),
+    undefined
+  )
+  // A sample can't send the terms check to some other address either.
+  const calls = []
+  const read = termsReader(
+    async (url, init) => {
+      calls.push(String(url))
+      return Response.json({}, { status: 400 })
+    },
+    async () => {},
+    { specs: false }
+  )
+  await read(PAID_POST, {
+    url: "https://elsewhere.example/v1/run",
+    method: "POST",
+    body: "{}",
+  })
+  assert.ok(calls.every((url) => url === PAID_POST))
+})
+
+test("a directory that is down leaves the seller's answer as it was", async () => {
+  const read = termsReader(
+    async (url) =>
+      String(url).startsWith("https://api.cdp.coinbase.com/")
+        ? new Response("", { status: 503 })
+        : Response.json({}, { status: 400 }),
+    async () => {},
+    {
+      specs: false,
+      listings: listingFinder(async () => new Response("", { status: 503 })),
+    }
+  )
+  const terms = await read(PICKY)
+  assert.equal(terms.status, 400)
+  assert.deepEqual(terms.accepts, [])
+  assert.equal(terms.error, undefined)
 })
 
 test("a service's reviews can be read from a browser", async () => {
