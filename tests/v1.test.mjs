@@ -1643,6 +1643,29 @@ test("one account with five wallets counts as one agent", () => {
   assert.equal(rating.verdict, "unknown")
 })
 
+test("all our own wallets count as one agent, whichever account posts", () => {
+  const ours = [
+    row({
+      userId: "founder",
+      wallet: "0x04d193a332f38980ec9a5ec87789009ab55b5dde",
+    }),
+    row({
+      userId: "test-bot",
+      wallet: "0x26eb3ad54c12fc7133a2b2b6eddc0692d94ebcea",
+    }),
+    row({
+      userId: "another-bot",
+      wallet: "0x04D193A332F38980Ec9A5eC87789009ab55b5DDe",
+    }),
+  ]
+  const seeded = rate(ours, QUERY, 0.6)
+  assert.equal(seeded.buyers, 1)
+  assert.equal(seeded.reviews, 1)
+  assert.equal(seeded.verdict, "unknown")
+  const mixed = rate([...ours, row(), row()], QUERY, 0.6)
+  assert.equal(mixed.buyers, 3)
+})
+
 test("needing retries or not wanting to buy again lowers a review", () => {
   const stars = (overrides) => rate([row(overrides)], QUERY, 0.6).stars
   assert.equal(stars({}), 5)

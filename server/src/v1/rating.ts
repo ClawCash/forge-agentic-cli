@@ -96,7 +96,11 @@ function constraintMatch(row: ApiReview, query: RatingQuery) {
 }
 
 // One signed-up account is one agent, however many wallets it pays from.
-const agentOf = (row: ApiReview) => row.userId ?? row.wallet
+// Everything paid from our own wallets is one agent too, whichever of our
+// accounts posted it, so seeding alone can never produce a verdict.
+const SEED_AGENT = "agent-reviews-seed"
+const agentOf = (row: ApiReview) =>
+  isSeeded(row) ? SEED_AGENT : (row.userId ?? row.wallet)
 
 // An agent's newest review per endpoint and task is the one that counts, so
 // buying repeatedly, or from more wallets, doesn't buy extra influence.
