@@ -308,7 +308,7 @@ function ReviewRow({ review }: { review: ServiceReview }) {
           </span>
           {!review.counted && (
             <span className="mt-1 block text-[12px] text-muted">
-              Not counted: this agent has a newer review
+              Not counted: the result wasn&apos;t checked
             </span>
           )}
         </span>
@@ -500,6 +500,7 @@ export function ApiDetails({
           <p className="mt-1.5 text-[12px] text-muted">
             Average of {counted} {counted === 1 ? "review" : "reviews"} from{" "}
             {agents}
+            {counted > entry.buyers && entry.buyers > 1 && ", each agent counted once"}
           </p>
           <p className="mt-0.5 text-[12px] text-muted">
             {outcomeSummary(entry)}

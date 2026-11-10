@@ -24,7 +24,7 @@ import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
 import { type WalletProof, walletProver } from "./proof.ts"
 import {
-  latestPerAgent,
+  outcomeValue,
   type Rating,
   rate,
   reviewScore,
@@ -251,14 +251,16 @@ function reviewRecord(row: ApiReview) {
   }
 }
 
-function publicReview(row: ApiReview, counted: boolean) {
+function publicReview(row: ApiReview) {
   const record = reviewRecord(row)
   return {
     ...record,
     fingerprint: fingerprintOf(record),
     helpfulness: HELPFULNESS_OF[row.satisfaction] ?? row.satisfaction,
     score: reviewScore(row),
-    counted,
+    // Every review counts toward its agent's vote, unless nobody judged
+    // whether the result was right.
+    counted: outcomeValue(row) !== null,
     verified_payment: true,
     transaction_url: transactionUrl(row.network, record.transaction),
   }
@@ -616,6 +618,10 @@ export function v1Routes(deps: V1Deps) {
     }
     const urls = resources.map((r) => r.resource as string).filter(parseableUrl)
     const ratings = urls.length ? await check(urls, { task }) : []
+    // Within a verdict, most likely to work first. An unreviewed API ranks as
+    // a typical one for the task: above a bad review, below a good one.
+    const typical = await priorFor(task)
+    const chance = (reviews: Rating) => reviews.works_for_task ?? typical
     const results = ratings
       .map((rating, relevance) => {
         const { url, health, ...reviews } = rating
@@ -640,6 +646,7 @@ export function v1Routes(deps: V1Deps) {
           Number(a.health?.status === "down") -
             Number(b.health?.status === "down") ||
           rank(a.reviews as Rating) - rank(b.reviews as Rating) ||
+          chance(b.reviews as Rating) - chance(a.reviews as Rating) ||
           a.relevance - b.relevance
       )
       .slice(0, limit)
@@ -667,7 +674,6 @@ export function v1Routes(deps: V1Deps) {
     const prior = await priorFor(task)
     const path = endpoint?.replace(/\/+$/, "")
     const paths = [...new Set(rows.map((row) => row.path))]
-    const counted = new Set(latestPerAgent(rows).map((row) => row.id))
     const healthRows = await deps.store.listHealthByDomains([domain])
     const known = rows.length > 0 || healthRows.length > 0
     const profile = known
@@ -696,7 +702,7 @@ export function v1Routes(deps: V1Deps) {
           healthRows.find((row) => locate(row.url).path === p)
         ),
       })),
-      reviews: reviews.map((row) => publicReview(row, counted.has(row.id))),
+      reviews: reviews.map(publicReview),
     })
   })
 

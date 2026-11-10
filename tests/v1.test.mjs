@@ -407,7 +407,7 @@ test("reviews for the asked language count most", () => {
   assert.equal(hindi.matched, "enrichment, hi")
 })
 
-test("a wallet's newest review is the only one that counts", () => {
+test("an agent's reviews are averaged into one vote", () => {
   const wallet = `0x${"a".repeat(40)}`
   const old = new Date(Date.now() - 86_400_000)
   const rating = rate(
@@ -418,8 +418,24 @@ test("a wallet's newest review is the only one that counts", () => {
     QUERY,
     0.6
   )
-  assert.equal(rating.reviews, 1)
+  assert.equal(rating.reviews, 5)
   assert.equal(rating.buyers, 1)
+  // Four good calls aren't erased by one bad newest one.
+  assert.equal(rating.stars, 4)
+  // Five reviews from one agent carry one review's weight.
+  const single = rate([row({ wallet })], QUERY, 0.6)
+  assert.ok(
+    Math.abs(rating.audit.evidence_weight - single.audit.evidence_weight) <
+      0.01
+  )
+})
+
+test("an agent that reviews often doesn't outweigh one that reviews once", () => {
+  const busy = many(9, { userId: "busy", result: "none", satisfaction: "not_satisfied" })
+  const rating = rate([...busy, row({ userId: "once" })], QUERY, 0.6)
+  assert.equal(rating.buyers, 2)
+  assert.equal(rating.reviews, 10)
+  assert.equal(rating.stars, 2.5)
 })
 
 test("not_checked results don't count unless the user judged the outcome", () => {
@@ -562,6 +578,35 @@ test("search adds ratings to directory results and sinks the bad ones", async ()
   assert.equal(results[1].reviews.verdict, "avoid")
   assert.equal(results[1].price_usd, 0.01)
   assert.equal(results[1].payers_30d, 7)
+})
+
+test("search ranks a well-reviewed API above an unreviewed one, and that above a badly reviewed one", async () => {
+  const listing = (host) => ({
+    resource: `https://${host}/search`,
+    description: "Web search",
+    serviceName: host,
+    accepts: [{ amount: "10000", asset: USDC_BASE }],
+  })
+  const fetcher = async () =>
+    Response.json({
+      resources: [listing("new.example"), listing("weak.example"), listing("good.example")],
+    })
+  const { app, store } = await setup({ fetcher })
+  const review = (domain, overrides = {}) =>
+    store.insert(row({ domain, path: "/search", task: "web-search", ...overrides }))
+  await review("good.example")
+  await review("weak.example", { result: "none", satisfaction: "not_satisfied" })
+  const { results } = await (
+    await app.request("/v1/search?q=web+search&task=web-search")
+  ).json()
+  assert.deepEqual(
+    results.map((r) => r.reviews.verdict),
+    ["unknown", "unknown", "unknown"]
+  )
+  assert.deepEqual(
+    results.map((r) => new URL(r.url).hostname),
+    ["good.example", "new.example", "weak.example"]
+  )
 })
 
 test("probe reports live terms without paying", async () => {
@@ -1639,7 +1684,7 @@ test("one account with five wallets counts as one agent", () => {
   const rows = many(5, { userId: "one-account" })
   const rating = rate(rows, QUERY, 0.6)
   assert.equal(rating.buyers, 1)
-  assert.equal(rating.reviews, 1)
+  assert.equal(rating.reviews, 5)
   assert.equal(rating.verdict, "unknown")
 })
 
@@ -1660,7 +1705,7 @@ test("all our own wallets count as one agent, whichever account posts", () => {
   ]
   const seeded = rate(ours, QUERY, 0.6)
   assert.equal(seeded.buyers, 1)
-  assert.equal(seeded.reviews, 1)
+  assert.equal(seeded.reviews, 3)
   assert.equal(seeded.verdict, "unknown")
   const mixed = rate([...ours, row(), row()], QUERY, 0.6)
   assert.equal(mixed.buyers, 3)

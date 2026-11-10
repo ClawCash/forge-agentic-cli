@@ -102,16 +102,26 @@ const SEED_AGENT = "agent-reviews-seed"
 const agentOf = (row: ApiReview) =>
   isSeeded(row) ? SEED_AGENT : (row.userId ?? row.wallet)
 
-// An agent's newest review per endpoint and task is the one that counts, so
-// buying repeatedly, or from more wallets, doesn't buy extra influence.
-export function latestPerAgent(rows: ApiReview[]) {
-  const latest = new Map<string, ApiReview>()
-  for (const row of rows) {
-    const key = `${agentOf(row)}|${row.path}|${row.task}`
-    const seen = latest.get(key)
-    if (!seen || seen.createdAt < row.createdAt) latest.set(key, row)
+const voterOf = (row: ApiReview) => `${agentOf(row)}|${row.path}|${row.task}`
+
+// Each agent gets one vote per endpoint and task: the average of all its
+// reviews there, newer ones counting for more. Buying repeatedly, or from
+// more wallets, adds evidence without adding influence, and one bad call
+// doesn't erase an agent's earlier good ones.
+function onePerAgent(scored: Scored[]) {
+  const voters = new Map<string, Scored[]>()
+  for (const e of scored) {
+    const key = voterOf(e.row)
+    voters.set(key, [...(voters.get(key) ?? []), e])
   }
-  return [...latest.values()]
+  return [...voters.values()].flatMap((votes) => {
+    const total = votes.reduce((sum, e) => sum + e.weight, 0)
+    const vote = Math.max(...votes.map((e) => e.weight))
+    return votes.map((e) => ({
+      ...e,
+      weight: total > 0 ? (e.weight * vote) / total : 0,
+    }))
+  })
 }
 
 function score(rows: ApiReview[], query: RatingQuery, now: number) {
@@ -170,9 +180,19 @@ function median(values: number[]) {
   return sorted[Math.floor(sorted.length / 2)]
 }
 
-// The plain average of the reviews, which anyone can check by hand.
-const averageValue = (evidence: Scored[]) =>
-  evidence.reduce((sum, e) => sum + e.value, 0) / evidence.length
+// The plain average of each agent's own average, which anyone can check by
+// hand.
+function averageValue(evidence: Scored[]) {
+  const voters = new Map<string, number[]>()
+  for (const { row, value } of evidence) {
+    const key = voterOf(row)
+    voters.set(key, [...(voters.get(key) ?? []), value])
+  }
+  const votes = [...voters.values()].map(
+    (values) => values.reduce((sum, v) => sum + v, 0) / values.length
+  )
+  return votes.reduce((sum, v) => sum + v, 0) / votes.length
+}
 
 function summarize(evidence: Scored[], chance: number) {
   const weight = evidence.reduce((sum, e) => sum + e.weight, 0)
@@ -375,15 +395,16 @@ export function rate(
   prior: number,
   now = Date.now()
 ): Rating {
-  const current = latestPerAgent(rows)
   const sameTask = query.task
-    ? current.filter((row) => row.task === query.task)
-    : current
+    ? rows.filter((row) => row.task === query.task)
+    : rows
   // No review for this task yet: other tasks on the domain say little, but
   // they are better than nothing.
   const usingOtherTasks = sameTask.length === 0
-  const scored = score(usingOtherTasks ? current : sameTask, query, now).map(
-    (e) => (usingOtherTasks ? { ...e, weight: e.weight * 0.25 } : e)
+  const scored = onePerAgent(
+    score(usingOtherTasks ? rows : sameTask, query, now).map((e) =>
+      usingOtherTasks ? { ...e, weight: e.weight * 0.25 } : e
+    )
   )
   if (scored.length === 0) return EMPTY
 
