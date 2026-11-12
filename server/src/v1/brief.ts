@@ -103,7 +103,7 @@ export function brief(entries: BriefEntry[]) {
   return { text, reviewed, unreviewed }
 }
 
-// Every rating in one small file, so a hook can answer from disk and a search
+// Every rating in one small file, so the wrapper can answer from disk and a search
 // never waits on us.
 export function ratingsFile(entries: BriefEntry[], now = new Date()) {
   const rated: Record<string, string> = {}

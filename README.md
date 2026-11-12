@@ -77,8 +77,8 @@ marks the ones that have stopped answering. It can't see what happens after paym
 
 ## Ratings in the same call
 
-An optional hook adds one line per API to a wallet's search results in Claude Code, Codex, Cursor, Grok Build, Hermes
-and OpenCode. It answers from a local file of public ratings refreshed in the background, so nothing about a search leaves the machine and a search never waits on the service. See `app/public/HOOK.md`.
+An optional wrapper adds one line per API to a wallet's search results in any agent that uses MCP. It runs in front of
+the wallet's MCP server and passes everything else through unchanged. It answers from a local file of public ratings refreshed in the background, so nothing about a search leaves the machine and a search never waits on the service. See `app/public/WRAP.md`.
 
 ## Tamper-evident reviews
 
