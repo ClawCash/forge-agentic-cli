@@ -112,14 +112,12 @@ const CHECKS = {
     }),
   "AgentCash CLI": () =>
     ratedInShell(["npx", "-y", "agentcash@latest", "search", "web search"]),
-  "awal CLI": () =>
-    ratedInShell(["npx", "-y", "awal@latest", "x402", "bazaar", "search", "web search", "-k", "5"]),
   "pay.sh CLI": () =>
     ratedInShell(["npx", "-y", "@solana/pay", "skills", "search", "web search"]),
   "mppx CLI": () =>
     ratedInShell(["npx", "-y", "mppx", "services", "list", "-q", "search"]),
-  // Payments MCP answers only through its desktop wallet window, which can't
-  // run here, so the data its search returns is read directly.
+  // Payments MCP and awal search only through their desktop wallet apps,
+  // which can't run here, so the Coinbase data both return is read directly.
   "Coinbase Payments MCP data": async () =>
     found({
       tool_name: "mcp__payments-mcp__bazaar_search",
