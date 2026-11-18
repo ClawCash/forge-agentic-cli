@@ -20,7 +20,7 @@ const FOOTER_LINKS: [string, [string, string][]][] = [
     "Developers",
     [
       ["SKILL.md", "/SKILL.md"],
-      ["Search ratings", "/WRAP.md"],
+      ["Docs", "/docs"],
       ["npm package", "https://www.npmjs.com/package/402reviews"],
       ["API", "/API.md"],
       ["llms.txt", "/llms.txt"],
@@ -146,6 +146,12 @@ export function SiteShell({
             >
               <Trophy className="size-4 sm:hidden" />
               <span className="hidden sm:inline">Leaderboard</span>
+            </a>
+            <a
+              href="/docs"
+              className="text-[14px] text-muted transition-colors duration-150 hover:text-ink"
+            >
+              Docs
             </a>
             <a
               href="/SKILL.md"

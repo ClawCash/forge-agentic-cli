@@ -687,6 +687,10 @@ test("the same email keeps one account across signups", async () => {
   const a = await store.userForKey(hashKey(first.api_key))
   const b = await store.userForKey(hashKey(second.api_key))
   assert.equal(a.id, b.id)
+  assert.equal(first.existing_account, false)
+  assert.equal(first.note, undefined)
+  assert.equal(second.existing_account, true)
+  assert.match(second.note, /already had an account.*earlier keys still work/)
 })
 
 test("a wrong code is refused and five tries lock it", async () => {
@@ -2312,6 +2316,20 @@ test("a brief needs at least one real domain", async () => {
   const { app } = await setup()
   assert.equal((await askBrief(app, ["not a domain!"])).status, 400)
   assert.equal((await askBrief(app, "stableenrich.dev")).status, 400)
+})
+
+test("signup emails always come from 402reviews, at the configured address", async () => {
+  const { resendSender } = await import("../server/src/v1/accounts.ts")
+  for (const from of ["Agent Reviews <codes@example.com>", "codes@example.com"]) {
+    let sent
+    const send = resendSender(
+      { RESEND_API_KEY: "re_not_real", RESEND_FROM_EMAIL: from },
+      async (_url, init) => ((sent = JSON.parse(init.body)), Response.json({}))
+    )
+    await send("b@example.com", "123456")
+    assert.equal(sent.from, "402reviews <codes@example.com>")
+    assert.match(sent.subject, /^123456 is your 402reviews code$/)
+  }
 })
 
 test("a failed signup email reports why, without the key", async () => {

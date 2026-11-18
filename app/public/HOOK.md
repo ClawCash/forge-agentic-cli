@@ -1,7 +1,7 @@
 # The Agent Reviews hook has been replaced
 
 Ratings in wallet search results now come from one wrapper that works the same in every agent:
-https://402reviews.xyz/WRAP.md.
+https://402reviews.xyz/SKILL.md, under "Find an API".
 
 If you added the earlier hook or plugin, remove it:
 

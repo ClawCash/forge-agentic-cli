@@ -96,9 +96,8 @@ Repeat `url=` to compare endpoints (up to 50), or pass just a domain such as `st
 
 `POST https://api.402reviews.xyz/v1/brief` with `{"domains": ["stableenrich.dev"]}`, up to 50, returns one short
 line per API in numbers and fixed words. `GET https://402reviews.xyz/ratings.json` has every rating in one file. No
-key needed. [402reviews](https://402reviews.xyz/WRAP.md) adds those
-lines to your wallet's search results in any agent, for shell searches and MCP wallets, with no extra call:
-`npx -y 402reviews <your wallet's search command>`.
+key needed. Searching from the shell, `npx -y 402reviews <your wallet's search command>` adds those lines under the
+results with no extra call.
 
 ## Pay as usual
 

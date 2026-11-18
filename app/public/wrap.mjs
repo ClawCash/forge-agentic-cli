@@ -37,6 +37,7 @@ import { dirname, join } from "node:path"
 import { createInterface } from "node:readline"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
+const VERSION = "0.2.1"
 const RATINGS_URL =
   process.env.AGENT_REVIEWS_RATINGS_URL ??
   "https://402reviews.xyz/ratings.json"
@@ -373,25 +374,27 @@ function refreshInBackground() {
   }).unref()
 }
 
+// Downloads the ratings file. Throws if it can't, keeping the last good one.
 async function refresh() {
   const res = await fetch(RATINGS_URL, {
-    headers: { "User-Agent": "402reviews/0.2" },
+    headers: { "User-Agent": `402reviews/${VERSION}` },
     signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
   })
-  if (!res.ok) return
+  if (!res.ok) throw new Error(`${RATINGS_URL} returned ${res.status}`)
   const body = await res.text()
-  if (body.length > MAX_RATINGS_BYTES) return
+  if (body.length > MAX_RATINGS_BYTES) throw new Error("the file is too large")
   const ratings = JSON.parse(body)
   const usable =
     typeof ratings?.generated_at === "string" &&
     ratings.rated &&
     typeof ratings.rated === "object" &&
     Array.isArray(ratings.down)
-  if (!usable) return
+  if (!usable) throw new Error("the file isn't in the expected format")
   mkdirSync(dirname(RATINGS_FILE), { recursive: true })
   const partial = `${RATINGS_FILE}.${process.pid}`
   writeFileSync(partial, body)
   renameSync(partial, RATINGS_FILE)
+  return { rated: Object.keys(ratings.rated).length, asOf: ratings.generated_at }
 }
 
 // The wallet's search tools are told apart by the command or address that
@@ -657,18 +660,33 @@ if (isScript) {
   const mode = args[0] === "mcp" || args[0] === "run" ? args[0] : null
   const words = mode ? args.slice(1) : args
   if (args[0] === "refresh") {
-    refresh()
-      .catch(() => {})
-      .finally(() => {
-        process.exitCode = 0
-      })
-  } else if (words.length === 0 || /^(-h|--help)$/.test(args[0])) {
+    refresh().then(
+      ({ rated, asOf }) =>
+        process.stdout.write(
+          `402reviews: ratings updated, ${rated} rated APIs as of ${asOf}\n`
+        ),
+      (error) => {
+        process.stderr.write(
+          `402reviews: couldn't update the ratings: ${error.message}\n`
+        )
+        process.exitCode = 1
+      }
+    )
+  } else if (/^(-v|--version)$/.test(args[0] ?? "")) {
+    process.stdout.write(`${VERSION}\n`)
+  } else if (
+    words.length === 0 ||
+    /^(-h|--help)$/.test(args[0]) ||
+    words[0].startsWith("-")
+  ) {
     process.stderr.write(
       "Usage: 402reviews <wallet search command...>    ratings after a search run from the shell\n" +
+        "       402reviews refresh                        download the latest ratings\n" +
         "       402reviews mcp <wallet MCP server command or https URL>\n" +
-        "       402reviews refresh                        download the latest ratings\n"
+        "       402reviews --version\n" +
+        "Docs: https://docs.402reviews.xyz\n"
     )
-    process.exitCode = words.length === 0 ? 2 : 0
+    process.exitCode = /^(-h|--help)$/.test(args[0]) ? 0 : 2
   } else if (/^https?:\/\//i.test(words[0])) {
     // An address can only be an MCP server.
     try {

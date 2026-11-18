@@ -129,7 +129,7 @@ function WorksWith() {
             </code>
           </div>
           <a
-            href="/WRAP.md"
+            href="/docs#search-ratings"
             className="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium text-ink underline-offset-4 hover:underline"
           >
             How it works <ArrowUpRight className="size-3.5" />

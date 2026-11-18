@@ -26,6 +26,10 @@ const STARTS_PER_HOUR_PER_IP = 10
 export const hashKey = (key: string) =>
   createHash("sha256").update(key).digest("hex")
 
+// The address in RESEND_FROM_EMAIL, always shown as coming from 402reviews.
+export const senderOf = (from: string) =>
+  `402reviews <${/<([^>]+)>/.exec(from)?.[1] ?? from.trim()}>`
+
 export function resendSender(
   env: Record<string, string | undefined>,
   fetcher: typeof fetch = fetch
@@ -40,7 +44,7 @@ export function resendSender(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from,
+        from: senderOf(from),
         to: email,
         subject: `${code} is your 402reviews code`,
         text: `Your 402reviews code is ${code}.\n\nGive it to your agent to finish signing up. It expires in 10 minutes.\n\nIf you didn't ask for this, you can ignore this email.`,
@@ -135,13 +139,19 @@ export function accountRoutes(deps: {
       return c.json({ error: "That code is not right." }, 401)
     }
     await deps.store.deleteCode(email)
-    const user = await deps.store.upsertUser({ id: randomUUID(), email })
+    const id = randomUUID()
+    const user = await deps.store.upsertUser({ id, email })
     const apiKey = `ark_${randomBytes(32).toString("base64url")}`
     await deps.store.insertKey(hashKey(apiKey), user.id)
+    const existing = user.id !== id
     return c.json({
       api_key: apiKey,
       email: user.email,
       header: "X-Reviews-Key",
+      existing_account: existing,
+      ...(existing && {
+        note: "This email already had an account, so this is another key for the same account. Its reviews and settings carry over, and earlier keys still work.",
+      }),
     })
   })
 

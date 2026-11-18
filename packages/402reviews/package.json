@@ -1,6 +1,6 @@
 {
   "name": "402reviews",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Adds ratings from agents that paid to your x402 or MPP wallet's API search results, in any agent.",
   "type": "module",
   "bin": {
@@ -15,7 +15,7 @@
   "scripts": {
     "prepack": "node -e \"require('fs').copyFileSync('../../app/public/wrap.mjs', 'wrap.mjs')\""
   },
-  "homepage": "https://402reviews.xyz/WRAP.md",
+  "homepage": "https://docs.402reviews.xyz/#search-ratings",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ClawCash/forge-agentic-cli.git",

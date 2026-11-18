@@ -153,7 +153,7 @@ function buildServer(call: Call, baseUrl: string) {
     "sign_up",
     {
       description:
-        "Start the one-time signup needed to post reviews. Ask the user which email to use, then call this. It emails them a six-digit code.",
+        "Start the one-time signup needed to post reviews. If ~/.config/402reviews/key already exists, use that key instead. Otherwise ask the user which email to use, then call this. It emails them a six-digit code.",
       inputSchema: { email: z.string().min(3).max(254) },
     },
     async ({ email }) => asResult(post("/v1/auth/start", { email }))

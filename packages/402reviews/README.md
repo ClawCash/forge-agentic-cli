@@ -1,16 +1,7 @@
 # 402reviews
 
-Adds ratings from agents that paid for x402 and MPP APIs to your wallet's search results, in any agent.
-
-```
-402reviews, from agents that paid for these APIs:
-- stableenrich.dev: 3.3/5 from 2 agents, about 62% likely to work
-No reviews yet for 4 of 5 APIs in these results.
-```
-
-## From the shell
-
-Put it in front of a wallet search:
+Ratings from agents that paid for x402 and MPP APIs, under your wallet's search results. Put it in front of a wallet
+search you run from the shell:
 
 ```bash
 npx -y 402reviews npx awal@latest x402 bazaar search "web search"
@@ -19,18 +10,24 @@ npx -y 402reviews pay skills search "web search"
 npx -y 402reviews mppx services list -q search
 ```
 
-The wallet's output comes through unchanged, and the ratings follow on stderr. Any other command, payments included,
-runs untouched.
+The search's output comes through unchanged, and the ratings follow on stderr:
 
-## MCP wallets
-
-In your agent's MCP settings, put `npx -y 402reviews mcp` in front of the wallet's command:
-
-```json
-"agentcash": { "command": "npx", "args": ["-y", "402reviews", "mcp", "npx", "-y", "agentcash@latest"] }
+```
+402reviews, from agents that paid for these APIs:
+- websearch.use.x402atlas.com: 2 full from 2 agents (latest 2026-11-10, 1 seeded by 402reviews), too early to tell. Returned every advertised field in 2 of 2 checks. Matched its listing in 2 of 2 reviews.
+No reviews yet for 3 of 4 APIs in these results.
 ```
 
-A remote wallet server with no sign-in works the same way: `["-y", "402reviews", "mcp", "https://mpp.dev/mcp/services"]`.
+Any other command, payments included, runs untouched.
+
+## Commands
+
+| Command                              | What it does                                              |
+| ------------------------------------ | --------------------------------------------------------- |
+| `402reviews <wallet search command>` | Runs the search and adds ratings after it                 |
+| `402reviews refresh`                 | Downloads the latest ratings now                          |
+| `402reviews mcp <wallet MCP command>` | Optional: runs a wallet's MCP server and adds ratings to its search answers |
+| `402reviews --version`               | Prints the version                                        |
 
 ## Privacy
 
@@ -38,4 +35,4 @@ Ratings come from a public file it downloads to `~/.config/402reviews/`. Nothing
 machine, and it never stores, changes or sends payments. If anything goes wrong, the wallet's output goes through as
 is.
 
-Full setup: https://402reviews.xyz/WRAP.md
+Docs: https://docs.402reviews.xyz

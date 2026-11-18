@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 const MARKDOWN_PATHS: Record<string, string> = {
   "/": "/index.md",
   "/leaderboard": "/leaderboard.md",
+  "/docs": "/docs.md",
 }
 
 // True when the client ranks markdown at least as high as HTML, so browsers
@@ -33,7 +34,12 @@ export function proxy(request: NextRequest) {
     url.pathname = "/SKILL.md"
     return NextResponse.redirect(url, 308)
   }
-  const { pathname } = request.nextUrl
+  // docs.402reviews.xyz is the docs page of the same site.
+  const docsHost = request.headers.get("host")?.startsWith("docs.")
+  const pathname =
+    docsHost && request.nextUrl.pathname === "/"
+      ? "/docs"
+      : request.nextUrl.pathname
   const target =
     MARKDOWN_PATHS[pathname] ??
     (/^\/s\/[^/]+$/.test(pathname) ? `${pathname}/md` : undefined)
@@ -42,11 +48,18 @@ export function proxy(request: NextRequest) {
     url.pathname = target
     return NextResponse.rewrite(url)
   }
+  if (pathname !== request.nextUrl.pathname) {
+    const url = request.nextUrl.clone()
+    url.pathname = pathname
+    const response = NextResponse.rewrite(url)
+    response.headers.set("Vary", "Accept")
+    return response
+  }
   const response = NextResponse.next()
   if (target) response.headers.set("Vary", "Accept")
   return response
 }
 
 export const config = {
-  matcher: ["/", "/leaderboard", "/skill.md", "/s/:domain"],
+  matcher: ["/", "/leaderboard", "/docs", "/skill.md", "/s/:domain"],
 }

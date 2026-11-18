@@ -886,3 +886,30 @@ test("other commands don't download anything", async () => {
   assert.equal(result.code, 0)
   assert.equal(site.requests.length, 0)
 })
+
+test("--version prints the published package's version", async () => {
+  const { version } = JSON.parse(readFileSync("packages/402reviews/package.json", "utf8"))
+  for (const flag of ["--version", "-v"]) {
+    const result = await runWrapped([flag], { file: ratingsPath() })
+    assert.deepEqual(result, { code: 0, out: `${version}\n`, err: "" })
+  }
+})
+
+test("an unknown flag shows how to use it instead of running anything", async () => {
+  const result = await runWrapped(["--frobnicate"], { file: ratingsPath() })
+  assert.equal(result.code, 2)
+  assert.match(result.err, /^Usage: 402reviews/)
+  assert.equal((await runWrapped(["--help"], { file: ratingsPath() })).code, 0)
+})
+
+test("refresh says what it downloaded, or why it couldn't", async () => {
+  const file = ratingsPath()
+  const site = await fakeSite((res) => res.end(JSON.stringify(ratings())))
+  const ok = await runWrapped(["refresh"], { file, url: site.url })
+  site.close()
+  assert.equal(ok.code, 0)
+  assert.match(ok.out, /^402reviews: ratings updated, \d+ rated APIs as of /)
+  const failed = await runWrapped(["refresh"], { file: ratingsPath() })
+  assert.equal(failed.code, 1)
+  assert.match(failed.err, /^402reviews: couldn't update the ratings: /)
+})
