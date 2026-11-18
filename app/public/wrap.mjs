@@ -1,26 +1,27 @@
 #!/usr/bin/env node
-// Agent Reviews: adds ratings to your wallet's API search results, in any agent.
+// 402reviews: adds Agent Reviews ratings to your wallet's API search results,
+// in any agent. Published on npm as 402reviews.
 //
-// Put this in front of the command that starts your wallet's MCP server:
+// Put it in front of a wallet search you run from the shell:
 //
-//   node wrap.mjs npx -y agentcash@latest
-//   node wrap.mjs https://mpp.dev/mcp/services     (a remote server with no sign-in)
-//
-// It starts the wallet itself and passes every message through unchanged, with
-// one exception: when the wallet answers a search, it adds a few lines of
-// ratings for the APIs in the answer. It never stores, changes or sends payment
-// requests.
-//
-// For wallets you search from the shell, put `run` in front of the search:
-//
-//   node wrap.mjs run npx awal@latest x402 bazaar search "web search"
+//   npx -y 402reviews npx awal@latest x402 bazaar search "web search"
 //
 // The wallet's output comes through unchanged, and the ratings follow on
-// stderr. Any other command runs untouched.
+// stderr. Any other command, payments included, runs untouched.
 //
-// The ratings come from a local file of public ratings, refreshed in the
-// background with a plain download, so nothing about your searches leaves your
-// machine. If anything goes wrong, the wallet's answer goes through as is.
+// For a wallet that runs as an MCP server, put `mcp` and the server's command
+// or address after it, in your agent's MCP settings:
+//
+//   npx -y 402reviews mcp npx -y agentcash@latest
+//   npx -y 402reviews mcp https://mpp.dev/mcp/services   (a remote server with no sign-in)
+//
+// It passes every message through unchanged, with one exception: when the
+// wallet answers a search, it adds a few lines of ratings for the APIs in the
+// answer. It never stores, changes or sends payment requests.
+//
+// The ratings come from a local file of public ratings, kept fresh with a
+// plain download, so nothing about your searches leaves your machine. If
+// anything goes wrong, the wallet's answer goes through as is.
 
 import { spawn } from "node:child_process"
 import {
@@ -349,6 +350,10 @@ function loadRatings() {
   }
 }
 
+const usable = (ratings) =>
+  Boolean(ratings?.rated && ratings.generated_at) &&
+  Date.now() - Date.parse(ratings.generated_at) <= TOO_OLD_MS
+
 function ageOf(file) {
   try {
     return Date.now() - statSync(file).mtimeMs
@@ -457,6 +462,15 @@ const linesOf = (stream, onLine, onEnd = () => {}) =>
 
 const send = (line) => process.stdout.write(`${line}\n`)
 
+// Run through `npx --package=...`, npm hands its own settings down, and a
+// wallet started with npx would read them as its own.
+function walletEnv() {
+  const env = { ...process.env }
+  delete env.npm_config_package
+  delete env.npm_config_call
+  return env
+}
+
 // A wallet started as a local command.
 function wrapCommand(command, args) {
   const wallet = walletOf([command, ...args])
@@ -464,6 +478,7 @@ function wrapCommand(command, args) {
   const child = spawn(command, args, {
     stdio: ["pipe", "pipe", "inherit"],
     shell: process.platform === "win32",
+    env: walletEnv(),
   })
   child.on("error", (error) => {
     process.stderr.write(
@@ -580,6 +595,7 @@ function runCommand(command, args) {
   const child = spawn(command, args, {
     stdio: search ? ["inherit", "pipe", "pipe"] : "inherit",
     shell: process.platform === "win32",
+    env: walletEnv(),
   })
   child.on("error", (error) => {
     process.stderr.write(
@@ -589,6 +605,16 @@ function runCommand(command, args) {
   })
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(signal, () => child.kill(signal))
+  }
+  // With no usable file, as on a first run, the ratings download while the
+  // search runs, so this search gets them too.
+  let download = Promise.resolve()
+  if (search && !usable(loadRatings()) && ageOf(LAST_ATTEMPT) >= RETRY_MS) {
+    try {
+      mkdirSync(dirname(RATINGS_FILE), { recursive: true })
+      writeFileSync(LAST_ATTEMPT, "")
+      download = refresh().catch(() => {})
+    } catch {}
   }
   const kept = { stdout: [], stderr: [] }
   let size = 0
@@ -603,7 +629,7 @@ function runCommand(command, args) {
     child.stdout.on("data", keep("stdout", process.stdout))
     child.stderr.on("data", keep("stderr", process.stderr))
   }
-  child.on("close", (code, signal) => {
+  child.on("close", async (code, signal) => {
     process.exitCode = code ?? (signal ? 1 : 0)
     if (!search) return
     try {
@@ -611,6 +637,7 @@ function runCommand(command, args) {
       const stdout = domainsInOutput(output("stdout"))
       const domains = stdout.length > 0 ? stdout : domainsInOutput(output("stderr"))
       if (domains.length === 0) return
+      await download
       try {
         refreshInBackground()
       } catch {}
@@ -626,25 +653,34 @@ const isScript =
   import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
 
 if (isScript) {
-  const [first, ...rest] = process.argv.slice(2)
-  if (first === "refresh") {
+  const args = process.argv.slice(2)
+  const mode = args[0] === "mcp" || args[0] === "run" ? args[0] : null
+  const words = mode ? args.slice(1) : args
+  if (args[0] === "refresh") {
     refresh()
       .catch(() => {})
       .finally(() => {
         process.exitCode = 0
       })
-  } else if (!first || (first === "run" && rest.length === 0)) {
+  } else if (words.length === 0 || /^(-h|--help)$/.test(args[0])) {
     process.stderr.write(
-      "Usage: node wrap.mjs <wallet MCP command...>\n" +
-        "       node wrap.mjs <https URL of a wallet MCP server>\n" +
-        "       node wrap.mjs run <wallet search command...>\n"
+      "Usage: 402reviews <wallet search command...>    ratings after a search run from the shell\n" +
+        "       402reviews mcp <wallet MCP server command or https URL>\n" +
+        "       402reviews refresh                        download the latest ratings\n"
     )
-    process.exitCode = 2
-  } else if (first === "run") {
-    runCommand(rest[0], rest.slice(1))
-  } else if (/^https?:\/\//i.test(first)) {
-    wrapUrl(first)
+    process.exitCode = words.length === 0 ? 2 : 0
+  } else if (/^https?:\/\//i.test(words[0])) {
+    // An address can only be an MCP server.
+    try {
+      refreshInBackground()
+    } catch {}
+    wrapUrl(words[0])
+  } else if (mode === "mcp") {
+    try {
+      refreshInBackground()
+    } catch {}
+    wrapCommand(words[0], words.slice(1))
   } else {
-    wrapCommand(first, rest)
+    runCommand(words[0], words.slice(1))
   }
 }

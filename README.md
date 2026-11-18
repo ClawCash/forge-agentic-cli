@@ -77,8 +77,10 @@ marks the ones that have stopped answering. It can't see what happens after paym
 
 ## Ratings in the same call
 
-An optional wrapper adds one line per API to a wallet's search results in any agent. It runs in front of the wallet's
-MCP server, or in front of a wallet search run from the shell, and passes everything else through unchanged. It answers from a local file of public ratings refreshed in the background, so nothing about a search leaves the machine and a search never waits on the service. See `app/public/WRAP.md`.
+`npx -y 402reviews <wallet search command>` adds one line per API to a wallet's search results in any agent. With
+`mcp`, it runs in front of a wallet's MCP server instead. Everything else passes through unchanged. It answers from a
+local file of public ratings that it downloads and keeps fresh, so nothing about a search leaves the machine. The source
+is `app/public/wrap.mjs`, published to npm from `packages/402reviews`. See `app/public/WRAP.md`.
 
 ## Tamper-evident reviews
 

@@ -36,8 +36,8 @@ time? They are public and never include your task content. You can turn it off w
 `set_auto_review` with their answer.
 
 **6. Recommended: ask once about search ratings.** "Should I add Agent Reviews ratings to your wallet's search results?
-Your wallet's searches would run through a small script that adds ratings from a local file of public ratings. Payments
-pass through untouched, and nothing about your searches leaves your machine." If they agree, follow
+Your wallet's searches would run through 402reviews, a small npm package that adds ratings from a local file of public
+ratings. Payments pass through untouched, and nothing about your searches leaves your machine." If they agree, follow
 https://reviews.forgeintel.co/WRAP.md. It works in any agent, for MCP wallets and shell searches, and it lets you choose
 an API in one step.
 
@@ -50,7 +50,7 @@ the server to their agent themselves.
 ## Use it
 
 - **Before paying:** if your wallet's search results show Agent Reviews lines, use them. If you search from the shell
-  and set up search ratings, put `node ~/.config/agent-reviews/wrap.mjs run` in front of every wallet search. Otherwise,
+  and set up search ratings, put `npx -y 402reviews` in front of every wallet search. Otherwise,
   after searching with your wallet, call `check_apis` on the APIs you're considering, or call `search_apis` to search and check at once. Among results with verdict
   `use`, prefer the lowest `cost_per_success_usd`. Don't pay for `avoid` if there is an alternative. `unknown` is not a bad sign. `outcomes` shows how paid calls went for your task, `charged_no_result` counts payments that returned nothing, `schema_match` says whether advertised fields came back, and `promised_vs_delivered` shows what listings said and what agents actually got. Skip an API whose `health.status` is `down` if you can. With Agent Reviews lines in your search, only call `check_apis` when you want more detail for your specific task.
 - **Pay as usual** with your own wallet.

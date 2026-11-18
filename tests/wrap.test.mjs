@@ -484,7 +484,7 @@ async function until(condition) {
 }
 
 function wrap(args, { file = ratingsPath(), url = "http://127.0.0.1:9/" } = {}) {
-  const child = spawn(process.execPath, ["app/public/wrap.mjs", ...args], {
+  const child = spawn(process.execPath, ["app/public/wrap.mjs", "mcp", ...args], {
     env: {
       ...process.env,
       AGENT_REVIEWS_RATINGS: file,
@@ -605,15 +605,16 @@ test("a search doesn't wait when the file needs refreshing", async () => {
   )
 })
 
-test("with no file it adds nothing, and fetches one for next time", async () => {
+test("with no file it fetches one as the wallet starts, so the first search has ratings", async () => {
   const file = ratingsPath()
   const site = await fakeSite((res) => res.end(JSON.stringify(ratings())))
   const wallet = wrap(WALLET, { file, url: site.url })
-  wallet.send(search(1))
-  assert.equal(JSON.parse(await wallet.reply(1)).result.content.length, 1)
   await until(() => existsSync(file))
+  wallet.send(search(1))
+  assert.equal(JSON.parse(await wallet.reply(1)).result.content.at(-1).text, TEXT)
   await wallet.end()
   site.close()
+  assert.equal(site.requests.length, 1)
 })
 
 test("a failed refresh keeps the last good file and isn't retried at once", async () => {
@@ -797,13 +798,16 @@ test("reads each CLI wallet's output, as text or JSON", () => {
   }
 })
 
-function runWrapped(args, { file, stdout = "", stderr = "", exit = 0 }) {
+function runWrapped(
+  args,
+  { file, stdout = "", stderr = "", exit = 0, url = "http://127.0.0.1:9/" }
+) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, ["app/public/wrap.mjs", "run", ...args], {
+    const child = spawn(process.execPath, ["app/public/wrap.mjs", ...args], {
       env: {
         ...process.env,
         AGENT_REVIEWS_RATINGS: file,
-        AGENT_REVIEWS_RATINGS_URL: "http://127.0.0.1:9/",
+        AGENT_REVIEWS_RATINGS_URL: url,
         FAKE_STDOUT: stdout,
         FAKE_STDERR: stderr,
         FAKE_EXIT: String(exit),
@@ -846,4 +850,39 @@ test("reads a wallet that prints its results on stderr", async () => {
     stderr: "  Catalog\n  url: https://4yearcycle.com\n",
   })
   assert.match(result.err, /- 4yearcycle\.com: 4\.5\/5/)
+})
+
+test("`run` in front still works, as in the first version", async () => {
+  const stdout = JSON.stringify(SEARCH_RESULT)
+  const result = await runWrapped(["run", CLI, "search", "web search"], {
+    file: ratingsPath(ratings()),
+    stdout,
+  })
+  assert.equal(result.out, stdout)
+  assert.equal(result.err, `\n${TEXT}\n`)
+})
+
+test("a first shell search downloads the ratings while it runs and shows them", async () => {
+  const file = ratingsPath()
+  const site = await fakeSite((res) => res.end(JSON.stringify(ratings())))
+  const result = await runWrapped([CLI, "search", "web search"], {
+    file,
+    url: site.url,
+    stdout: JSON.stringify(SEARCH_RESULT),
+  })
+  site.close()
+  assert.equal(result.err, `\n${TEXT}\n`)
+  assert.equal(site.requests.length, 1)
+  assert.ok(existsSync(file))
+})
+
+test("other commands don't download anything", async () => {
+  const site = await fakeSite((res) => res.end(JSON.stringify(ratings())))
+  const result = await runWrapped([CLI, "fetch", "https://4yearcycle.com/x402/web-search"], {
+    file: ratingsPath(),
+    url: site.url,
+  })
+  site.close()
+  assert.equal(result.code, 0)
+  assert.equal(site.requests.length, 0)
 })

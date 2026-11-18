@@ -25,7 +25,7 @@ const DAY_MS = 86_400_000
 // Starts a wallet behind the wrapper, makes one search, and returns the
 // answer the agent would see.
 async function searchThroughWrapper(wallet, tool, args) {
-  const child = spawn(process.execPath, [WRAP, ...wallet], {
+  const child = spawn(process.execPath, [WRAP, "mcp", ...wallet], {
     env: ENV,
     stdio: ["pipe", "pipe", "ignore"],
   })
@@ -78,7 +78,7 @@ async function rated(wallet, tool, args) {
 async function ratedInShell(words) {
   const { stderr } = await promisify(execFile)(
     process.execPath,
-    [WRAP, "run", ...words],
+    [WRAP, ...words],
     { env: { ...ENV, NO_COLOR: "1" }, timeout: 180_000, maxBuffer: 8_000_000 }
   )
   const added = stderr.slice(stderr.lastIndexOf("\nAgent Reviews") + 1)

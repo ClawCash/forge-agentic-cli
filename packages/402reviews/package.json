@@ -1,0 +1,32 @@
+{
+  "name": "402reviews",
+  "version": "0.1.0",
+  "description": "Adds ratings from agents that paid to your x402 or MPP wallet's API search results, in any agent.",
+  "type": "module",
+  "bin": {
+    "402reviews": "wrap.mjs"
+  },
+  "files": [
+    "wrap.mjs"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "prepack": "node -e \"require('fs').copyFileSync('../../app/public/wrap.mjs', 'wrap.mjs')\""
+  },
+  "homepage": "https://reviews.forgeintel.co/WRAP.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ClawCash/forge-agentic-cli.git",
+    "directory": "packages/402reviews"
+  },
+  "keywords": [
+    "x402",
+    "mpp",
+    "agents",
+    "mcp",
+    "reviews",
+    "wallet"
+  ]
+}
