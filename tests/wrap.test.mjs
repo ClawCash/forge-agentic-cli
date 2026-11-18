@@ -154,6 +154,52 @@ test("reads pay.sh and the MPP directory", () => {
     }),
     ["x402.api.agentmail.to"]
   )
+  // Trimmed from real `pay mcp` answers.
+  const pay = (tool, body) => ({
+    tool_name: `mcp__${walletOf(["npx", "-y", "@solana/pay", "mcp"])}__${tool}`,
+    tool_response: { content: [{ type: "text", text: JSON.stringify(body) }] },
+  })
+  assert.deepEqual(
+    domainsIn(
+      pay("search_catalog", {
+        query: "scrape a web page",
+        candidates: [
+          {
+            fqn: "apify/agi",
+            description: "See https://docs.apify.com for details",
+            endpoints: [
+              { method: "POST", path: "runs", url: "https://agi.apify.com/api-proxy/runs/{receipt}" },
+              { method: "GET", path: "protocols", url: "https://agi.apify.com/protocols" },
+            ],
+          },
+          {
+            fqn: "exa/search",
+            endpoints: [{ method: "POST", path: "search", url: "https://api.exa.ai/search" }],
+          },
+        ],
+        next_step: "Call get_catalog_entry, then https://example.com/how",
+      })
+    ),
+    ["agi.apify.com", "api.exa.ai"]
+  )
+  assert.deepEqual(
+    domainsIn(
+      pay("get_catalog_entry", {
+        fqn: "exa/search",
+        service_url: "https://api.exa.ai",
+        endpoints: [{ url: "https://api.exa.ai/contents" }],
+      })
+    ),
+    ["api.exa.ai"]
+  )
+  assert.deepEqual(
+    domainsIn(
+      pay("list_catalog", {
+        categories: [{ services: [{ fqn: "exa/search", title: "Exa" }] }],
+      })
+    ),
+    []
+  )
   const service = (url, extra) => ({
     id: "x",
     url,
@@ -273,7 +319,8 @@ test("finds each wallet's search tools from the command that starts it, and noth
     [["npx", "@coinbase/payments-mcp"], "bazaar_search"],
     [["https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp"], "search_resources"],
     [["https://mpp.dev/mcp/services"], "search_services"],
-    [["tempo", "wallet", "mcp"], "services_search"],
+    [["npx", "-y", "@solana/pay", "mcp"], "search_catalog"],
+    [["pay", "mcp"], "get_catalog_entry"],
     [["npx", "some-pitstop-mcp"], "list_mpp_services"],
   ]) {
     assert.ok(searches(words, tool), `${words.join(" ")} ${tool}`)
@@ -281,6 +328,9 @@ test("finds each wallet's search tools from the command that starts it, and noth
   for (const [words, tool] of [
     [["npx", "-y", "agentcash@latest"], "fetch"],
     [["npx", "@coinbase/payments-mcp"], "make_http_request_with_x402"],
+    [["pay", "mcp"], "curl"],
+    [["pay", "mcp"], "topup"],
+    [["pay", "mcp"], "list_catalog"],
     [["npx", "@notionhq/notion-mcp-server"], "search"],
     [["railway", "mcp"], "list_services"],
   ]) {

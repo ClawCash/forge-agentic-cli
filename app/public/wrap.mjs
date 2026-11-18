@@ -77,8 +77,20 @@ const TOOLS = [
   [/^mcp__.*__bazaar_(search|list|get_resource_details)$/, (node) => node.resource],
   // Coinbase's hosted Bazaar
   [/^mcp__.*(bazaar|cdp|coinbase).*__search_resources$/, bazaarTool],
-  // pay.sh
-  [/^mcp__.*pay.*__search_skills$/, (node) => node.service_url],
+  // pay.sh (`pay mcp`): each provider and its endpoints. Its catalog listing
+  // names providers without addresses, so it isn't read.
+  [
+    /^mcp__.*pay.*__(search_catalog|get_catalog_entry|search_skills)$/,
+    (node) =>
+      typeof node.fqn !== "string"
+        ? undefined
+        : [
+            node.service_url,
+            ...(Array.isArray(node.endpoints)
+              ? node.endpoints.map((endpoint) => endpoint?.url)
+              : []),
+          ],
+  ],
   // MPP's service directory and Tempo Wallet
   [
     /^mcp__.*(mpp|tempo).*__(search_services|list_services|recommend_services|search_offers|get_service|get_services_by_recipient|services_search|services_list|services_show)$/,

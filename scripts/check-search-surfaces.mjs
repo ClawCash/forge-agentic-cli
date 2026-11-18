@@ -18,7 +18,6 @@ const RATINGS_FILE = join(mkdtempSync(join(tmpdir(), "reviews-")), "ratings.json
 const ENV = { ...process.env, AGENT_REVIEWS_RATINGS: RATINGS_FILE }
 const DIRECTORY =
   "https://api.cdp.coinbase.com/platform/v2/x402/discovery/search?query=web%20search&limit=5"
-const PAY_CATALOG = "https://pay.sh/api/catalog"
 const RATINGS = "https://reviews.forgeintel.co/ratings.json"
 const RETRY_MS = 20_000
 const DAY_MS = 86_400_000
@@ -92,16 +91,17 @@ const CHECKS = {
       "search_resources",
       { query: "web search", limit: 5 }
     ),
-  // These two need a signed-in wallet to run, so their data is read directly.
+  "pay.sh": () =>
+    rated(["npx", "-y", "@solana/pay", "mcp"], "search_catalog", {
+      query: "web search",
+      max_results: 5,
+    }),
+  // Payments MCP answers only through its desktop wallet window, which can't
+  // run here, so the data its search returns is read directly.
   "Coinbase Payments MCP data": async () =>
     found({
       tool_name: "mcp__payments-mcp__bazaar_search",
       tool_response: await getJson(DIRECTORY),
-    }),
-  "pay.sh data": async () =>
-    found({
-      tool_name: "mcp__pay__search_skills",
-      tool_response: { providers: (await getJson(PAY_CATALOG)).providers },
     }),
   "Ratings file": async () => {
     const { generated_at: generatedAt, rated } = await getJson(RATINGS)

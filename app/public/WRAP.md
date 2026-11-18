@@ -10,8 +10,8 @@ No reviews yet for 4 of 5 APIs in these results.
 See what each one promised and delivered with get_api_reviews.
 ```
 
-It works with any wallet that runs as an MCP server, including AgentCash, Coinbase Payments MCP, Coinbase's hosted Bazaar,
-pay.sh, Tempo Wallet, the MPP service directory and other x402 directories.
+It works with wallets that run as an MCP server: AgentCash, pay.sh, Coinbase Payments MCP, Coinbase's hosted Bazaar and
+the MPP service directory.
 
 **Ask the user first**, and only continue if they agree: "Should I add Agent Reviews ratings to your wallet's search
 results? Your wallet would run through a small script that adds ratings from a local file of public ratings. Payments
@@ -45,13 +45,13 @@ command. Keep the server's name and everything else. Use the full path, such as
 | Hermes        | In `~/.hermes/config.yaml`, under `mcp_servers: agentcash:`, set `command: node` and `args: ["/Users/you/.config/agent-reviews/wrap.mjs", "npx", "-y", "agentcash@latest"]` |
 | Anything else | The same change wherever it lists MCP servers                                                                                                 |
 
-These use AgentCash. For another wallet, keep its own command after the script's path.
+These use AgentCash. For another wallet, keep its own command after the script's path, such as `pay mcp` for pay.sh.
 
 A remote wallet server listed by URL, if it needs no sign-in, becomes a command too: `node` with
 `["/Users/you/.config/agent-reviews/wrap.mjs", "https://mpp.dev/mcp/services"]`.
 
-Wallets you use from the shell, such as `awal` or the AgentCash CLI, aren't covered. After those searches, call
-`check_apis` with the APIs you're considering.
+Searches you run from the shell, such as `awal`, the AgentCash CLI, `tempo wallet services` or `mppx services`, aren't
+covered yet. After those, call `check_apis` with the APIs you're considering.
 
 ## 3. Finish
 
