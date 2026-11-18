@@ -2084,6 +2084,22 @@ test("a brief with nothing to say is one line", async () => {
   )
 })
 
+test("a brief says how long a paid call usually takes", async () => {
+  const { app, store } = await setup()
+  await store.insert(row({ latencyMs: 4200 }))
+  await store.insert(row({ latencyMs: 12600 }))
+  await store.insert(row({ latencyMs: 13100 }))
+  await store.insert(row({ domain: "fast.example", latencyMs: 400 }))
+  const brief = await (
+    await askBrief(app, ["stableenrich.dev", "fast.example"])
+  ).json()
+  assert.match(
+    brief.text,
+    /stableenrich\.dev: .*\$0\.01 a call, usually about 13s per call,/
+  )
+  assert.match(brief.text, /fast\.example: .*usually under a second per call,/)
+})
+
 test("reviews for other tasks give no stars, only say which tasks", async () => {
   const { app, store } = await setup()
   await store.insert(row({ domain: "weather.example", path: "/now", task: "weather" }))

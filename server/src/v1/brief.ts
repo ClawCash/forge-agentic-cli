@@ -70,6 +70,10 @@ export function briefUrls(input: unknown) {
 const NOT_RESPONDING = "not responding when last checked"
 
 const money = (usd: number) => `$${Number(usd.toPrecision(2))}`
+const duration = (ms: number) =>
+  ms < 1000
+    ? "under a second"
+    : `about ${ms < 10_000 ? (ms / 1000).toFixed(1) : Math.round(ms / 1000)}s`
 const agentsWord = (count: number) =>
   `${count} ${count === 1 ? "agent" : "agents"}`
 
@@ -113,6 +117,8 @@ export function briefDetails({
     rating.works_for_task !== null &&
       `about ${Math.round(rating.works_for_task * 100)}% likely to work`,
     rating.price_usd !== null && `${money(rating.price_usd)} a call`,
+    rating.typical_latency_ms !== null &&
+      `usually ${duration(rating.typical_latency_ms)} per call`,
     rating.verdict === "unknown"
       ? "too early to tell"
       : `verdict ${rating.verdict}`,

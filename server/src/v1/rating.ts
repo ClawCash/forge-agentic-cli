@@ -226,6 +226,8 @@ export interface Rating {
   cost_per_success_usd: number | null
   // What one call usually costs.
   price_usd: number | null
+  // How long a paid call usually took, as reviewers measured it.
+  typical_latency_ms: number | null
   scope: "endpoint" | "domain" | null
   matched: string
   // The task the reviews behind this rating were for. Usually the one asked
@@ -291,6 +293,7 @@ const EMPTY: Rating = {
   confidence: "low",
   cost_per_success_usd: null,
   price_usd: null,
+  typical_latency_ms: null,
   scope: null,
   matched: "none",
   rated_for: null,
@@ -480,6 +483,11 @@ export function rate(
     cost_per_success_usd:
       price === null ? null : round(price / Math.max(chance, 0.01), 4),
     price_usd: price === null ? null : round(price, 4),
+    typical_latency_ms: median(
+      evidence.flatMap(({ row }) =>
+        typeof row.latencyMs === "number" ? [row.latencyMs] : []
+      )
+    ),
     scope,
     matched: [task, ...constraints].join(", "),
     rated_for: ratedFor,
