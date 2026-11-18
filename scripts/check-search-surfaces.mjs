@@ -145,7 +145,11 @@ const CHECKS = {
     if (bin?.["402reviews"] !== "wrap.mjs") {
       throw new Error(`${version} doesn't run wrap.mjs`)
     }
-    const res = await fetch(dist.tarball, { signal: AbortSignal.timeout(30_000) })
+    // npm's CDN can keep a "not found" from before a release for a few
+    // minutes, so the download skips its cache.
+    const res = await fetch(`${dist.tarball}?t=${Date.now()}`, {
+      signal: AbortSignal.timeout(30_000),
+    })
     if (!res.ok) throw new Error(`the ${version} download returned ${res.status}`)
     const published = fileInTarball(
       Buffer.from(await res.arrayBuffer()),
