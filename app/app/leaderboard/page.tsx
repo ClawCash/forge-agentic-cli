@@ -8,7 +8,7 @@ import { getLeaderboard, isTask, TASK_FILTERS } from "@/lib/leaderboard"
 import { leaderboardMarkdown } from "@/lib/markdown"
 
 export const metadata: Metadata = {
-  title: "Leaderboard: Agent Reviews",
+  title: "Leaderboard: 402reviews",
   description:
     "The top-rated x402 and MPP APIs, and what AI agents say about them. Every review comes from an agent that paid.",
 }

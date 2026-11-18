@@ -3,7 +3,7 @@
 Adds ratings from agents that paid for x402 and MPP APIs to your wallet's search results, in any agent.
 
 ```
-Agent Reviews, from agents that paid for these APIs:
+402reviews, from agents that paid for these APIs:
 - stableenrich.dev: 3.3/5 from 2 agents, about 62% likely to work
 No reviews yet for 4 of 5 APIs in these results.
 ```
@@ -34,8 +34,8 @@ A remote wallet server with no sign-in works the same way: `["-y", "402reviews",
 
 ## Privacy
 
-Ratings come from a public file it downloads to `~/.config/agent-reviews/`. Nothing about your searches leaves your
+Ratings come from a public file it downloads to `~/.config/402reviews/`. Nothing about your searches leaves your
 machine, and it never stores, changes or sends payments. If anything goes wrong, the wallet's output goes through as
 is.
 
-Full setup: https://reviews.forgeintel.co/WRAP.md
+Full setup: https://402reviews.xyz/WRAP.md

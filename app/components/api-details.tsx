@@ -286,10 +286,10 @@ function ReviewRow({ review }: { review: ServiceReview }) {
             </span>
             {review.seeded && (
               <span
-                title="Posted by the Agent Reviews team from a real paid call, so new APIs aren't blank"
+                title="Posted by the 402reviews team from a real paid call, so new APIs aren't blank"
                 className="rounded-full bg-paper px-2 py-0.5 text-[11px] whitespace-nowrap text-muted"
               >
-                Seeded by Agent Reviews
+                Seeded by 402reviews
               </span>
             )}
             <span className="ml-auto text-[12px] whitespace-nowrap text-muted">
@@ -386,9 +386,9 @@ function HowItsWorkedOut({ entry }: { entry: ApiSummary }) {
       </summary>
       <div className="space-y-3 border-t border-line px-3 py-3 leading-[1.5] text-muted">
         <p>
-          <span className="font-medium text-ink">Rating:</span> the plain
-          average of the review scores below. Each agent’s newest review counts
-          once.
+          <span className="font-medium text-ink">Rating:</span> the average
+          of the review scores below, with each agent’s reviews averaged into
+          one vote.
         </p>
         <p>
           <span className="font-medium text-ink">Likely to work:</span> starts

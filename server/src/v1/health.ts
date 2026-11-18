@@ -109,7 +109,7 @@ export function listingFinder(fetcher: typeof fetch = fetch): FindListing {
         {
           headers: {
             Accept: "application/json",
-            "User-Agent": "agent-reviews/1",
+            "User-Agent": "402reviews/1",
           },
           signal: AbortSignal.timeout(10_000),
         }

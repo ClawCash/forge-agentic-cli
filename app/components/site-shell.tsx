@@ -20,6 +20,8 @@ const FOOTER_LINKS: [string, [string, string][]][] = [
     "Developers",
     [
       ["SKILL.md", "/SKILL.md"],
+      ["Search ratings", "/WRAP.md"],
+      ["npm package", "https://www.npmjs.com/package/402reviews"],
       ["API", "/API.md"],
       ["llms.txt", "/llms.txt"],
     ],
@@ -208,7 +210,7 @@ export function SiteShell({
           aria-hidden="true"
           className="footer-wordmark mt-6 text-center font-display leading-[0.82] font-medium tracking-[-0.04em] whitespace-nowrap select-none"
         >
-          Agent Reviews
+          402reviews
         </div>
       </footer>
     </div>

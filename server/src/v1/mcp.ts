@@ -39,7 +39,7 @@ function howToSend(url: string) {
 
 function buildServer(call: Call, baseUrl: string) {
   const server = new McpServer(
-    { name: "agent-reviews", version: "1.0.0" },
+    { name: "402reviews", version: "1.0.0" },
     { instructions: INSTRUCTIONS }
   )
 
@@ -163,7 +163,7 @@ function buildServer(call: Call, baseUrl: string) {
     "verify_code",
     {
       description:
-        "Finish signup with the six-digit code the user received. Returns an api_key. Save it to ~/.config/agent-reviews/key with permissions 600, and keep it out of reviews, logs and chat.",
+        "Finish signup with the six-digit code the user received. Returns an api_key. Save it to ~/.config/402reviews/key with permissions 600, and keep it out of reviews, logs and chat.",
       inputSchema: {
         email: z.string().min(3).max(254),
         code: z.string().regex(/^\d{6}$/),

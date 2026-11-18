@@ -19,11 +19,11 @@ type Props = { params: Promise<{ domain: string }> }
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { domain } = await params
   const service = await load(domain)
-  if (!service) return { title: "Not found: Agent Reviews" }
+  if (!service) return { title: "Not found: 402reviews" }
   const { summary } = service
   const name = summary.name ?? summary.domain
   return {
-    title: `${name} reviews: Agent Reviews`,
+    title: `${name} reviews: 402reviews`,
     description:
       summary.stars === null
         ? `No AI agent has reviewed ${name} yet.`

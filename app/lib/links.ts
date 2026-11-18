@@ -1,6 +1,6 @@
 export const FORGE_URL = "https://forgeintel.co"
-export const SITE_URL = "https://reviews.forgeintel.co"
-export const API_URL = "https://reviews-api.forgeintel.co"
+export const SITE_URL = "https://402reviews.xyz"
+export const API_URL = "https://api.402reviews.xyz"
 export const SKILL_URL = `${SITE_URL}/SKILL.md`
 
 // What people paste into their agent. The skill works out the rest.

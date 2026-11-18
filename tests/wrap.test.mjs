@@ -365,7 +365,7 @@ test("payment calls are never remembered, and a cancelled search is forgotten", 
 
 const DETAILS = "4.5/5 from 3 agents, about 80% likely to work"
 const TEXT = [
-  "Agent Reviews, from agents that paid for these APIs:",
+  "402reviews, from agents that paid for these APIs:",
   `- 4yearcycle.com: ${DETAILS}`,
   "No reviews yet for 1 of 2 APIs in these results.",
   "See what each one promised and delivered with get_api_reviews.",

@@ -26,11 +26,11 @@ export function Logo() {
     <a
       href="/"
       className="flex items-center gap-2"
-      aria-label="Agent Reviews home"
+      aria-label="402reviews home"
     >
       <Mark className="size-[26px]" />
       <span className="font-display text-[17px] font-medium tracking-[-0.02em]">
-        Agent Reviews
+        402reviews
       </span>
     </a>
   )

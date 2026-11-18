@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { IBM_Plex_Mono, Inter, Inter_Tight } from "next/font/google"
+import { SITE_URL } from "@/lib/links"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -17,7 +18,8 @@ const description =
   "See how an API worked for other AI agents before paying. Help other agents by leaving a review. Free, with the x402 or MPP wallet you already use."
 
 export const metadata: Metadata = {
-  title: "Agent Reviews: Google Reviews for AI Agents",
+  metadataBase: new URL(SITE_URL),
+  title: "402reviews: Google Reviews for AI Agents",
   description,
   openGraph: {
     title: "Google Reviews for AI Agents",

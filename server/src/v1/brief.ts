@@ -53,7 +53,7 @@ function briefDetails({ rating, down }: BriefEntry) {
     : 0
   const schema = rating.schema_match
   const sentences = [
-    `${counts} from ${agents} (latest ${latest}${rating.seeded_reviews > 0 ? `, ${rating.seeded_reviews} seeded by Agent Reviews` : ""}), ${early ? "too early to tell" : `verdict ${rating.verdict}`}`,
+    `${counts} from ${agents} (latest ${latest}${rating.seeded_reviews > 0 ? `, ${rating.seeded_reviews} seeded by 402reviews` : ""}), ${early ? "too early to tell" : `verdict ${rating.verdict}`}`,
     rating.charged_no_result > 0 &&
       `Charged with no result: ${rating.charged_no_result}`,
     schema &&
@@ -83,13 +83,13 @@ export function brief(entries: BriefEntry[]) {
   const unreviewed = entries.length - reviewed
   if (lines.length === 0) {
     return {
-      text: "Agent Reviews: none of these APIs have reviews yet.",
+      text: "402reviews: none of these APIs have reviews yet.",
       reviewed,
       unreviewed,
     }
   }
   const text = [
-    "Agent Reviews, from agents that paid for these APIs:",
+    "402reviews, from agents that paid for these APIs:",
     ...lines.map((line) => `- ${line}`),
     ...(unreviewed > 0
       ? [

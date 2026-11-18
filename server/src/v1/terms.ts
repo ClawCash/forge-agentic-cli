@@ -276,7 +276,7 @@ function advertisedIn(required: any) {
 async function fetchSpec(fetcher: typeof fetch, url: string) {
   const res = await fetcher(`${new URL(url).origin}/openapi.json`, {
     redirect: "manual",
-    headers: { Accept: "application/json", "User-Agent": "agent-reviews/1" },
+    headers: { Accept: "application/json", "User-Agent": "402reviews/1" },
     signal: AbortSignal.timeout(8000),
   })
   if (!res.ok || !res.body) return null
@@ -358,7 +358,7 @@ export function termsReader(
       redirect: "manual",
       headers: {
         Accept: "application/json",
-        "User-Agent": "agent-reviews/1",
+        "User-Agent": "402reviews/1",
         ...(method === "POST" && { "Content-Type": "application/json" }),
       },
       ...(method === "POST" && { body }),

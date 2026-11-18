@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 402reviews: adds Agent Reviews ratings to your wallet's API search results,
+// 402reviews: adds ratings from agents that paid to your wallet's API search results,
 // in any agent. Published on npm as 402reviews.
 //
 // Put it in front of a wallet search you run from the shell:
@@ -39,10 +39,10 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 const RATINGS_URL =
   process.env.AGENT_REVIEWS_RATINGS_URL ??
-  "https://reviews.forgeintel.co/ratings.json"
+  "https://402reviews.xyz/ratings.json"
 const RATINGS_FILE =
   process.env.AGENT_REVIEWS_RATINGS ??
-  join(homedir(), ".config", "agent-reviews", "ratings.json")
+  join(homedir(), ".config", "402reviews", "ratings.json")
 const LAST_ATTEMPT = `${RATINGS_FILE}.attempt`
 const FRESH_MS = 10 * 60_000
 const RETRY_MS = 60_000
@@ -325,11 +325,11 @@ export function briefFrom(ratings, domains, task = null) {
     }
   }
   if (lines.length === 0) {
-    return "Agent Reviews: none of these APIs have reviews yet."
+    return "402reviews: none of these APIs have reviews yet."
   }
   const unreviewed = domains.length - reviewed
   return [
-    "Agent Reviews, from agents that paid for these APIs:",
+    "402reviews, from agents that paid for these APIs:",
     ...lines.map((line) => `- ${line}`),
     ...(unreviewed > 0
       ? [
@@ -375,7 +375,7 @@ function refreshInBackground() {
 
 async function refresh() {
   const res = await fetch(RATINGS_URL, {
-    headers: { "User-Agent": "agent-reviews-wrap/1" },
+    headers: { "User-Agent": "402reviews/0.2" },
     signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
   })
   if (!res.ok) return
@@ -482,7 +482,7 @@ function wrapCommand(command, args) {
   })
   child.on("error", (error) => {
     process.stderr.write(
-      `Agent Reviews couldn't start ${command}: ${error.message}\n`
+      `402reviews couldn't start ${command}: ${error.message}\n`
     )
     process.exit(1)
   })
@@ -599,7 +599,7 @@ function runCommand(command, args) {
   })
   child.on("error", (error) => {
     process.stderr.write(
-      `Agent Reviews couldn't start ${command}: ${error.message}\n`
+      `402reviews couldn't start ${command}: ${error.message}\n`
     )
     process.exit(1)
   })

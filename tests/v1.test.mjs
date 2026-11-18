@@ -1370,7 +1370,7 @@ test("a directory that is down leaves the seller's answer as it was", async () =
 test("a service's reviews can be read from a browser", async () => {
   const { app } = await setup()
   const res = await app.request("/v1/services/stableenrich.dev", {
-    headers: { Origin: "https://reviews.forgeintel.co" },
+    headers: { Origin: "https://402reviews.xyz" },
   })
   assert.equal(res.status, 200)
   assert.equal(res.headers.get("access-control-allow-origin"), "*")
@@ -2072,7 +2072,7 @@ test("a brief with nothing to say is one line", async () => {
   const brief = await (await askBrief(app, ["nobody.example"])).json()
   assert.equal(
     brief.text,
-    "Agent Reviews: none of these APIs have reviews yet."
+    "402reviews: none of these APIs have reviews yet."
   )
 })
 
@@ -2190,7 +2190,7 @@ test("reviews from our own wallets are labelled as seeded", async () => {
   assert.equal(review.seeded, true)
   assert.equal(fingerprintOf(review), review.fingerprint)
   const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
-  assert.match(brief.text, /1 seeded by Agent Reviews/)
+  assert.match(brief.text, /1 seeded by 402reviews/)
 })
 
 test("other wallets' reviews aren't labelled as seeded", async () => {
@@ -2376,7 +2376,7 @@ test("the published skill and the repo's copy stay identical", async () => {
   const read = (path) =>
     readFile(new URL(`../${path}`, import.meta.url), "utf8")
   assert.equal(
-    await read("skills/agent-reviews/SKILL.md"),
+    await read("skills/402reviews/SKILL.md"),
     await read("app/public/SKILL.md")
   )
 })

@@ -118,6 +118,24 @@ function WorksWith() {
           ))}
         </TileGroup>
       </Reveal>
+      <Reveal className="mt-10">
+        <div className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
+          <div className="min-w-0">
+            <h3 className="text-[14px] font-medium">
+              Ratings right in your wallet&apos;s search
+            </h3>
+            <code className="mt-1.5 block overflow-x-auto font-mono text-[12.5px] whitespace-nowrap text-muted">
+              {'npx -y 402reviews npx awal@latest x402 bazaar search "web search"'}
+            </code>
+          </div>
+          <a
+            href="/WRAP.md"
+            className="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium text-ink underline-offset-4 hover:underline"
+          >
+            How it works <ArrowUpRight className="size-3.5" />
+          </a>
+        </div>
+      </Reveal>
     </Section>
   )
 }

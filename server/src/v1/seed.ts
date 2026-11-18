@@ -1,4 +1,4 @@
-// The wallets the Agent Reviews team pays from. Their reviews are real paid
+// The wallets the 402reviews team pays from. Their reviews are real paid
 // calls, and are always labelled as ours. These addresses are public on-chain,
 // so anyone can check the label against a review's payment.
 const SEED_WALLETS = new Set([

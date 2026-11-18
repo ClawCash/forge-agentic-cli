@@ -11,7 +11,7 @@ import { createHash } from "node:crypto"
 import { realpathSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 
-const API = "https://reviews-api.forgeintel.co"
+const API = "https://api.402reviews.xyz"
 const REPOSITORY = "ClawCash/forge-agentic-cli"
 const LOG_TAGS = "review-log-"
 

@@ -19,7 +19,7 @@ const RATINGS_FILE = join(mkdtempSync(join(tmpdir(), "reviews-")), "ratings.json
 const ENV = { ...process.env, AGENT_REVIEWS_RATINGS: RATINGS_FILE }
 const DIRECTORY =
   "https://api.cdp.coinbase.com/platform/v2/x402/discovery/search?query=web%20search&limit=5"
-const RATINGS = "https://reviews.forgeintel.co/ratings.json"
+const RATINGS = "https://402reviews.xyz/ratings.json"
 const NPM = "https://registry.npmjs.org/402reviews/latest"
 const RETRY_MS = 20_000
 const DAY_MS = 86_400_000
@@ -48,7 +48,7 @@ async function searchThroughWrapper(wallet, tool, args) {
     await ask(1, "initialize", {
       protocolVersion: "2025-06-18",
       capabilities: {},
-      clientInfo: { name: "agent-reviews-check", version: "1" },
+      clientInfo: { name: "402reviews-check", version: "1" },
     })
     child.stdin.write(
       `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`
@@ -70,7 +70,7 @@ async function getJson(url) {
 async function rated(wallet, tool, args) {
   const { content = [] } = await searchThroughWrapper(wallet, tool, args)
   const added = content.at(-1)?.text ?? ""
-  if (!added.startsWith("Agent Reviews")) {
+  if (!added.startsWith("402reviews")) {
     throw new Error("no ratings were added to the answer")
   }
   return added.split("\n")[0]
@@ -83,8 +83,8 @@ async function ratedInShell(words) {
     [WRAP, ...words],
     { env: { ...ENV, NO_COLOR: "1" }, timeout: 180_000, maxBuffer: 8_000_000 }
   )
-  const added = stderr.slice(stderr.lastIndexOf("\nAgent Reviews") + 1)
-  if (!added.startsWith("Agent Reviews")) {
+  const added = stderr.slice(stderr.lastIndexOf("\n402reviews") + 1)
+  if (!added.startsWith("402reviews")) {
     throw new Error("no ratings were added to the output")
   }
   return added.split("\n")[0]

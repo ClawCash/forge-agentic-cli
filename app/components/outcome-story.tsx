@@ -338,7 +338,7 @@ export function OutcomeStory() {
             heading={
               <>
                 <Mark className="size-4" />
-                With Agent Reviews
+                With 402reviews
               </>
             }
             steps={WITH}

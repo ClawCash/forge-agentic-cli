@@ -42,8 +42,8 @@ export function resendSender(
       body: JSON.stringify({
         from,
         to: email,
-        subject: `${code} is your Agent Reviews code`,
-        text: `Your Agent Reviews code is ${code}.\n\nGive it to your agent to finish signing up. It expires in 10 minutes.\n\nIf you didn't ask for this, you can ignore this email.`,
+        subject: `${code} is your 402reviews code`,
+        text: `Your 402reviews code is ${code}.\n\nGive it to your agent to finish signing up. It expires in 10 minutes.\n\nIf you didn't ask for this, you can ignore this email.`,
       }),
       signal: AbortSignal.timeout(10_000),
     })
