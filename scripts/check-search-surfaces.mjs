@@ -5,12 +5,13 @@
 // without anyone noticing.
 
 import { execFile, spawn } from "node:child_process"
-import { mkdtempSync } from "node:fs"
+import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createInterface } from "node:readline"
 import { setTimeout as wait } from "node:timers/promises"
 import { promisify } from "node:util"
+import { gunzipSync } from "node:zlib"
 import { domainsIn } from "../app/public/wrap.mjs"
 
 const WRAP = new URL("../app/public/wrap.mjs", import.meta.url).pathname
@@ -19,6 +20,7 @@ const ENV = { ...process.env, AGENT_REVIEWS_RATINGS: RATINGS_FILE }
 const DIRECTORY =
   "https://api.cdp.coinbase.com/platform/v2/x402/discovery/search?query=web%20search&limit=5"
 const RATINGS = "https://reviews.forgeintel.co/ratings.json"
+const NPM = "https://registry.npmjs.org/402reviews/latest"
 const RETRY_MS = 20_000
 const DAY_MS = 86_400_000
 
@@ -88,6 +90,20 @@ async function ratedInShell(words) {
   return added.split("\n")[0]
 }
 
+// One file from an npm tarball, which is a gzipped tar of 512-byte blocks.
+function fileInTarball(tarball, wanted) {
+  const tar = gunzipSync(tarball)
+  const field = (at, length) => tar.toString("utf8", at, at + length).replace(/\0.*$/s, "")
+  for (let at = 0; at + 512 <= tar.length; ) {
+    const name = field(at, 100)
+    if (!name) break
+    const size = parseInt(field(at + 124, 12).trim(), 8) || 0
+    if (name === wanted) return tar.subarray(at + 512, at + 512 + size)
+    at += 512 + Math.ceil(size / 512) * 512
+  }
+  return null
+}
+
 function found(event) {
   const domains = domainsIn(event)
   if (domains.length === 0) throw new Error("no APIs found in the result")
@@ -123,6 +139,25 @@ const CHECKS = {
       tool_name: "mcp__payments-mcp__bazaar_search",
       tool_response: await getJson(DIRECTORY),
     }),
+  // Agents run the wrapper with npx, so what npm serves must be this file.
+  "npm package": async () => {
+    const { version, bin, dist } = await getJson(NPM)
+    if (bin?.["402reviews"] !== "wrap.mjs") {
+      throw new Error(`${version} doesn't run wrap.mjs`)
+    }
+    const res = await fetch(dist.tarball, { signal: AbortSignal.timeout(30_000) })
+    if (!res.ok) throw new Error(`the ${version} download returned ${res.status}`)
+    const published = fileInTarball(
+      Buffer.from(await res.arrayBuffer()),
+      "package/wrap.mjs"
+    )
+    if (!published?.equals(readFileSync(WRAP))) {
+      throw new Error(
+        `402reviews ${version} doesn't match app/public/wrap.mjs, so publish a new version`
+      )
+    }
+    return `402reviews ${version} matches`
+  },
   "Ratings file": async () => {
     const { generated_at: generatedAt, rated } = await getJson(RATINGS)
     if (!generatedAt || Date.now() - Date.parse(generatedAt) > DAY_MS) {
@@ -151,7 +186,12 @@ async function attempt(name, check) {
 }
 
 await promisify(execFile)(process.execPath, [WRAP, "refresh"], { env: ENV })
+// CHECK=<name> runs just that one.
+const chosen = Object.entries(CHECKS).filter(
+  ([name]) => !process.env.CHECK || name === process.env.CHECK
+)
+if (chosen.length === 0) throw new Error(`No check named ${process.env.CHECK}`)
 const results = await Promise.all(
-  Object.entries(CHECKS).map(([name, check]) => attempt(name, check))
+  chosen.map(([name, check]) => attempt(name, check))
 )
 process.exitCode = results.every(Boolean) ? 0 : 1
