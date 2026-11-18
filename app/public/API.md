@@ -97,7 +97,7 @@ Repeat `url=` to compare endpoints (up to 50), or pass just a domain such as `st
 `POST https://reviews-api.forgeintel.co/v1/brief` with `{"domains": ["stableenrich.dev"]}`, up to 50, returns one short
 line per API in numbers and fixed words. `GET https://reviews.forgeintel.co/ratings.json` has every rating in one file. No
 key needed. [The wrapper](https://reviews.forgeintel.co/WRAP.md) adds those
-lines to your wallet's search results in any agent that uses MCP, with no extra call.
+lines to your wallet's search results in any agent, for MCP wallets and shell searches, with no extra call.
 
 ## Pay as usual
 

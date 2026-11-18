@@ -9,9 +9,18 @@
 // It starts the wallet itself and passes every message through unchanged, with
 // one exception: when the wallet answers a search, it adds a few lines of
 // ratings for the APIs in the answer. It never stores, changes or sends payment
-// requests. The ratings come from a local file of public ratings, refreshed in
-// the background with a plain download, so nothing about your searches leaves
-// your machine. If anything goes wrong, the wallet's answer goes through as is.
+// requests.
+//
+// For wallets you search from the shell, put `run` in front of the search:
+//
+//   node wrap.mjs run npx awal@latest x402 bazaar search "web search"
+//
+// The wallet's output comes through unchanged, and the ratings follow on
+// stderr. Any other command runs untouched.
+//
+// The ratings come from a local file of public ratings, refreshed in the
+// background with a plain download, so nothing about your searches leaves your
+// machine. If anything goes wrong, the wallet's answer goes through as is.
 
 import { spawn } from "node:child_process"
 import {
@@ -120,6 +129,22 @@ const DIRECTORY =
 const isSearch = (name) =>
   TOOLS.some(([pattern]) => pattern.test(name)) || DIRECTORY.test(name)
 
+// Wallet search commands run from the shell, with or without npx.
+const LAUNCH = String.raw`^(?:\w+=\S*\s+)*(?:npx\s+(?:-\S+\s+)*|bunx\s+|pnpm\s+dlx\s+|yarn\s+dlx\s+)?(?:\S*\/)?`
+const command = (name, rest) =>
+  new RegExp(`${LAUNCH}${name}(?:@\\S+)?\\s+${rest}`)
+const COMMANDS = [
+  command("awal", String.raw`(?:x402\s+)?bazaar\s+(?:search|list)\b`),
+  command("agentcash", String.raw`(?:search|discover)\b`),
+  command("pay", String.raw`skills\s+(?:search|show)\b`),
+  command("tempo", String.raw`wallet\s+(?:-\S+\s+)*services\b`),
+  command("mppx", String.raw`services\s+(?:list|show|endpoints)\b`),
+  command("spongewallet", String.raw`pay\s+(?:discover|service)\b`),
+]
+
+export const isSearchCommand = (words) =>
+  COMMANDS.some((pattern) => pattern.test(words.join(" ")))
+
 // Picks the rating for the job at hand. This only reads the search on this
 // machine, so the query itself is never sent anywhere.
 const TASK_WORDS = [
@@ -201,6 +226,66 @@ function readText(value) {
           [node.text, node.result].filter((text) => typeof text === "string")
         )
   return unique(texts.flatMap(addressesInText))
+}
+
+// The fields wallet CLIs use for an API's address in their JSON output.
+const listedByCli = (node) => [
+  ...listed(node),
+  node.service !== undefined ||
+  node.paidEndpoints !== undefined ||
+  (node.id !== undefined && node.name !== undefined)
+    ? node.url
+    : undefined,
+]
+
+const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g
+const LABELLED = new RegExp(
+  String.raw`\b(?:url|endpoint|resource|service[ _]?url|origin)\b\s*[:=]\s*(${ADDRESS})`,
+  "i"
+)
+const LEADING = new RegExp(String.raw`^(?:[-*>]|\d+[.)])?\s*(${ADDRESS})`)
+const TRAILING = new RegExp(String.raw`\s(${ADDRESS})$`)
+
+// In text output an address counts when it is labelled, starts a line or
+// ends a table row. Addresses inside descriptions don't.
+function addressesInLines(text) {
+  return text.split(/\r?\n/).flatMap((raw) => {
+    const line = raw.trim()
+    const found =
+      LABELLED.exec(line)?.[1] ??
+      LEADING.exec(line)?.[1] ??
+      TRAILING.exec(line)?.[1]
+    return found ? [found] : []
+  })
+}
+
+// JSON output, even after install messages, or one document per line.
+function jsonIn(text) {
+  const trimmed = text.trim()
+  const from = trimmed.search(/^[{[]/m)
+  for (const attempt of [trimmed, from > 0 ? trimmed.slice(from) : null]) {
+    if (!attempt) continue
+    try {
+      return [JSON.parse(attempt)]
+    } catch {}
+  }
+  const lines = trimmed.split(/\r?\n/).flatMap((line) => {
+    const part = line.trim()
+    if (!/^[{[]/.test(part)) return []
+    try {
+      return [JSON.parse(part)]
+    } catch {
+      return []
+    }
+  })
+  return lines.length > 0 ? lines : null
+}
+
+// The APIs in a wallet CLI's search output.
+export function domainsInOutput(output) {
+  const text = String(output ?? "").replace(ANSI, "")
+  const json = jsonIn(text)
+  return json ? read(json, listedByCli) : unique(addressesInLines(text))
 }
 
 // The APIs in a search answer. `event` is { tool_name, tool_input, tool_response }.
@@ -487,6 +572,55 @@ function wrapUrl(url) {
   })
 }
 
+// A wallet search run from the shell. Its output passes through unchanged,
+// then the ratings follow on stderr, so piping its output still works.
+function runCommand(command, args) {
+  const words = [command, ...args]
+  const search = isSearchCommand(words)
+  const child = spawn(command, args, {
+    stdio: search ? ["inherit", "pipe", "pipe"] : "inherit",
+    shell: process.platform === "win32",
+  })
+  child.on("error", (error) => {
+    process.stderr.write(
+      `Agent Reviews couldn't start ${command}: ${error.message}\n`
+    )
+    process.exit(1)
+  })
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.on(signal, () => child.kill(signal))
+  }
+  const kept = { stdout: [], stderr: [] }
+  let size = 0
+  const keep = (name, stream) => (chunk) => {
+    stream.write(chunk)
+    if (size + chunk.length <= MAX_MESSAGE_BYTES) {
+      kept[name].push(chunk)
+      size += chunk.length
+    }
+  }
+  if (search) {
+    child.stdout.on("data", keep("stdout", process.stdout))
+    child.stderr.on("data", keep("stderr", process.stderr))
+  }
+  child.on("close", (code, signal) => {
+    process.exitCode = code ?? (signal ? 1 : 0)
+    if (!search) return
+    try {
+      const output = (name) => Buffer.concat(kept[name]).toString("utf8")
+      const stdout = domainsInOutput(output("stdout"))
+      const domains = stdout.length > 0 ? stdout : domainsInOutput(output("stderr"))
+      if (domains.length === 0) return
+      try {
+        refreshInBackground()
+      } catch {}
+      const event = { tool_input: { query: words.join(" ") } }
+      const text = briefFrom(loadRatings(), domains, taskOf(event))
+      if (text) process.stderr.write(`\n${text.slice(0, MAX_TEXT)}\n`)
+    } catch {}
+  })
+}
+
 const isScript =
   process.argv[1] &&
   import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
@@ -499,11 +633,15 @@ if (isScript) {
       .finally(() => {
         process.exitCode = 0
       })
-  } else if (!first) {
+  } else if (!first || (first === "run" && rest.length === 0)) {
     process.stderr.write(
-      "Usage: node wrap.mjs <wallet MCP command...>  or  node wrap.mjs <https URL>\n"
+      "Usage: node wrap.mjs <wallet MCP command...>\n" +
+        "       node wrap.mjs <https URL of a wallet MCP server>\n" +
+        "       node wrap.mjs run <wallet search command...>\n"
     )
     process.exitCode = 2
+  } else if (first === "run") {
+    runCommand(rest[0], rest.slice(1))
   } else if (/^https?:\/\//i.test(first)) {
     wrapUrl(first)
   } else {

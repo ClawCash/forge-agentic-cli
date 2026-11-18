@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+// A stand-in wallet CLI for the wrapper's tests: prints FAKE_STDOUT and
+// FAKE_STDERR exactly, then exits with FAKE_EXIT.
+process.stdout.write(process.env.FAKE_STDOUT ?? "")
+process.stderr.write(process.env.FAKE_STDERR ?? "")
+process.exitCode = Number(process.env.FAKE_EXIT ?? 0)

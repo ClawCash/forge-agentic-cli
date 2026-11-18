@@ -74,6 +74,20 @@ async function rated(wallet, tool, args) {
   return added.split("\n")[0]
 }
 
+// Runs a wallet's search command through the wrapper, as an agent's shell would.
+async function ratedInShell(words) {
+  const { stderr } = await promisify(execFile)(
+    process.execPath,
+    [WRAP, "run", ...words],
+    { env: { ...ENV, NO_COLOR: "1" }, timeout: 180_000, maxBuffer: 8_000_000 }
+  )
+  const added = stderr.slice(stderr.lastIndexOf("\nAgent Reviews") + 1)
+  if (!added.startsWith("Agent Reviews")) {
+    throw new Error("no ratings were added to the output")
+  }
+  return added.split("\n")[0]
+}
+
 function found(event) {
   const domains = domainsIn(event)
   if (domains.length === 0) throw new Error("no APIs found in the result")
@@ -96,6 +110,14 @@ const CHECKS = {
       query: "web search",
       max_results: 5,
     }),
+  "AgentCash CLI": () =>
+    ratedInShell(["npx", "-y", "agentcash@latest", "search", "web search"]),
+  "awal CLI": () =>
+    ratedInShell(["npx", "-y", "awal@latest", "x402", "bazaar", "search", "web search", "-k", "5"]),
+  "pay.sh CLI": () =>
+    ratedInShell(["npx", "-y", "@solana/pay", "skills", "search", "web search"]),
+  "mppx CLI": () =>
+    ratedInShell(["npx", "-y", "mppx", "services", "list", "-q", "search"]),
   // Payments MCP answers only through its desktop wallet window, which can't
   // run here, so the data its search returns is read directly.
   "Coinbase Payments MCP data": async () =>

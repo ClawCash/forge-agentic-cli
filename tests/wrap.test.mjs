@@ -16,6 +16,8 @@ import { test } from "node:test"
 import {
   briefFrom,
   domainsIn,
+  domainsInOutput,
+  isSearchCommand,
   remember,
   taskOf,
   walletOf,
@@ -717,4 +719,131 @@ test("wraps a remote wallet server over HTTP", async () => {
     assert.equal(headers["mcp-protocol-version"], "2025-06-18")
   }
   assert.equal(wallet.lines.length, 3)
+})
+
+// Searches run from the shell
+
+test("knows each CLI wallet's search commands, and leaves payments alone", () => {
+  for (const line of [
+    'npx awal@latest x402 bazaar search "web search" --json',
+    "awal bazaar list",
+    "npx -y agentcash@latest search linkedin",
+    "agentcash discover https://stableenrich.dev",
+    "npx -y @solana/pay skills search maps",
+    "pay skills show exa/search",
+    "tempo wallet services --search image",
+    "/Users/me/.tempo/bin/tempo wallet services svc_1",
+    "npx -y mppx services list -q search",
+    "mppx services show exa",
+    "npx spongewallet pay discover search",
+  ]) {
+    assert.ok(isSearchCommand(line.split(" ")), line)
+  }
+  for (const line of [
+    "npx awal@latest x402 pay https://a.example -X POST",
+    "npx -y agentcash@latest fetch https://a.example",
+    "pay curl https://a.example",
+    "pay skills add org/repo",
+    "tempo wallet transfer 1 USDC 0xabc",
+    "mppx https://a.example",
+    "spongewallet pay fetch --url https://a.example",
+    "echo agentcash search",
+  ]) {
+    assert.ok(!isSearchCommand(line.split(" ")), line)
+  }
+})
+
+test("reads each CLI wallet's output, as text or JSON", () => {
+  // Trimmed from real output of each wallet.
+  const awalText = [
+    "added 70 packages, and audited 71 packages in 5s",
+    "Found 2 results",
+    "",
+    "https://x402.agentindex.world/search",
+    "Web search. See https://docs.agentindex.world/guide for details.",
+    "Price: 0.002 USDC",
+    "---",
+    "https://search.openverbs.com/v1/web",
+  ].join("\n")
+  const awalJson = `added 70 packages\n${JSON.stringify({
+    items: [
+      { resource: "https://x402.agentindex.world/search", description: "See https://docs.example" },
+      { resource: "https://search.openverbs.com/v1/web" },
+    ],
+  })}`
+  const agentcash = JSON.stringify({ success: true, data: SEARCH_RESULT })
+  const payJson = JSON.stringify([
+    { service: "exa/search", title: "Exa", url: "https://api.exa.ai", endpoints: [{ url: "https://api.exa.ai/search" }] },
+  ])
+  const payText = "\n  \x1b[1mExa\x1b[0m\n  fqn: exa/search\n  url: https://api.exa.ai\n  │ POST $0.007 / req   │\n"
+  const mppxTable = [
+    "aisa     109 paid  AIsa MPP Data APIs  https://api.aisa.one",
+    "brave      6 paid  Brave Search  https://brave.mpp.paywithlocus.com",
+  ].join("\n")
+  const mppxJson = JSON.stringify({
+    services: [{ id: "aisa", name: "AIsa", url: "https://api.aisa.one", paidEndpoints: 109 }],
+  })
+  for (const [output, domains] of [
+    [awalText, ["x402.agentindex.world", "search.openverbs.com"]],
+    [awalJson, ["x402.agentindex.world", "search.openverbs.com"]],
+    [agentcash, DOMAINS],
+    [payJson, ["api.exa.ai"]],
+    [payText, ["api.exa.ai"]],
+    [mppxTable, ["api.aisa.one", "brave.mpp.paywithlocus.com"]],
+    [mppxJson, ["api.aisa.one"]],
+    ["No results.", []],
+  ]) {
+    assert.deepEqual(domainsInOutput(output), domains, output.slice(0, 40))
+  }
+})
+
+function runWrapped(args, { file, stdout = "", stderr = "", exit = 0 }) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ["app/public/wrap.mjs", "run", ...args], {
+      env: {
+        ...process.env,
+        AGENT_REVIEWS_RATINGS: file,
+        AGENT_REVIEWS_RATINGS_URL: "http://127.0.0.1:9/",
+        FAKE_STDOUT: stdout,
+        FAKE_STDERR: stderr,
+        FAKE_EXIT: String(exit),
+      },
+    })
+    let out = ""
+    let err = ""
+    child.stdout.on("data", (chunk) => (out += chunk))
+    child.stderr.on("data", (chunk) => (err += chunk))
+    child.on("close", (code) => resolve({ code, out, err }))
+  })
+}
+
+const CLI = "tests/fixtures/bin/agentcash"
+
+test("a shell search comes back unchanged, with ratings after it on stderr", async () => {
+  const stdout = JSON.stringify({ success: true, data: SEARCH_RESULT })
+  const result = await runWrapped([CLI, "search", "web search"], {
+    file: ratingsPath(ratings()),
+    stdout,
+    stderr: "- Searching...\n",
+  })
+  assert.equal(result.code, 0)
+  assert.equal(result.out, stdout)
+  assert.equal(result.err, `- Searching...\n\n${TEXT}\n`)
+})
+
+test("keeps the wallet's exit code, and adds nothing to other commands", async () => {
+  const file = ratingsPath(ratings())
+  const stdout = JSON.stringify(SEARCH_RESULT)
+  const failed = await runWrapped([CLI, "search", "x"], { file, stdout: "", stderr: "Error: offline\n", exit: 3 })
+  assert.deepEqual(failed, { code: 3, out: "", err: "Error: offline\n" })
+  const other = await runWrapped([CLI, "fetch", "https://4yearcycle.com/x402/web-search"], { file, stdout, exit: 0 })
+  assert.deepEqual(other, { code: 0, out: stdout, err: "" })
+})
+
+test("reads a wallet that prints its results on stderr", async () => {
+  const result = await runWrapped([CLI, "search", "web search"], {
+    file: ratingsPath(ratings()),
+    stderr: "  Catalog\n  url: https://4yearcycle.com\n",
+  })
+  assert.match(result.err, /- 4yearcycle\.com: 4\.5\/5/)
 })
