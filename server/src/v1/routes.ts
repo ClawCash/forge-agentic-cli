@@ -16,7 +16,13 @@ import {
   KEY_HEADER,
   type SendCode,
 } from "./accounts.ts"
-import { brief, briefDomains, MAX_BRIEF_DOMAINS, ratingsFile } from "./brief.ts"
+import {
+  type Alternative,
+  brief,
+  briefDomains,
+  MAX_BRIEF_DOMAINS,
+  ratingsFile,
+} from "./brief.ts"
 import { fingerprintOf } from "./fingerprint.ts"
 import { isSeeded } from "./seed.ts"
 import { domainHealth, healthView } from "./health.ts"
@@ -495,19 +501,79 @@ export function v1Routes(deps: V1Deps) {
     return respondCheck(c, Array.isArray(urls) ? urls : [], filters)
   })
 
+  // The best-reviewed endpoint of each domain for a task, best first: rated
+  // at least 4 stars, likelier than a typical API to work, not down.
+  function topFor(
+    rows: ApiReview[],
+    task: string,
+    prior: number,
+    down: Set<string>,
+    limit = 3
+  ): Alternative[] {
+    const byDomain = new Map<string, ApiReview[]>()
+    for (const row of rows) {
+      if (row.task !== task || down.has(row.domain)) continue
+      byDomain.set(row.domain, [...(byDomain.get(row.domain) ?? []), row])
+    }
+    return [...byDomain]
+      .flatMap(([domain, domainRows]) => {
+        const best = [...new Set(domainRows.map((row) => row.path))]
+          .map((path) => ({
+            url: `https://${domain}${path}`,
+            rating: rate(domainRows, { domain, path, task }, prior),
+          }))
+          .filter(
+            ({ rating }) =>
+              rating.scope === "endpoint" &&
+              rating.verdict !== "avoid" &&
+              (rating.stars ?? 0) >= 4 &&
+              (rating.works_for_task ?? 0) >= prior
+          )
+          .sort(
+            (a, b) =>
+              (b.rating.works_for_task as number) -
+              (a.rating.works_for_task as number)
+          )
+        return best.slice(0, 1)
+      })
+      .sort(
+        (a, b) =>
+          (b.rating.works_for_task as number) -
+            (a.rating.works_for_task as number) ||
+          b.rating.buyers - a.rating.buyers
+      )
+      .slice(0, limit)
+  }
+
+  const downDomains = async () => {
+    const domains = await deps.store.listHealthDomains()
+    const health = await deps.store.listHealthByDomains(domains)
+    return new Set(
+      domains.filter(
+        (domain) =>
+          domainHealth(health.filter((row) => row.domain === domain))
+            ?.status === "down"
+      )
+    )
+  }
+
   // One line per API for a wallet's search results, so an agent sees ratings
-  // without making another call.
+  // without making another call. With a task, only reviews for that task
+  // count, and well-reviewed APIs the search missed are added.
   app.post("/brief", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
     const body = await c.req.json().catch(() => null)
     const domains = briefDomains(body?.domains)
     if (domains.length === 0) {
       return c.json({ error: `Pass 1 to ${MAX_BRIEF_DOMAINS} domains` }, 400)
     }
+    const parsedTask = Task.optional().safeParse(body?.task ?? undefined)
+    if (!parsedTask.success) return c.json({ error: "Unknown task" }, 400)
+    const task = parsedTask.data
     const [rows, subdomainRows, health, prior] = await Promise.all([
       deps.store.listByDomains(domains),
       deps.store.listBySubdomains(domains),
       deps.store.listHealthByDomains(domains),
-      priorFor(undefined),
+      priorFor(task),
     ])
     // A directory can list a company's site while reviews name its API host.
     const reviewsOf = (domain: string) => {
@@ -516,15 +582,28 @@ export function v1Routes(deps: V1Deps) {
         ? exact
         : subdomainRows.filter((row) => row.domain.endsWith(`.${domain}`))
     }
+    const listed = (url: string) => {
+      const host = new URL(url).hostname
+      return domains.some((d) => host === d || host.endsWith(`.${d}`))
+    }
+    const alternatives = task
+      ? topFor(
+          await deps.store.listRecent(5000),
+          task,
+          prior,
+          await downDomains()
+        ).filter(({ url }) => !listed(url))
+      : []
     return c.json(
       brief(
         domains.map((domain) => ({
           domain,
-          rating: rate(reviewsOf(domain), { domain, path: "" }, prior),
+          rating: rate(reviewsOf(domain), { domain, path: "", task }, prior),
           down:
             domainHealth(health.filter((row) => row.domain === domain))
               ?.status === "down",
-        }))
+        })),
+        { task, alternatives }
       )
     )
   })
@@ -566,6 +645,10 @@ export function v1Routes(deps: V1Deps) {
     const domains = [
       ...new Set([...rows.map((row) => row.domain), ...healthDomains]),
     ]
+    const isDown = (domain: string) =>
+      domainHealth(health.filter((row) => row.domain === domain))?.status ===
+      "down"
+    const down = new Set(healthDomains.filter(isDown))
     return c.json(
       ratingsFile(
         domains.map((domain) => {
@@ -573,9 +656,7 @@ export function v1Routes(deps: V1Deps) {
           return {
             domain,
             rating: rate(reviews, { domain, path: "" }, prior),
-            down:
-              domainHealth(health.filter((row) => row.domain === domain))
-                ?.status === "down",
+            down: down.has(domain),
             tasks: Object.fromEntries(
               [...new Set(reviews.map((row) => row.task))].map((task) => [
                 task,
@@ -587,7 +668,13 @@ export function v1Routes(deps: V1Deps) {
               ])
             ),
           }
-        })
+        }),
+        Object.fromEntries(
+          [...priors].map(([task, taskPrior]) => [
+            task,
+            topFor(rows, task, taskPrior, down),
+          ])
+        )
       )
     )
   })

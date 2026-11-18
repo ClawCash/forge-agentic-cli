@@ -301,11 +301,29 @@ export function domainsIn(event) {
   return found.length > 0 ? found : readText(response)
 }
 
-// Same wording as the API's /v1/brief. A test holds the two together.
+const MAX_ALTERNATIVES = 2
+
+const listOf = (words) =>
+  words.length < 2
+    ? words.join("")
+    : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`
+
+const hostOf = (url) => {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return ""
+  }
+}
+
+// Same wording as the API's /v1/brief (server/src/v1/brief.ts). A test holds
+// the two together. With a task, only reviews for that task count, and
+// well-reviewed APIs the search missed are added.
 export function briefFrom(ratings, domains, task = null) {
   if (!ratings?.rated || !ratings.generated_at) return null
   if (Date.now() - Date.parse(ratings.generated_at) > TOO_OLD_MS) return null
   const { rated } = ratings
+  const byTask = ratings.tasks ?? {}
   const names = Object.keys(rated)
   const down = new Set(ratings.down)
   const lines = []
@@ -315,18 +333,50 @@ export function briefFrom(ratings, domains, task = null) {
     const name = Object.hasOwn(rated, domain)
       ? domain
       : names.find((known) => known.endsWith(`.${domain}`))
-    if (name) {
+    const others = name ? Object.keys(byTask[name] ?? {}) : []
+    if (name && task && byTask[name]?.[task]) {
       reviewed += 1
-      const forTask = task ? ratings.tasks?.[name]?.[task] : undefined
+      lines.push(`${domain} (${task}): ${byTask[name][task]}`)
+    } else if (name && task && others.length > 0) {
       lines.push(
-        forTask ? `${domain}, ${task}: ${forTask}` : `${domain}: ${rated[name]}`
+        `${domain}: reviewed only for ${listOf(others.sort())}, not ${task}${down.has(domain) ? ". Not responding when last checked" : ""}`
       )
+    } else if (name) {
+      reviewed += 1
+      lines.push(`${domain}: ${rated[name]}`)
     } else if (down.has(domain)) {
       lines.push(`${domain}: not responding when last checked`)
     }
   }
+  const alternatives = task
+    ? (ratings.top?.[task] ?? [])
+        .filter(({ url }) => {
+          const host = hostOf(url)
+          return (
+            host &&
+            !domains.some((d) => host === d || host.endsWith(`.${d}`))
+          )
+        })
+        .slice(0, MAX_ALTERNATIVES)
+        .map(({ url, line }) => `${url}: ${line}`)
+    : []
+  const reviews = task ? `${task} reviews` : "reviews"
+  const others = alternatives.length
+    ? [
+        `Reviewed for ${task}, not in these results:`,
+        ...alternatives.map((line) => `- ${line}`),
+      ]
+    : []
+  const more =
+    reviewed > 0 || alternatives.length > 0
+      ? ["See what each one promised and delivered with get_api_reviews."]
+      : []
   if (lines.length === 0) {
-    return "402reviews: none of these APIs have reviews yet."
+    return [
+      `402reviews: none of these APIs have ${reviews} yet.`,
+      ...others,
+      ...more,
+    ].join("\n")
   }
   const unreviewed = domains.length - reviewed
   return [
@@ -334,12 +384,11 @@ export function briefFrom(ratings, domains, task = null) {
     ...lines.map((line) => `- ${line}`),
     ...(unreviewed > 0
       ? [
-          `No reviews yet for ${unreviewed} of ${domains.length} APIs in these results.`,
+          `No ${reviews} yet for ${unreviewed} of ${domains.length} APIs in these results.`,
         ]
       : []),
-    ...(reviewed > 0
-      ? ["See what each one promised and delivered with get_api_reviews."]
-      : []),
+    ...others,
+    ...more,
   ].join("\n")
 }
 

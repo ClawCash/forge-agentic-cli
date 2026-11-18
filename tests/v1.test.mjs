@@ -1959,11 +1959,11 @@ test("the leaderboard shows whether an API is answering", async () => {
   assert.equal(after.top[0].health.status, "down")
 })
 
-const askBrief = (app, domains) =>
+const askBrief = (app, domains, task) =>
   app.request("/v1/brief", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domains }),
+    body: JSON.stringify({ domains, task }),
   })
 
 test("a brief is one line per API, in numbers and fixed words", async () => {
@@ -1991,7 +1991,7 @@ test("a brief is one line per API, in numbers and fixed words", async () => {
   assert.equal(brief.unreviewed, 1)
   assert.match(
     brief.text,
-    /stableenrich\.dev: 1 full from 1 agent \(latest \d{4}-\d\d-\d\d\), too early to tell\. Matched its listing in 0 of 1 reviews\. Top problem: stale\./
+    /stableenrich\.dev: \d\.\d\/5 from 1 agent, about \d+% likely to work, \$0\.01 a call, too early to tell\. Didn't match its listing in 1 of 1 reviews\. Top problem: stale\./
   )
   assert.match(brief.text, /No reviews yet for 1 of 2 APIs/)
   assert.match(brief.text, /get_api_reviews/)
@@ -2010,16 +2010,20 @@ test("a brief gives the same counts as the API's page", async () => {
     none: 0,
     not_checked: 0,
   })
-  assert.ok(brief.text.includes("1 full, 1 partial from 2 agents"))
+  assert.ok(
+    brief.text.includes(`${page.rating.stars.toFixed(1)}/5 from 2 agents`)
+  )
 })
 
 test("a brief gives a verdict and real cost once three agents have paid", async () => {
   const { app, store } = await setup()
   for (let i = 0; i < 3; i++) await store.insert(row())
   const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
-  assert.match(brief.text, /3 full from 3 agents .*, verdict \w+\./)
-  assert.match(brief.text, /About \$0\.\d+ per success\./)
-  assert.doesNotMatch(brief.text, /too early|likely to work/)
+  assert.match(
+    brief.text,
+    /\d\.\d\/5 from 3 agents, about \d+% likely to work, \$0\.01 a call, verdict \w+\./
+  )
+  assert.doesNotMatch(brief.text, /too early/)
 })
 
 test("a brief flags a payment that returned nothing", async () => {
@@ -2032,8 +2036,8 @@ test("a brief flags a payment that returned nothing", async () => {
     })
   )
   const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
-  assert.match(brief.text, /1 nothing from 1 agent/)
-  assert.match(brief.text, /Charged with no result: 1\./)
+  assert.match(brief.text, /from 1 agent/)
+  assert.match(brief.text, /Charged with no result once\./)
 })
 
 test("a brief says when an unreviewed API has stopped answering", async () => {
@@ -2051,7 +2055,7 @@ test("a brief finds reviews filed under a company's API host", async () => {
   await store.insert(row({ domain: "api.aisa.one" }))
   const brief = await (await askBrief(app, ["aisa.one"])).json()
   assert.equal(brief.reviewed, 1)
-  assert.match(brief.text, /aisa\.one: 1 full/)
+  assert.match(brief.text, /aisa\.one: \d\.\d\/5 from 1 agent/)
 })
 
 test("a brief prefers reviews of the exact domain listed", async () => {
@@ -2061,7 +2065,7 @@ test("a brief prefers reviews of the exact domain listed", async () => {
   )
   await store.insert(row({ domain: "api.aisa.one" }))
   const brief = await (await askBrief(app, ["aisa.one"])).json()
-  assert.match(brief.text, /aisa\.one: 1 nothing/)
+  assert.match(brief.text, /aisa\.one: [0-2]\.\d\/5/)
 })
 
 test("a brief doesn't match a lookalike domain", async () => {
@@ -2080,6 +2084,68 @@ test("a brief with nothing to say is one line", async () => {
   )
 })
 
+test("reviews for other tasks give no stars, only say which tasks", async () => {
+  const { app, store } = await setup()
+  await store.insert(row({ domain: "weather.example", path: "/now", task: "weather" }))
+  const check = await (
+    await app.request(
+      `/v1/check?task=web-scrape&url=${encodeURIComponent("https://weather.example/scrape")}`
+    )
+  ).json()
+  const [rating] = check.results
+  assert.equal(rating.stars, null)
+  assert.equal(rating.works_for_task, null)
+  assert.equal(rating.verdict, "unknown")
+  assert.deepEqual(rating.other_tasks, ["weather"])
+  const brief = await (
+    await askBrief(app, ["weather.example"], "web-scrape")
+  ).json()
+  assert.equal(brief.reviewed, 0)
+  assert.equal(
+    brief.text,
+    [
+      "402reviews, from agents that paid for these APIs:",
+      "- weather.example: reviewed only for weather, not web-scrape",
+      "No web-scrape reviews yet for 1 of 1 APIs in these results.",
+    ].join("\n")
+  )
+})
+
+test("a brief for a task adds well-reviewed APIs the search missed", async () => {
+  const { app, store } = await setup()
+  for (let i = 0; i < 2; i++) {
+    await store.insert(
+      row({ domain: "atlas.example", path: "/search", task: "web-search" })
+    )
+  }
+  await store.insert(
+    row({
+      domain: "flaky.example",
+      path: "/search",
+      task: "web-search",
+      result: "none",
+      satisfaction: "not_satisfied",
+    })
+  )
+  const brief = await (
+    await askBrief(app, ["listed.example"], "web-search")
+  ).json()
+  assert.match(
+    brief.text,
+    /^402reviews: none of these APIs have web-search reviews yet\.\nReviewed for web-search, not in these results:\n- https:\/\/atlas\.example\/search: \d\.\d\/5 from 2 agents/
+  )
+  assert.doesNotMatch(brief.text, /flaky/)
+  const listed = await (
+    await askBrief(app, ["atlas.example"], "web-search")
+  ).json()
+  assert.doesNotMatch(listed.text, /not in these results/)
+  const file = await (await app.request("/v1/ratings")).json()
+  assert.deepEqual(
+    file.top["web-search"].map((entry) => entry.url),
+    ["https://atlas.example/search"]
+  )
+})
+
 test("the ratings file holds every rating and every dead API", async () => {
   const { app, store } = await setup()
   await store.insert(
@@ -2090,10 +2156,10 @@ test("the ratings file holds every rating and every dead API", async () => {
   const file = await (await app.request("/v1/ratings")).json()
   assert.equal(file.version, 1)
   assert.ok(file.generated_at)
-  assert.match(file.rated["stableenrich.dev"], /^1 full from 1 agent/)
+  assert.match(file.rated["stableenrich.dev"], /^\d\.\d\/5 from 1 agent/)
   assert.match(
     file.tasks["stableenrich.dev"].enrichment,
-    /^1 full from 1 agent/
+    /^\d\.\d\/5 from 1 agent/
   )
   assert.deepEqual(file.down, ["gone.example"])
   assert.doesNotMatch(JSON.stringify(file), /Ignore this|fine\.example/)

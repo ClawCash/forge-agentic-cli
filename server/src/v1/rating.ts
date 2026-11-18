@@ -224,8 +224,12 @@ export interface Rating {
   satisfied: number | null
   confidence: string
   cost_per_success_usd: number | null
+  // What one call usually costs.
+  price_usd: number | null
   scope: "endpoint" | "domain" | null
   matched: string
+  // With no reviews for the task asked about: the tasks it was reviewed for.
+  other_tasks: string[] | null
   buyers: number
   reviews: number
   typical_tries: number | null
@@ -277,8 +281,10 @@ const EMPTY: Rating = {
   satisfied: null,
   confidence: "low",
   cost_per_success_usd: null,
+  price_usd: null,
   scope: null,
   matched: "none",
+  other_tasks: null,
   buyers: 0,
   reviews: 0,
   typical_tries: null,
@@ -398,14 +404,13 @@ export function rate(
   const sameTask = query.task
     ? rows.filter((row) => row.task === query.task)
     : rows
-  // No review for this task yet: other tasks on the domain say little, but
-  // they are better than nothing.
-  const usingOtherTasks = sameTask.length === 0
-  const scored = onePerAgent(
-    score(usingOtherTasks ? rows : sameTask, query, now).map((e) =>
-      usingOtherTasks ? { ...e, weight: e.weight * 0.25 } : e
-    )
-  )
+  // Reviews for other tasks don't say whether it does this one, so they
+  // aren't rated as if they did. They only name those tasks.
+  if (sameTask.length === 0) {
+    const tasks = [...new Set(rows.map((row) => row.task))].sort()
+    return tasks.length > 0 ? { ...EMPTY, other_tasks: tasks } : EMPTY
+  }
+  const scored = onePerAgent(score(sameTask, query, now))
   if (scored.length === 0) return EMPTY
 
   const onEndpoint = query.path
@@ -426,7 +431,7 @@ export function rate(
   const here = summarize(evidence, chance)
   const price = typicalPrice(evidence, onEndpoint, query.path)
   const constraints = [query.language, query.format].filter(Boolean)
-  const task = usingOtherTasks ? "overall" : (query.task ?? "overall")
+  const task = query.task ?? "overall"
 
   return {
     ...summary,
@@ -436,8 +441,10 @@ export function rate(
     top_problem: topProblem(evidence) ?? summary.top_problem,
     cost_per_success_usd:
       price === null ? null : round(price / Math.max(chance, 0.01), 4),
+    price_usd: price === null ? null : round(price, 4),
     scope,
     matched: [task, ...constraints].join(", "),
+    other_tasks: null,
     notes: latestNotes(evidence),
     listing_accuracy: listingAccuracy(evidence),
     promised_vs_delivered: promisedVsDelivered(evidence),
