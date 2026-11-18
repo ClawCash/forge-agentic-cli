@@ -4,7 +4,7 @@
 //
 // Put it in front of a wallet search you run from the shell:
 //
-//   npx -y 402reviews npx awal@latest x402 bazaar search "web search"
+//   npx -y 402reviews@latest npx awal@latest x402 bazaar search "web search"
 //
 // The wallet's output comes through unchanged, and the ratings follow on
 // stderr. Any other command, payments included, runs untouched.
@@ -12,8 +12,8 @@
 // For a wallet that runs as an MCP server, put `mcp` and the server's command
 // or address after it, in your agent's MCP settings:
 //
-//   npx -y 402reviews mcp npx -y agentcash@latest
-//   npx -y 402reviews mcp https://mpp.dev/mcp/services   (a remote server with no sign-in)
+//   npx -y 402reviews@latest mcp npx -y agentcash@latest
+//   npx -y 402reviews@latest mcp https://mpp.dev/mcp/services   (a remote server with no sign-in)
 //
 // It passes every message through unchanged, with one exception: when the
 // wallet answers a search, it adds a few lines of ratings for the APIs in the
@@ -37,7 +37,7 @@ import { dirname, join } from "node:path"
 import { createInterface } from "node:readline"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-const VERSION = "0.2.2"
+const VERSION = "0.3.0"
 const RATINGS_URL =
   process.env.AGENT_REVIEWS_RATINGS_URL ??
   "https://402reviews.xyz/ratings.json"
@@ -78,7 +78,8 @@ const TOOLS = [
   // AgentCash
   [
     /^mcp__.*agentcash.*__search$/,
-    (node) => (typeof node.path === "string" ? node.origin?.url : undefined),
+    (node) =>
+      typeof node.path === "string" ? endpointUrl(node.origin?.url, node.path) : undefined,
   ],
   [
     /^mcp__.*agentcash.*__discover_api_endpoints$/,
@@ -112,6 +113,12 @@ const TOOLS = [
   ],
 ]
 
+// An origin and a path, as one endpoint address.
+function endpointUrl(origin, path) {
+  if (typeof origin !== "string") return undefined
+  return `${origin.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`
+}
+
 // The fields directories use for an API's address.
 const listed = (node) => [
   node.resource,
@@ -119,7 +126,7 @@ const listed = (node) => [
   node.serviceUrl,
   node.endpoint_url,
   node.endpointUrl,
-  typeof node.path === "string" ? node.origin?.url : undefined,
+  typeof node.path === "string" ? endpointUrl(node.origin?.url, node.path) : undefined,
   Array.isArray(node.endpoints) ? node.origin : undefined,
   node.integration !== undefined ? node.url : undefined,
 ]
@@ -156,7 +163,8 @@ const TASK_WORDS = [
   ],
   ["email", /\b(emails?|inbox\w*)\b/i],
   ["web-scrape", /\b(scrap\w+|crawl\w*)\b/i],
-  ["web-search", /\b(web search|search the web|news|serp|google)\b/i],
+  ["news", /\b(news|headlines?)\b/i],
+  ["web-search", /\b(web search|search the web|serp|google)\b/i],
   ["token-price", /\b(token|crypto|coin|defi)\b/i],
   ["weather", /\b(weather|forecast)\b/i],
   ["document-extract", /\b(pdf|documents?|ocr)\b/i],
@@ -191,23 +199,34 @@ function* objects(value, depth = 0) {
   }
 }
 
-function domainOf(address) {
+// An API as its domain, or as "https://domain/path" when the address names an
+// endpoint, so APIs sold under one marketplace domain stay apart.
+function targetOf(address) {
   if (typeof address !== "string") return null
   try {
     const url = new URL(address)
-    return url.protocol === "https:"
-      ? url.hostname.toLowerCase().replace(/^www\./, "")
-      : null
+    if (url.protocol !== "https:") return null
+    const domain = url.hostname.toLowerCase().replace(/^www\./, "")
+    const path = url.pathname.replace(/\/+$/, "")
+    return path ? `https://${domain}${path}` : domain
   } catch {
     return null
   }
 }
 
 const unique = (addresses) =>
-  [...new Set(addresses.flatMap((a) => domainOf(a) ?? []))].slice(
+  [...new Set(addresses.flatMap((a) => targetOf(a) ?? []))].slice(
     0,
     MAX_DOMAINS
   )
+
+const domainsOf = (targets) => [
+  ...new Set(
+    targets.map((target) =>
+      target.startsWith("https://") ? new URL(target).hostname : target
+    )
+  ),
+]
 
 const read = (value, reader) => unique([...objects(value)].flatMap(reader))
 
@@ -283,15 +302,20 @@ function jsonIn(text) {
   return lines.length > 0 ? lines : null
 }
 
-// The APIs in a wallet CLI's search output.
-export function domainsInOutput(output) {
+// The APIs in a wallet CLI's search output, as domains or endpoint URLs.
+export function targetsInOutput(output) {
   const text = String(output ?? "").replace(ANSI, "")
   const json = jsonIn(text)
   return json ? read(json, listedByCli) : unique(addressesInLines(text))
 }
 
-// The APIs in a search answer. `event` is { tool_name, tool_input, tool_response }.
-export function domainsIn(event) {
+export const domainsInOutput = (output) => domainsOf(targetsInOutput(output))
+
+// The APIs in a search answer, as domains or endpoint URLs. `event` is
+// { tool_name, tool_input, tool_response }.
+export const domainsIn = (event) => domainsOf(targetsIn(event))
+
+export function targetsIn(event) {
   const name = String(event?.tool_name ?? "")
   const response = event?.tool_response
   const tool = TOOLS.find(([pattern]) => pattern.test(name))
@@ -302,6 +326,9 @@ export function domainsIn(event) {
 }
 
 const MAX_ALTERNATIVES = 2
+// A task whose reviews stand in, labelled, when there are none for it. The
+// API's rating.ts has the same list.
+const PARENT_TASK = { news: "web-search" }
 
 const listOf = (words) =>
   words.length < 2
@@ -316,50 +343,100 @@ const hostOf = (url) => {
   }
 }
 
+// "domain" or "https://domain/path", as the domain and the path.
+function splitTarget(target) {
+  if (!target.startsWith("https://")) return { domain: target, path: "" }
+  try {
+    const url = new URL(target)
+    return {
+      domain: url.hostname.toLowerCase().replace(/^www\./, ""),
+      path: url.pathname.replace(/\/+$/, ""),
+    }
+  } catch {
+    return null
+  }
+}
+
 // Same wording as the API's /v1/brief (server/src/v1/brief.ts). A test holds
-// the two together. With a task, only reviews for that task count, and
-// well-reviewed APIs the search missed are added.
-export function briefFrom(ratings, domains, task = null) {
+// the two together. `targets` are domains or endpoint URLs. With a task, only
+// reviews for that task count, endpoints are told apart, and well-reviewed
+// APIs the search missed are added.
+export function briefFrom(ratings, targets, task = null) {
   if (!ratings?.rated || !ratings.generated_at) return null
   if (Date.now() - Date.parse(ratings.generated_at) > TOO_OLD_MS) return null
   const { rated } = ratings
   const byTask = ratings.tasks ?? {}
+  const byEndpoint = ratings.endpoints ?? {}
+  const failed = ratings.failures ?? {}
   const names = Object.keys(rated)
   const down = new Set(ratings.down)
+  const parent = task ? PARENT_TASK[task] : undefined
+  const seen = new Set()
+  const listed = targets
+    .flatMap((target) => splitTarget(target) ?? [])
+    .map((t) => (task ? t : { domain: t.domain, path: "" }))
+    .filter(({ domain, path }) => {
+      const key = `${domain}${path}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, MAX_DOMAINS)
   const lines = []
   let reviewed = 0
-  for (const domain of domains) {
+  for (const { domain, path } of listed) {
+    const label = `${domain}${path}`
+    const stillDown = down.has(domain) ? ". Not responding when last checked" : ""
     // A directory can list a company's site while reviews name its API host.
     const name = Object.hasOwn(rated, domain)
       ? domain
       : names.find((known) => known.endsWith(`.${domain}`))
-    const others = name ? Object.keys(byTask[name] ?? {}) : []
-    if (name && task && byTask[name]?.[task]) {
+    const reviewedFor = (name && byTask[name]) || {}
+    const others = Object.keys(reviewedFor)
+    const ratedFor = !task
+      ? null
+      : reviewedFor[task]
+        ? task
+        : parent && reviewedFor[parent]
+          ? parent
+          : null
+    if (name && (!task || others.length === 0)) {
       reviewed += 1
-      lines.push(`${domain} (${task}): ${byTask[name][task]}`)
-    } else if (name && task && others.length > 0) {
+      lines.push(`${label}: ${rated[name]}`)
+    } else if (ratedFor) {
+      reviewed += 1
+      const own = path ? byEndpoint[name]?.[path]?.[ratedFor] : undefined
       lines.push(
-        `${domain}: reviewed only for ${listOf(others.sort())}, not ${task}${down.has(domain) ? ". Not responding when last checked" : ""}`
+        own
+          ? `${label} (${ratedFor}): ${own}`
+          : `${label} (${ratedFor}${path ? `, from other endpoints on ${domain}` : ""}): ${reviewedFor[ratedFor]}`
       )
     } else if (name) {
-      reviewed += 1
-      lines.push(`${domain}: ${rated[name]}`)
+      lines.push(
+        `${label}: reviewed only for ${listOf(others.sort())}, not ${task}${stillDown}`
+      )
+    } else if (path && failed[domain]?.[path]) {
+      lines.push(`${label}: ${failed[domain][path]}${stillDown}`)
     } else if (down.has(domain)) {
-      lines.push(`${domain}: not responding when last checked`)
+      lines.push(`${label}: not responding when last checked`)
     }
   }
-  const alternatives = task
-    ? (ratings.top?.[task] ?? [])
-        .filter(({ url }) => {
-          const host = hostOf(url)
-          return (
-            host &&
-            !domains.some((d) => host === d || host.endsWith(`.${d}`))
-          )
-        })
-        .slice(0, MAX_ALTERNATIVES)
-        .map(({ url, line }) => `${url}: ${line}`)
-    : []
+  const top = ratings.top ?? {}
+  const suggested = !task
+    ? []
+    : top[task]?.length
+      ? top[task]
+      : parent
+        ? (top[parent] ?? [])
+        : []
+  const domains = listed.map(({ domain }) => domain)
+  const alternatives = suggested
+    .filter(({ url }) => {
+      const host = hostOf(url)
+      return host && !domains.some((d) => host === d || host.endsWith(`.${d}`))
+    })
+    .slice(0, MAX_ALTERNATIVES)
+    .map(({ url, task: ratedFor, line }) => `${url}${ratedFor ? ` (${ratedFor})` : ""}: ${line}`)
   const reviews = task ? `${task} reviews` : "reviews"
   const others = alternatives.length
     ? [
@@ -378,13 +455,13 @@ export function briefFrom(ratings, domains, task = null) {
       ...more,
     ].join("\n")
   }
-  const unreviewed = domains.length - reviewed
+  const unreviewed = listed.length - reviewed
   return [
     "402reviews, from agents that paid for these APIs:",
     ...lines.map((line) => `- ${line}`),
     ...(unreviewed > 0
       ? [
-          `No ${reviews} yet for ${unreviewed} of ${domains.length} APIs in these results.`,
+          `No rating yet for ${unreviewed} of ${listed.length} APIs in these results.`,
         ]
       : []),
     ...others,
@@ -490,12 +567,12 @@ export function withRatings(searches, line) {
       tool_input: search.input,
       tool_response: m.result,
     }
-    const domains = domainsIn(event)
-    if (domains.length === 0) continue
+    const targets = targetsIn(event)
+    if (targets.length === 0) continue
     try {
       refreshInBackground()
     } catch {}
-    const text = briefFrom(loadRatings(), domains, taskOf(event))
+    const text = briefFrom(loadRatings(), targets, taskOf(event))
     if (!text) continue
     const content = Array.isArray(m.result.content) ? m.result.content : []
     m.result.content = [
@@ -686,8 +763,8 @@ function runCommand(command, args) {
     if (!search) return
     try {
       const output = (name) => Buffer.concat(kept[name]).toString("utf8")
-      const stdout = domainsInOutput(output("stdout"))
-      const domains = stdout.length > 0 ? stdout : domainsInOutput(output("stderr"))
+      const stdout = targetsInOutput(output("stdout"))
+      const domains = stdout.length > 0 ? stdout : targetsInOutput(output("stderr"))
       if (domains.length === 0) return
       await download
       try {

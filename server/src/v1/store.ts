@@ -7,6 +7,7 @@ import {
   apiReviews,
   authCodes,
   endpointHealth,
+  paymentFailures,
   pendingReviews,
   serviceProfiles,
   usageEvents,
@@ -17,6 +18,7 @@ import {
 export type ServiceProfile = typeof serviceProfiles.$inferSelect
 export type PendingReview = typeof pendingReviews.$inferSelect
 export type EndpointHealth = typeof endpointHealth.$inferSelect
+export type PaymentFailure = typeof paymentFailures.$inferSelect
 export type ApiReview = typeof apiReviews.$inferSelect
 export type NewApiReview = Omit<ApiReview, "createdAt">
 export type ApiUser = typeof users.$inferSelect
@@ -59,6 +61,10 @@ export interface ApiReviewStore {
   getHealth(urls: string[]): Promise<Map<string, EndpointHealth>>
   listHealthByDomains(domains: string[]): Promise<EndpointHealth[]>
   listHealthDomains(): Promise<string[]>
+  insertPaymentFailure(
+    report: Omit<PaymentFailure, "createdAt">
+  ): Promise<PaymentFailure>
+  listPaymentFailures(domains?: string[]): Promise<PaymentFailure[]>
   close(): Promise<void>
 }
 
@@ -181,6 +187,23 @@ export async function postgresApiReviewStore(
         .from(endpointHealth)
       return rows.map((row) => row.domain)
     },
+    async insertPaymentFailure(report) {
+      const [row] = await db.insert(paymentFailures).values(report).returning()
+      return row
+    },
+    listPaymentFailures: (domains) =>
+      domains
+        ? domains.length > 0
+          ? db
+              .select()
+              .from(paymentFailures)
+              .where(inArray(paymentFailures.domain, domains))
+          : Promise.resolve([])
+        : db
+            .select()
+            .from(paymentFailures)
+            .orderBy(desc(paymentFailures.createdAt))
+            .limit(5000),
     async getProfiles(domains) {
       if (domains.length === 0) return new Map()
       const rows = await db
@@ -266,6 +289,7 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const profiles = new Map<string, ServiceProfile>()
   const pending = new Map<string, PendingReview>()
   const health = new Map<string, EndpointHealth>()
+  const failures: PaymentFailure[] = []
   const newestFirst = (list: ApiReview[]) =>
     [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   return {
@@ -336,6 +360,13 @@ export function memoryApiReviewStore(): ApiReviewStore {
     listHealthDomains: async () => [
       ...new Set([...health.values()].map((row) => row.domain)),
     ],
+    async insertPaymentFailure(report) {
+      const row = { ...report, createdAt: new Date() }
+      failures.push(row)
+      return row
+    },
+    listPaymentFailures: async (domains) =>
+      domains ? failures.filter((row) => domains.includes(row.domain)) : [...failures],
     getCode: async (email) => codes.get(email) ?? null,
     async saveCode(code) {
       codes.set(code.email, code)

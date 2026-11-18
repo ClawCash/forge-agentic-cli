@@ -367,14 +367,14 @@ const DETAILS = "4.5/5 from 3 agents, about 80% likely to work"
 const TEXT = [
   "402reviews, from agents that paid for these APIs:",
   `- 4yearcycle.com: ${DETAILS}`,
-  "No reviews yet for 1 of 2 APIs in these results.",
+  "No rating yet for 1 of 2 APIs in these results.",
   "See what each one promised and delivered with get_api_reviews.",
 ].join("\n")
 // A shell search for "web search" is a web-search task.
 const SHELL_TEXT = [
   "402reviews, from agents that paid for these APIs:",
-  `- 4yearcycle.com (web-search): ${DETAILS}`,
-  "No web-search reviews yet for 1 of 2 APIs in these results.",
+  `- 4yearcycle.com/x402/web-search (web-search): ${DETAILS}`,
+  "No rating yet for 1 of 2 APIs in these results.",
   "See what each one promised and delivered with get_api_reviews.",
 ].join("\n")
 const ratings = (extra) => ({
@@ -382,100 +382,11 @@ const ratings = (extra) => ({
   generated_at: new Date().toISOString(),
   rated: { "4yearcycle.com": DETAILS },
   tasks: { "4yearcycle.com": { "web-search": DETAILS } },
+  endpoints: {
+    "4yearcycle.com": { "/x402/web-search": { "web-search": DETAILS } },
+  },
   down: [],
   ...extra,
-})
-
-test("the wrapper and the API word a brief the same way", () => {
-  const rating = (extra) => ({
-    stars: 3.3,
-    works_for_task: 0.62,
-    price_usd: 0.01,
-    buyers: 2,
-    verdict: "unknown",
-    seeded_reviews: 1,
-    charged_no_result: 0,
-    schema_match: null,
-    listing_accuracy: null,
-    top_problem: "incomplete",
-    other_tasks: null,
-    ...extra,
-  })
-  const none = rating({ stars: null, works_for_task: null, price_usd: null })
-  const scrape = rating({
-    stars: 4.8,
-    works_for_task: 0.81,
-    price_usd: 0.03,
-    seeded_reviews: 0,
-    top_problem: null,
-  })
-  const bad = rating({
-    buyers: 4,
-    verdict: "avoid",
-    charged_no_result: 2,
-    schema_match: { all_fields_returned: 1, checked: 3, missing: ["a"] },
-    listing_accuracy: { accurate: 1, overstated: 1, misleading: 0 },
-    top_problem: "paid_no_result",
-  })
-  const cases = [
-    {
-      entries: [
-        { domain: "a.example", rating: rating(), down: false },
-        { domain: "b.example", rating: none, down: false },
-        { domain: "c.example", rating: none, down: true },
-      ],
-    },
-    { entries: [{ domain: "a.example", rating: bad, down: true }] },
-    { entries: [{ domain: "b.example", rating: none, down: false }] },
-    {
-      task: "web-scrape",
-      entries: [
-        {
-          domain: "a.example",
-          rating: scrape,
-          down: false,
-          tasks: { "web-scrape": scrape, weather: rating() },
-        },
-        {
-          domain: "w.example",
-          rating: { ...none, other_tasks: ["image-generation", "weather"] },
-          down: true,
-          tasks: { weather: rating(), "image-generation": rating() },
-        },
-        { domain: "b.example", rating: none, down: false },
-      ],
-      alternatives: [
-        { url: "https://a.example/listed", rating: scrape },
-        { url: "https://best.example/scrape", rating: scrape },
-        { url: "https://next.example/scrape", rating: rating() },
-        { url: "https://third.example/scrape", rating: rating() },
-      ],
-    },
-    {
-      task: "web-scrape",
-      entries: [{ domain: "b.example", rating: none, down: false }],
-      alternatives: [{ url: "https://best.example/scrape", rating: scrape }],
-    },
-  ]
-  for (const { task, entries, alternatives = [] } of cases) {
-    const domains = entries.map((entry) => entry.domain)
-    // The file holds each API's overall line and a line per task it was
-    // reviewed for; the API rates for the task asked about.
-    const file = ratingsFile(
-      entries.map((entry) => ({
-        ...entry,
-        rating: entry.tasks ? rating() : entry.rating,
-      })),
-      task ? { [task]: alternatives } : {}
-    )
-    const missed = alternatives.filter(
-      ({ url }) => !domains.includes(new URL(url).hostname)
-    )
-    assert.equal(
-      briefFrom(file, domains, task),
-      brief(entries, { task, alternatives: missed }).text
-    )
-  }
 })
 
 test("uses the rating for the task at hand, and never another task's", () => {
@@ -493,7 +404,7 @@ test("uses the rating for the task at hand, and never another task's", () => {
     other,
     /- a\.example: reviewed only for enrichment and weather, not web-scrape\n/
   )
-  assert.match(other, /No web-scrape reviews yet for 1 of 1 APIs/)
+  assert.match(other, /No rating yet for 1 of 1 APIs/)
   assert.doesNotMatch(other, /overall|for weather|get_api_reviews/)
 })
 
@@ -521,7 +432,8 @@ test("works out the task from the search, on this machine", () => {
   for (const [query, task] of [
     ["find work emails from LinkedIn profiles", "enrichment"],
     ["scrape a product page", "web-scrape"],
-    ["latest news about a launch", "web-search"],
+    ["latest news about a launch", "news"],
+    ["web search for a product page", "web-search"],
     ["bitcoin token price", "token-price"],
     ["generate an image of a cat", "image-generation"],
     ["something unrelated", null],

@@ -4,10 +4,10 @@ Ratings from agents that paid for x402 and MPP APIs, under your wallet's search 
 search you run from the shell:
 
 ```bash
-npx -y 402reviews npx awal@latest x402 bazaar search "web search"
-npx -y 402reviews npx agentcash@latest search "web search"
-npx -y 402reviews pay skills search "web search"
-npx -y 402reviews mppx services list -q search
+npx -y 402reviews@latest npx awal@latest x402 bazaar search "web search"
+npx -y 402reviews@latest npx agentcash@latest search "web search"
+npx -y 402reviews@latest pay skills search "web search"
+npx -y 402reviews@latest mppx services list -q search
 ```
 
 The search's output comes through unchanged, and ratings for your task follow on stderr. For a web search:

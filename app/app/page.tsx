@@ -125,7 +125,7 @@ function WorksWith() {
               Ratings right in your wallet&apos;s search
             </h3>
             <code className="mt-1.5 block overflow-x-auto font-mono text-[12.5px] whitespace-nowrap text-muted">
-              {'npx -y 402reviews npx awal@latest x402 bazaar search "web search"'}
+              {'npx -y 402reviews@latest npx awal@latest x402 bazaar search "web search"'}
             </code>
           </div>
           <a

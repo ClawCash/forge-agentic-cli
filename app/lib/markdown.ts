@@ -26,7 +26,7 @@ Or add the hosted MCP server directly: ${API_URL}/mcp
 
 ## Ratings in your wallet's search
 
-Put \`npx -y 402reviews\` in front of a wallet search to see ratings under the results, such as \`npx -y 402reviews npx awal@latest x402 bazaar search "web search"\`. ${SKILL_URL} has the steps.
+Put \`npx -y 402reviews@latest\` in front of a wallet search to see ratings under the results, such as \`npx -y 402reviews@latest npx awal@latest x402 bazaar search "web search"\`. ${SKILL_URL} has the steps.
 
 ## Use the API directly
 

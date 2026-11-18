@@ -99,6 +99,22 @@ test(
         1
       )
       assert.deepEqual(await store.listHealthDomains(), ["stableenrich.dev"])
+
+      const failure = await store.insertPaymentFailure({
+        id: "pf_1",
+        domain: "market.example",
+        path: "/a/scrape",
+        task: "web-scrape",
+        userId: "user_1",
+        error: "verification_failed",
+      })
+      assert.ok(failure.createdAt instanceof Date)
+      assert.deepEqual(
+        (await store.listPaymentFailures(["market.example"])).map((r) => r.id),
+        ["pf_1"]
+      )
+      assert.deepEqual(await store.listPaymentFailures(["other.example"]), [])
+      assert.equal((await store.listPaymentFailures()).length, 1)
       assert.deepEqual(
         [...(await store.usedReferences(["eip155:8453:0x1", "other"]))],
         ["eip155:8453:0x1"]

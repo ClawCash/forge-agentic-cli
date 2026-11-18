@@ -95,6 +95,7 @@ test("an agent is told when to act, and sees the tools", async () => {
     "get_api_reviews",
     "prepare_review",
     "probe_api",
+    "report_payment_failure",
     "search_apis",
     "set_auto_review",
     "sign_up",

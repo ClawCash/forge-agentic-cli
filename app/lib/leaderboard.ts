@@ -157,6 +157,7 @@ export const HELPFUL: Record<string, string> = {
 
 export const TASK_FILTERS: [string, string][] = [
   ["web-search", "Web search"],
+  ["news", "News"],
   ["web-scrape", "Scraping"],
   ["token-price", "Token prices"],
   ["enrichment", "Enrichment"],

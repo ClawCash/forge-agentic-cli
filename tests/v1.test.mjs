@@ -1991,9 +1991,9 @@ test("a brief is one line per API, in numbers and fixed words", async () => {
   assert.equal(brief.unreviewed, 1)
   assert.match(
     brief.text,
-    /stableenrich\.dev: \d\.\d\/5 from 1 agent, about \d+% likely to work, \$0\.01 a call, too early to tell\. Didn't match its listing in 1 of 1 reviews\. Top problem: stale\./
+    /stableenrich\.dev: \d\.\d\/5 from 1 agent, about \d+% likely to work, \$0\.01 a call, too early to tell\. Didn't match its listing in 1 of 1 reviews\. Top problem: stale, in 1 of 1 reviews\./
   )
-  assert.match(brief.text, /No reviews yet for 1 of 2 APIs/)
+  assert.match(brief.text, /No rating yet for 1 of 2 APIs/)
   assert.match(brief.text, /get_api_reviews/)
   assert.doesNotMatch(brief.text, /Ignore this|Some of the emails|nobody/)
 })
@@ -2037,7 +2037,7 @@ test("a brief flags a payment that returned nothing", async () => {
   )
   const brief = await (await askBrief(app, ["stableenrich.dev"])).json()
   assert.match(brief.text, /from 1 agent/)
-  assert.match(brief.text, /Charged with no result once\./)
+  assert.match(brief.text, /Returned nothing in 1 of 1 paid calls\./)
 })
 
 test("a brief says when an unreviewed API has stopped answering", async () => {
@@ -2106,7 +2106,7 @@ test("reviews for other tasks give no stars, only say which tasks", async () => 
     [
       "402reviews, from agents that paid for these APIs:",
       "- weather.example: reviewed only for weather, not web-scrape",
-      "No web-scrape reviews yet for 1 of 1 APIs in these results.",
+      "No rating yet for 1 of 1 APIs in these results.",
     ].join("\n")
   )
 })
@@ -2132,7 +2132,7 @@ test("a brief for a task adds well-reviewed APIs the search missed", async () =>
   ).json()
   assert.match(
     brief.text,
-    /^402reviews: none of these APIs have web-search reviews yet\.\nReviewed for web-search, not in these results:\n- https:\/\/atlas\.example\/search: \d\.\d\/5 from 2 agents/
+    /^402reviews: none of these APIs have web-search reviews yet\.\nReviewed for web-search, not in these results:\n- https:\/\/atlas\.example\/search \(web-search\): \d\.\d\/5 from 2 agents/
   )
   assert.doesNotMatch(brief.text, /flaky/)
   const listed = await (
@@ -2143,6 +2143,143 @@ test("a brief for a task adds well-reviewed APIs the search missed", async () =>
   assert.deepEqual(
     file.top["web-search"].map((entry) => entry.url),
     ["https://atlas.example/search"]
+  )
+})
+
+test("the wrapper words every brief exactly as the API does", async () => {
+  const { briefFrom } = await import("../app/public/wrap.mjs")
+  const { app, store } = await setup()
+  const scrape = (path, extra) =>
+    row({ domain: "market.example", path, task: "web-scrape", ...extra })
+  await store.insert(scrape("/a/scrape"))
+  await store.insert(
+    scrape("/b/scrape", {
+      result: "none",
+      satisfaction: "not_satisfied",
+      problems: ["paid_no_result"],
+    })
+  )
+  await store.insert(
+    scrape("/b/scrape", { result: "partial", satisfaction: "partly" })
+  )
+  await store.insert(row({ domain: "weather.example", path: "/now", task: "weather" }))
+  await store.insert(
+    row({ domain: "news.example", path: "/headlines", task: "web-search", problems: ["slow"] })
+  )
+  for (let i = 0; i < 2; i++) {
+    await store.insert(row({ domain: "best.example", path: "/search", task: "web-search" }))
+    await store.insert(row({ domain: "scraper.example", path: "/extract", task: "web-scrape" }))
+  }
+  await store.insertPaymentFailure({
+    id: "pf_1",
+    domain: "market.example",
+    path: "/a/scrape",
+    task: "web-scrape",
+    userId: "user_1",
+    error: "verification_failed",
+  })
+  await store.insertPaymentFailure({
+    id: "pf_2",
+    domain: "unknown.example",
+    path: "/run",
+    task: "web-scrape",
+    userId: "user_2",
+    error: "rejected_after_authorization",
+  })
+  await saveHealth(store, "https://down.example/x", "down")
+  const file = await (await app.request("/v1/ratings")).json()
+  const cases = [
+    {
+      task: "web-scrape",
+      urls: [
+        "https://market.example/a/scrape",
+        "https://market.example/b/scrape",
+        "https://market.example/c/scrape",
+        "https://weather.example/scrape",
+        "https://unknown.example/run",
+        "https://down.example/x",
+        "https://nobody.example/y",
+      ],
+    },
+    {
+      task: "news",
+      urls: [
+        "https://news.example/headlines",
+        "https://news.example/other",
+        "https://weather.example/now",
+      ],
+    },
+    {
+      urls: [
+        "https://market.example/a/scrape",
+        "https://market.example/b/scrape",
+        "https://weather.example/now",
+      ],
+    },
+    { task: "web-search", domains: ["news.example", "nobody.example"] },
+  ]
+  const texts = []
+  for (const { task, urls = [], domains = [] } of cases) {
+    const api = await (
+      await app.request("/v1/brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task, urls, domains }),
+      })
+    ).json()
+    assert.equal(briefFrom(file, [...domains, ...urls], task ?? null), api.text)
+    texts.push(api.text)
+  }
+  const [marketplace, news, untasked] = texts
+  // Each endpoint of a marketplace is rated on its own reviews.
+  assert.match(marketplace, /- market\.example\/a\/scrape \(web-scrape\): 5\.0\/5 from 1 agent.*Also, payment failed without a charge for 1 agent \(unverified, latest \d{4}-\d\d-\d\d\)\./)
+  assert.match(marketplace, /- market\.example\/b\/scrape \(web-scrape\): .*Returned nothing in 1 of 2 paid calls\. Partial results in 1 of 2 paid calls\./)
+  assert.match(marketplace, /- market\.example\/c\/scrape \(web-scrape, from other endpoints on market\.example\): /)
+  assert.match(marketplace, /- weather\.example\/scrape: reviewed only for weather, not web-scrape/)
+  assert.match(marketplace, /- unknown\.example\/run: payment failed without a charge for 1 agent \(unverified/)
+  assert.match(marketplace, /- down\.example\/x: not responding when last checked/)
+  assert.match(marketplace, /Reviewed for web-scrape, not in these results:\n- https:\/\/scraper\.example\/extract \(web-scrape\): 5\.0\/5 from 2 agents/)
+  // News leans on web-search reviews, and says so.
+  assert.match(news, /- news\.example\/headlines \(web-search\): .*Top problem: slow, in 1 of 1 reviews\./)
+  assert.match(news, /Reviewed for news, not in these results:\n- https:\/\/best\.example\/search \(web-search\)/)
+  // Without a task, each domain is rated once.
+  assert.match(untasked, /- market\.example: /)
+  assert.doesNotMatch(untasked, /\/a\/scrape/)
+})
+
+test("an agent can report a payment that failed without a charge", async () => {
+  const { app } = await setup()
+  const report = (body, headers = { [KEY]: apiKey }) =>
+    app.request("/v1/reports/payment-failure", json(body, headers))
+  const url = "https://market.example/a"
+  assert.equal(
+    (await report({ url, error: "verification_failed" }, {})).status,
+    401
+  )
+  assert.equal((await report({ url, error: "made_up" })).status, 400)
+  const first = await report({
+    url: `${url}/`,
+    task: "web-scrape",
+    error: "verification_failed",
+  })
+  assert.equal(first.status, 201)
+  assert.equal((await first.json()).recorded, true)
+  const again = await (await report({ url, error: "timeout" })).json()
+  assert.equal(again.recorded, false)
+  const [checked] = (
+    await (
+      await app.request(`/v1/check?task=web-scrape&url=${encodeURIComponent(url)}`)
+    ).json()
+  ).results
+  assert.equal(checked.stars, null)
+  assert.equal(checked.payment_failures.reports, 1)
+  assert.equal(checked.payment_failures.agents, 1)
+  const brief = await (
+    await app.request("/v1/brief", json({ urls: [url], task: "web-scrape" }))
+  ).json()
+  assert.match(
+    brief.text,
+    /- market\.example\/a: payment failed without a charge for 1 agent \(unverified, latest \d{4}-\d\d-\d\d\)/
   )
 })
 

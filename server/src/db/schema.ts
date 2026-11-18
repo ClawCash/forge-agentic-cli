@@ -226,6 +226,25 @@ export const endpointHealth = pgTable(
   (table) => [index("endpoint_health_domain_idx").on(table.domain)]
 )
 
+// A payment an agent says failed without charging it, such as a seller
+// rejecting a valid authorization. Unverified, since nothing settled, so it
+// never affects a rating; it's shown beside one.
+export const paymentFailures = pgTable(
+  "payment_failures",
+  {
+    id: text("id").primaryKey(),
+    domain: text("domain").notNull(),
+    path: text("path").notNull(),
+    task: text("task"),
+    userId: text("user_id").notNull(),
+    error: text("error").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("payment_failures_domain_idx").on(table.domain)]
+)
+
 // What an API's own site says about it, for its leaderboard card.
 export const serviceProfiles = pgTable("service_profiles", {
   domain: text("domain").primaryKey(),

@@ -228,12 +228,21 @@ export interface Rating {
   price_usd: number | null
   scope: "endpoint" | "domain" | null
   matched: string
+  // The task the reviews behind this rating were for. Usually the one asked
+  // about; for news with no news reviews, web-search.
+  rated_for: string | null
   // With no reviews for the task asked about: the tasks it was reviewed for.
   other_tasks: string[] | null
   buyers: number
   reviews: number
   typical_tries: number | null
   top_problem: string | null
+  // How many of the reviews behind this rating named top_problem.
+  top_problem_count: { reviews: number; of: number } | null
+  // The most recent paid call: what came back, and when.
+  latest: { result: string; at: string } | null
+  // Payments that failed without a charge, reported by agents. Unverified.
+  payment_failures: { reports: number; agents: number; latest_at: string } | null
   notes: string[]
   // Only from reviews that said what was promised and what came back.
   listing_accuracy: {
@@ -284,11 +293,15 @@ const EMPTY: Rating = {
   price_usd: null,
   scope: null,
   matched: "none",
+  rated_for: null,
   other_tasks: null,
   buyers: 0,
   reviews: 0,
   typical_tries: null,
   top_problem: null,
+  top_problem_count: null,
+  latest: null,
+  payment_failures: null,
   notes: [],
   listing_accuracy: null,
   promised_vs_delivered: [],
@@ -385,14 +398,19 @@ function schemaMatch(evidence: Scored[]) {
 }
 
 function typicalPrice(evidence: Scored[], onEndpoint: Scored[], path: string) {
-  const priced = (path ? onEndpoint : evidence)
+  const exact = path !== "" && onEndpoint.length > 0
+  const priced = (exact ? onEndpoint : evidence)
     .map(({ row }) => row)
     .filter((row) => row.priceUsd !== null)
   if (priced.length === 0) return null
-  if (!path) return median(priced.map((row) => row.priceUsd as number))
+  if (!exact) return median(priced.map((row) => row.priceUsd as number))
   return priced.sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime())[0]
     .priceUsd as number
 }
+
+// A task whose reviews stand in, clearly labelled, when there are none for it.
+// A news search is a web search, so web-search reviews say something about it.
+export const PARENT_TASK: Record<string, string> = { news: "web-search" }
 
 // `rows` is every review for the domain; `prior` is taskPrior for the task.
 export function rate(
@@ -401,9 +419,13 @@ export function rate(
   prior: number,
   now = Date.now()
 ): Rating {
-  const sameTask = query.task
-    ? rows.filter((row) => row.task === query.task)
-    : rows
+  let ratedFor = query.task ?? null
+  let sameTask = ratedFor ? rows.filter((row) => row.task === ratedFor) : rows
+  const parent = ratedFor ? PARENT_TASK[ratedFor] : undefined
+  if (sameTask.length === 0 && parent) {
+    sameTask = rows.filter((row) => row.task === parent)
+    ratedFor = parent
+  }
   // Reviews for other tasks don't say whether it does this one, so they
   // aren't rated as if they did. They only name those tasks.
   if (sameTask.length === 0) {
@@ -431,19 +453,36 @@ export function rate(
   const here = summarize(evidence, chance)
   const price = typicalPrice(evidence, onEndpoint, query.path)
   const constraints = [query.language, query.format].filter(Boolean)
-  const task = query.task ?? "overall"
+  const task = ratedFor ?? "overall"
+  // Only this rating's own reviews: one endpoint's problem isn't another's.
+  const problem = topProblem(evidence)
+  const named = (e: Scored) => problem !== null && e.row.problems.includes(problem)
+  const newest = [...evidence].sort(
+    (a, b) => b.row.createdAt.getTime() - a.row.createdAt.getTime()
+  )[0]
 
   return {
     ...summary,
+    // A verdict counts the agents behind this rating, not the whole domain's.
+    verdict: here.verdict,
     stars: here.stars,
     satisfied: here.satisfied,
     typical_tries: here.typical_tries,
-    top_problem: topProblem(evidence) ?? summary.top_problem,
+    top_problem: problem,
+    top_problem_count: problem
+      ? { reviews: evidence.filter(named).length, of: evidence.length }
+      : null,
+    latest: {
+      result: newest.row.result,
+      at: newest.row.createdAt.toISOString().slice(0, 10),
+    },
+    payment_failures: null,
     cost_per_success_usd:
       price === null ? null : round(price / Math.max(chance, 0.01), 4),
     price_usd: price === null ? null : round(price, 4),
     scope,
     matched: [task, ...constraints].join(", "),
+    rated_for: ratedFor,
     other_tasks: null,
     notes: latestNotes(evidence),
     listing_accuracy: listingAccuracy(evidence),

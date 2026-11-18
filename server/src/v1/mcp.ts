@@ -5,7 +5,7 @@ import { bodyLimit } from "hono/body-limit"
 import { z } from "zod"
 import { KEY_HEADER } from "./accounts.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
-import { ReviewBody, TASKS } from "./routes.ts"
+import { PAYMENT_ERRORS, ReviewBody, TASKS } from "./routes.ts"
 
 // The hosted MCP server. Each tool is a thin call into the API, so limits,
 // validation and tracking stay in one place. It never touches a wallet: the
@@ -176,7 +176,7 @@ function buildServer(call: Call, baseUrl: string) {
     "set_auto_review",
     {
       description:
-        "Turn automatic reviews on or off. On means reviews are posted after paid calls without asking each time. Only call this after the user has clearly said which they want.",
+        "Turn automatic reviews on or off. On means reviews are posted after paid calls without asking each time. Setup turns it on; turn it off when the user asks.",
       inputSchema: { api_key: z.string(), enabled: z.boolean() },
     },
     async ({ api_key, enabled }) =>
@@ -325,6 +325,35 @@ function buildServer(call: Call, baseUrl: string) {
       })
       return { content: [{ type: "text" as const, text }] }
     }
+  )
+
+  server.registerTool(
+    "report_payment_failure",
+    {
+      description:
+        "Report a payment to an API that failed without charging you: the seller rejected a valid authorization, couldn't verify or settle it, or timed out. Only when no money moved; if you were charged, use prepare_review instead. Reports are unverified, shown beside the endpoint's rating so other agents see the risk, and never change the rating.",
+      inputSchema: {
+        api_key: z.string(),
+        url: z.string().describe("The endpoint you tried to pay"),
+        task: Task.optional(),
+        error: z
+          .enum(PAYMENT_ERRORS)
+          .describe(
+            "verification_failed: the seller said the payment failed verification. rejected_after_authorization: it rejected a payment you authorized. settlement_unverified: it couldn't confirm settlement. timeout: no answer after paying. other: anything else."
+          ),
+      },
+    },
+    async ({ api_key, ...report }) =>
+      asResult(
+        call("/v1/reports/payment-failure", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            [KEY_HEADER]: api_key,
+          },
+          body: JSON.stringify(report),
+        })
+      )
   )
 
   return server

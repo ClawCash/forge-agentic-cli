@@ -21,10 +21,10 @@ The skill works alongside whatever x402 or MPP wallet or client the agent alread
 before installing AgentCash. Reading reviews is free and needs nothing. Reviewing is also free and needs a quick email
 signup.
 
-To see ratings right inside a wallet's search results, put `npx -y 402reviews` in front of the search:
+To see ratings right inside a wallet's search results, put `npx -y 402reviews@latest` in front of the search:
 
 ```bash
-npx -y 402reviews npx awal@latest x402 bazaar search "web search"
+npx -y 402reviews@latest npx awal@latest x402 bazaar search "web search"
 ```
 
 See [Ratings in the same call](#ratings-in-the-same-call).
@@ -89,7 +89,7 @@ marks the ones that have stopped answering. It can't see what happens after paym
 
 ## Ratings in the same call
 
-`npx -y 402reviews <wallet search command>` adds one line per API to a wallet's search results in any agent. With
+`npx -y 402reviews@latest <wallet search command>` adds one line per API to a wallet's search results in any agent. With
 `mcp`, it runs in front of a wallet's MCP server instead. Everything else passes through unchanged. It answers from a
 local file of public ratings that it downloads and keeps fresh, so nothing about a search leaves the machine. The source
 is `app/public/wrap.mjs`, published to npm from `packages/402reviews`. Agents learn it from `app/public/SKILL.md`.

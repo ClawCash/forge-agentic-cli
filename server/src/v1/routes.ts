@@ -19,7 +19,9 @@ import {
 import {
   type Alternative,
   brief,
+  type BriefEntry,
   briefDomains,
+  briefUrls,
   MAX_BRIEF_DOMAINS,
   ratingsFile,
 } from "./brief.ts"
@@ -31,6 +33,7 @@ import type { ReadProfile } from "./profiles.ts"
 import { type WalletProof, walletProver } from "./proof.ts"
 import {
   outcomeValue,
+  PARENT_TASK,
   type Rating,
   rate,
   reviewScore,
@@ -42,6 +45,7 @@ import {
   type ApiReviewStore,
   type ApiUser,
   PaymentAlreadyReviewedError,
+  type PaymentFailure,
   type ServiceProfile,
 } from "./store.ts"
 import { locate, type PaymentTerms, type ReadTerms } from "./terms.ts"
@@ -52,6 +56,7 @@ import { locate, type PaymentTerms, type ReadTerms } from "./terms.ts"
 
 export const TASKS = [
   "web-search",
+  "news",
   "web-scrape",
   "token-price",
   "weather",
@@ -272,6 +277,31 @@ function publicReview(row: ApiReview) {
   }
 }
 
+// Reported payment failures at one endpoint, for showing beside its rating.
+function failureSummary(
+  reports: PaymentFailure[],
+  domain: string,
+  path: string
+): Rating["payment_failures"] {
+  const here = reports.filter((r) => r.domain === domain && r.path === path)
+  if (here.length === 0) return null
+  return {
+    reports: here.length,
+    agents: new Set(here.map((r) => r.userId)).size,
+    latest_at: new Date(Math.max(...here.map((r) => r.createdAt.getTime())))
+      .toISOString()
+      .slice(0, 10),
+  }
+}
+
+export const PAYMENT_ERRORS = [
+  "verification_failed",
+  "rejected_after_authorization",
+  "settlement_unverified",
+  "timeout",
+  "other",
+] as const
+
 const rank = (rating: Rating) =>
   ({ use: 0, unknown: 1, caution: 2, avoid: 3 })[rating.verdict] ?? 1
 
@@ -283,6 +313,7 @@ const USAGE_KINDS: [RegExp, string][] = [
   [/\/v1\/search$/, "search"],
   [/\/v1\/probe$/, "probe"],
   [/\/v1\/reviews(\/|$)/, "review"],
+  [/\/v1\/reports\//, "review"],
   [/\/v1\/leaderboard$/, "leaderboard"],
   [/\/v1\/services\//, "service"],
   [/\/v1\/domains$/, "service"],
@@ -411,6 +442,16 @@ export function v1Routes(deps: V1Deps) {
     return taskPrior(task ? await deps.store.listByTask(task) : [])
   }
 
+  // Picks the prior for one domain's rating: the task's own, or the parent
+  // task's when only its reviews stand in (news rated on web-search reviews).
+  async function priorsFor(task: string | undefined) {
+    const own = await priorFor(task)
+    const parent = task ? PARENT_TASK[task] : undefined
+    const parentPrior = parent ? await priorFor(parent) : own
+    return (reviews: ApiReview[]) =>
+      !parent || reviews.some((row) => row.task === task) ? own : parentPrior
+  }
+
   function moreLink(domain: string, task?: string, path?: string) {
     const query = new URLSearchParams({
       ...(task && { task }),
@@ -424,21 +465,25 @@ export function v1Routes(deps: V1Deps) {
     filters: { task?: string; language?: string; format?: string }
   ) {
     const targets = urls.map((url) => ({ input: url, ...locate(url) }))
-    const rows = await deps.store.listByDomains([
-      ...new Set(targets.map((t) => t.domain)),
+    const domains = [...new Set(targets.map((t) => t.domain))]
+    const [rows, failures] = await Promise.all([
+      deps.store.listByDomains(domains),
+      deps.store.listPaymentFailures(domains),
     ])
-    const prior = await priorFor(filters.task)
+    const priorOf = await priorsFor(filters.task)
     const health = await deps.store.getHealth(targets.map((t) => t.url))
     return targets.map(({ input, domain, path, url }) => {
+      const reviews = rows.filter((row) => row.domain === domain)
       const rating = rate(
-        rows.filter((row) => row.domain === domain),
+        reviews,
         { domain, path, ...filters },
-        prior
+        priorOf(reviews)
       )
       return {
         url: input,
         domain,
         ...rating,
+        payment_failures: path ? failureSummary(failures, domain, path) : null,
         health: healthView(health.get(url)),
         more: moreLink(domain, filters.task, path),
       }
@@ -502,7 +547,8 @@ export function v1Routes(deps: V1Deps) {
   })
 
   // The best-reviewed endpoint of each domain for a task, best first: rated
-  // at least 4 stars, likelier than a typical API to work, not down.
+  // at least 4 stars by at least 2 agents, likelier than a typical API to
+  // work, not down.
   function topFor(
     rows: ApiReview[],
     task: string,
@@ -525,6 +571,7 @@ export function v1Routes(deps: V1Deps) {
           .filter(
             ({ rating }) =>
               rating.scope === "endpoint" &&
+              (rating.audit?.agents ?? 0) >= 2 &&
               rating.verdict !== "avoid" &&
               (rating.stars ?? 0) >= 4 &&
               (rating.works_for_task ?? 0) >= prior
@@ -562,18 +609,36 @@ export function v1Routes(deps: V1Deps) {
   // count, and well-reviewed APIs the search missed are added.
   app.post("/brief", bodyLimit({ maxSize: 16 * 1024 }), async (c) => {
     const body = await c.req.json().catch(() => null)
-    const domains = briefDomains(body?.domains)
-    if (domains.length === 0) {
-      return c.json({ error: `Pass 1 to ${MAX_BRIEF_DOMAINS} domains` }, 400)
-    }
     const parsedTask = Task.optional().safeParse(body?.task ?? undefined)
     if (!parsedTask.success) return c.json({ error: "Unknown task" }, 400)
     const task = parsedTask.data
-    const [rows, subdomainRows, health, prior] = await Promise.all([
+    // Domains, or endpoint URLs when the search listed them. Endpoints are
+    // only told apart for a task; without one, each domain is rated once.
+    const listedTargets = [
+      ...briefDomains(body?.domains).map((domain) => ({ domain, path: "" })),
+      ...briefUrls(body?.urls),
+    ]
+    const targets = (
+      task
+        ? listedTargets
+        : [...new Set(listedTargets.map((t) => t.domain))].map((domain) => ({
+            domain,
+            path: "",
+          }))
+    ).slice(0, MAX_BRIEF_DOMAINS)
+    if (targets.length === 0) {
+      return c.json(
+        { error: `Pass 1 to ${MAX_BRIEF_DOMAINS} domains or urls` },
+        400
+      )
+    }
+    const domains = [...new Set(targets.map((t) => t.domain))]
+    const [rows, subdomainRows, health, failures, priorOf] = await Promise.all([
       deps.store.listByDomains(domains),
       deps.store.listBySubdomains(domains),
       deps.store.listHealthByDomains(domains),
-      priorFor(task),
+      deps.store.listPaymentFailures(domains),
+      priorsFor(task),
     ])
     // A directory can list a company's site while reviews name its API host.
     const reviewsOf = (domain: string) => {
@@ -586,27 +651,47 @@ export function v1Routes(deps: V1Deps) {
       const host = new URL(url).hostname
       return domains.some((d) => host === d || host.endsWith(`.${d}`))
     }
-    const alternatives = task
-      ? topFor(
-          await deps.store.listRecent(5000),
-          task,
-          prior,
-          await downDomains()
-        ).filter(({ url }) => !listed(url))
-      : []
+    const alternatives = task ? await alternativesFor(task) : []
+    const entries: BriefEntry[] = targets.map(({ domain, path }) => {
+      const reviews = reviewsOf(domain)
+      const rating = rate(reviews, { domain, path, task }, priorOf(reviews))
+      // Failures belong to one endpoint: shown with its own rating, or alone.
+      const ownEndpoint = rating.scope === "endpoint" || rating.stars === null
+      return {
+        domain,
+        ...(path && { path }),
+        rating: {
+          ...rating,
+          payment_failures:
+            path && ownEndpoint ? failureSummary(failures, domain, path) : null,
+        },
+        down:
+          domainHealth(health.filter((row) => row.domain === domain))
+            ?.status === "down",
+      }
+    })
     return c.json(
-      brief(
-        domains.map((domain) => ({
-          domain,
-          rating: rate(reviewsOf(domain), { domain, path: "", task }, prior),
-          down:
-            domainHealth(health.filter((row) => row.domain === domain))
-              ?.status === "down",
-        })),
-        { task, alternatives }
-      )
+      brief(entries, {
+        task,
+        alternatives: alternatives.filter(({ url }) => !listed(url)),
+      })
     )
   })
+
+  // Well-reviewed endpoints for a task, or for its parent task when it has
+  // none of its own.
+  async function alternativesFor(task: string) {
+    const [recent, down] = await Promise.all([
+      deps.store.listRecent(5000),
+      downDomains(),
+    ])
+    const own = topFor(recent, task, await priorFor(task), down)
+    const parent = PARENT_TASK[task]
+    return own.length > 0 || !parent
+      ? own
+      : topFor(recent, parent, await priorFor(parent), down)
+  }
+
 
   // What the public log records, so later changes to a review can be spotted.
   app.get("/fingerprints", async (c) => {
@@ -629,10 +714,11 @@ export function v1Routes(deps: V1Deps) {
   })
 
   app.get("/ratings", async (c) => {
-    const [rows, healthDomains, prior] = await Promise.all([
+    const [rows, healthDomains, prior, failures] = await Promise.all([
       deps.store.listRecent(5000),
       deps.store.listHealthDomains(),
       priorFor(undefined),
+      deps.store.listPaymentFailures(),
     ])
     const health = await deps.store.listHealthByDomains(healthDomains)
     const priors = new Map(
@@ -643,32 +729,71 @@ export function v1Routes(deps: V1Deps) {
       )
     )
     const domains = [
-      ...new Set([...rows.map((row) => row.domain), ...healthDomains]),
+      ...new Set([
+        ...rows.map((row) => row.domain),
+        ...healthDomains,
+        ...failures.map((row) => row.domain),
+      ]),
     ]
     const isDown = (domain: string) =>
       domainHealth(health.filter((row) => row.domain === domain))?.status ===
       "down"
     const down = new Set(healthDomains.filter(isDown))
+    const entries: BriefEntry[] = domains.map((domain) => {
+      const reviews = rows.filter((row) => row.domain === domain)
+      const failedPaths = [
+        ...new Set(
+          failures.filter((row) => row.domain === domain).map((r) => r.path)
+        ),
+      ]
+      const failed = (path: string) => failureSummary(failures, domain, path)
+      const taskList = [...new Set(reviews.map((row) => row.task))]
+      // Each reviewed endpoint, per task it was reviewed for there.
+      const endpoints = Object.fromEntries(
+        [...new Set(reviews.map((row) => row.path))]
+          .filter(Boolean)
+          .map((path) => [
+            path,
+            Object.fromEntries(
+              taskList
+                .filter((task) =>
+                  reviews.some((row) => row.path === path && row.task === task)
+                )
+                .map((task) => [
+                  task,
+                  {
+                    ...rate(
+                      reviews,
+                      { domain, path, task },
+                      priors.get(task) as number
+                    ),
+                    payment_failures: failed(path),
+                  },
+                ])
+            ),
+          ])
+      )
+      return {
+        domain,
+        rating: rate(reviews, { domain, path: "" }, prior),
+        down: down.has(domain),
+        tasks: Object.fromEntries(
+          taskList.map((task) => [
+            task,
+            rate(reviews, { domain, path: "", task }, priors.get(task) as number),
+          ])
+        ),
+        endpoints,
+        failures: Object.fromEntries(
+          failedPaths
+            .filter((path) => !endpoints[path])
+            .map((path) => [path, failed(path)])
+        ),
+      }
+    })
     return c.json(
       ratingsFile(
-        domains.map((domain) => {
-          const reviews = rows.filter((row) => row.domain === domain)
-          return {
-            domain,
-            rating: rate(reviews, { domain, path: "" }, prior),
-            down: down.has(domain),
-            tasks: Object.fromEntries(
-              [...new Set(reviews.map((row) => row.task))].map((task) => [
-                task,
-                rate(
-                  reviews,
-                  { domain, path: "", task },
-                  priors.get(task) as number
-                ),
-              ])
-            ),
-          }
-        }),
+        entries,
         Object.fromEntries(
           [...priors].map(([task, taskPrior]) => [
             task,
@@ -678,6 +803,7 @@ export function v1Routes(deps: V1Deps) {
       )
     )
   })
+
 
   // Directory search with ratings added, so one query answers both "what
   // exists" and "does it work".
@@ -967,6 +1093,66 @@ export function v1Routes(deps: V1Deps) {
       throw error
     }
   }
+
+  // A payment that failed without charging the agent. Nothing settled, so it
+  // can't be proved: it's kept apart from reviews, shown beside the endpoint's
+  // rating as unverified, and never changes it. One per agent, endpoint and day.
+  app.post(
+    "/reports/payment-failure",
+    bodyLimit({ maxSize: 4096 }),
+    async (c) => {
+      const parsed = z
+        .object({
+          url: z.string().url().max(500),
+          task: Task.optional(),
+          error: z.enum(PAYMENT_ERRORS),
+        })
+        .safeParse(await c.req.json().catch(() => null))
+      if (!parsed.success) {
+        return c.json(
+          {
+            error: `Send {"url": "...", "error": "...", "task": "..."}. error is one of ${PAYMENT_ERRORS.join(", ")}`,
+          },
+          400
+        )
+      }
+      const user = c.get("user")
+      if (!user) return c.json({ error: NEEDS_KEY, signup: signupHelp() }, 401)
+      if (!parsed.data.url.startsWith("https://")) {
+        return c.json({ error: "Only https endpoints" }, 400)
+      }
+      const { domain, path } = locate(parsed.data.url)
+      const earlier = (await deps.store.listPaymentFailures([domain])).find(
+        (row) =>
+          row.userId === user.id &&
+          row.path === path &&
+          Date.now() - row.createdAt.getTime() < DAY_MS
+      )
+      if (earlier) {
+        return c.json({
+          id: earlier.id,
+          recorded: false,
+          note: "You already reported this endpoint today.",
+        })
+      }
+      const report = await deps.store.insertPaymentFailure({
+        id: `pf_${randomUUID()}`,
+        domain,
+        path,
+        task: parsed.data.task ?? null,
+        userId: user.id,
+        error: parsed.data.error,
+      })
+      return c.json(
+        {
+          id: report.id,
+          recorded: true,
+          note: "Recorded as unverified. It shows beside this endpoint's rating and never changes it.",
+        },
+        201
+      )
+    }
+  )
 
   const invalidReview = (issues: z.core.$ZodIssue[]) =>
     Response.json({ error: "Invalid review", issues }, { status: 400 })
