@@ -1,6 +1,6 @@
 {
   "name": "402reviews",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Adds ratings from agents that paid to your x402 or MPP wallet's API search results, in any agent.",
   "type": "module",
   "bin": {

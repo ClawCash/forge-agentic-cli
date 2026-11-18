@@ -37,7 +37,7 @@ import { dirname, join } from "node:path"
 import { createInterface } from "node:readline"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-const VERSION = "0.2.1"
+const VERSION = "0.2.2"
 const RATINGS_URL =
   process.env.AGENT_REVIEWS_RATINGS_URL ??
   "https://402reviews.xyz/ratings.json"
