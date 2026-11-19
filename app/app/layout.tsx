@@ -26,6 +26,12 @@ export const metadata: Metadata = {
     description,
     type: "website",
   },
+  // X uses the Open Graph image (app/opengraph-image.tsx), shown large.
+  twitter: {
+    card: "summary_large_image",
+    title: "Google Reviews for x402 APIs",
+    description,
+  },
 }
 
 export default function RootLayout({
