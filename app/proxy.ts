@@ -34,11 +34,16 @@ export function proxy(request: NextRequest) {
     url.pathname = "/SKILL.md"
     return NextResponse.redirect(url, 308)
   }
-  // docs.402reviews.xyz is the docs page of the same site.
-  const docsHost = request.headers.get("host")?.startsWith("docs.")
+  // docs.402reviews.xyz and admin.402reviews.xyz are pages of the same site.
+  const host = request.headers.get("host") ?? ""
+  const hostPage = host.startsWith("docs.")
+    ? "/docs"
+    : host.startsWith("admin.")
+      ? "/admin"
+      : null
   const pathname =
-    docsHost && request.nextUrl.pathname === "/"
-      ? "/docs"
+    hostPage && request.nextUrl.pathname === "/"
+      ? hostPage
       : request.nextUrl.pathname
   const target =
     MARKDOWN_PATHS[pathname] ??

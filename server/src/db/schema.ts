@@ -181,6 +181,17 @@ export const apiKeys = pgTable("api_keys", {
     .defaultNow(),
 })
 
+// A signed-in admin dashboard session. Only the token's hash is stored, and the
+// email must still be on ADMIN_EMAILS for it to work.
+export const adminSessions = pgTable("admin_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  email: text("email").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+})
+
 // One row per API request. No request or response content.
 export const usageEvents = pgTable(
   "usage_events",

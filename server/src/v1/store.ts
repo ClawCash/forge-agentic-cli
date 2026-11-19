@@ -1,8 +1,19 @@
-import { desc, eq, inArray, like, lt, or, sql } from "drizzle-orm"
+import {
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  like,
+  lt,
+  or,
+  sql,
+} from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
 import postgres from "postgres"
 import {
+  adminSessions,
   apiKeys,
   apiReviews,
   authCodes,
@@ -24,6 +35,23 @@ export type NewApiReview = Omit<ApiReview, "createdAt">
 export type ApiUser = typeof users.$inferSelect
 export type AuthCode = typeof authCodes.$inferSelect
 export type UsageEvent = Omit<typeof usageEvents.$inferSelect, "createdAt">
+export type AdminSession = typeof adminSessions.$inferSelect
+// Requests per UTC day ("YYYY-MM-DD"), account and kind.
+export interface UsageDay {
+  day: string
+  userId: string | null
+  kind: string
+  requests: number
+}
+export interface UsageUser {
+  userId: string
+  lastAt: Date
+  requests: number
+}
+export interface UsageClient {
+  client: string | null
+  requests: number
+}
 
 export class PaymentAlreadyReviewedError extends Error {
   constructor() {
@@ -52,6 +80,14 @@ export interface ApiReviewStore {
   setAutoReview(userId: string, enabled: boolean): Promise<ApiUser>
   recordUsage(event: UsageEvent): Promise<void>
   listUsage(): Promise<UsageEvent[]>
+  // For the admin dashboard.
+  listUsers(): Promise<ApiUser[]>
+  usageByDay(since: Date): Promise<UsageDay[]>
+  usageByUser(): Promise<UsageUser[]>
+  usageClients(since: Date, limit: number): Promise<UsageClient[]>
+  saveAdminSession(session: Omit<AdminSession, "createdAt">): Promise<void>
+  adminSession(tokenHash: string): Promise<AdminSession | null>
+  deleteAdminSession(tokenHash: string): Promise<void>
   getProfiles(domains: string[]): Promise<Map<string, ServiceProfile>>
   saveProfile(profile: ServiceProfile): Promise<void>
   savePending(pending: PendingReview): Promise<void>
@@ -274,6 +310,63 @@ export async function postgresApiReviewStore(
       await db.insert(usageEvents).values(event)
     },
     listUsage: () => db.select().from(usageEvents),
+    listUsers: () => db.select().from(users).orderBy(desc(users.createdAt)),
+    usageByDay(since) {
+      const day = sql<string>`to_char(${usageEvents.createdAt} at time zone 'UTC', 'YYYY-MM-DD')`
+      return db
+        .select({
+          day,
+          userId: usageEvents.userId,
+          kind: usageEvents.kind,
+          requests: sql<number>`count(*)::int`,
+        })
+        .from(usageEvents)
+        .where(gte(usageEvents.createdAt, since))
+        .groupBy(day, usageEvents.userId, usageEvents.kind)
+    },
+    async usageByUser() {
+      const rows = await db
+        .select({
+          userId: usageEvents.userId,
+          lastAt: sql<Date>`max(${usageEvents.createdAt})`.mapWith(
+            usageEvents.createdAt
+          ),
+          requests: sql<number>`count(*)::int`,
+        })
+        .from(usageEvents)
+        .where(isNotNull(usageEvents.userId))
+        .groupBy(usageEvents.userId)
+      return rows.map((row) => ({ ...row, userId: row.userId as string }))
+    },
+    usageClients: (since, limit) =>
+      db
+        .select({
+          client: usageEvents.client,
+          requests: sql<number>`count(*)::int`,
+        })
+        .from(usageEvents)
+        .where(gte(usageEvents.createdAt, since))
+        .groupBy(usageEvents.client)
+        .orderBy(desc(sql`count(*)`))
+        .limit(limit),
+    async saveAdminSession(session) {
+      await db
+        .delete(adminSessions)
+        .where(lt(adminSessions.expiresAt, sql`now()`))
+      await db.insert(adminSessions).values(session)
+    },
+    async adminSession(tokenHash) {
+      const [row] = await db
+        .select()
+        .from(adminSessions)
+        .where(eq(adminSessions.tokenHash, tokenHash))
+      return row ?? null
+    },
+    async deleteAdminSession(tokenHash) {
+      await db
+        .delete(adminSessions)
+        .where(eq(adminSessions.tokenHash, tokenHash))
+    },
     close: () => client.end(),
   }
 }
@@ -285,7 +378,8 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const codes = new Map<string, AuthCode>()
   const accounts = new Map<string, ApiUser>()
   const keys = new Map<string, string>()
-  const usage: UsageEvent[] = []
+  const usage: (UsageEvent & { createdAt: Date })[] = []
+  const sessions = new Map<string, AdminSession>()
   const profiles = new Map<string, ServiceProfile>()
   const pending = new Map<string, PendingReview>()
   const health = new Map<string, EndpointHealth>()
@@ -366,7 +460,9 @@ export function memoryApiReviewStore(): ApiReviewStore {
       return row
     },
     listPaymentFailures: async (domains) =>
-      domains ? failures.filter((row) => domains.includes(row.domain)) : [...failures],
+      domains
+        ? failures.filter((row) => domains.includes(row.domain))
+        : [...failures],
     getCode: async (email) => codes.get(email) ?? null,
     async saveCode(code) {
       codes.set(code.email, code)
@@ -404,9 +500,63 @@ export function memoryApiReviewStore(): ApiReviewStore {
       return updated
     },
     async recordUsage(event) {
-      usage.push(event)
+      usage.push({ ...event, createdAt: new Date() })
     },
     listUsage: async () => usage,
+    listUsers: async () =>
+      [...accounts.values()].sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      ),
+    async usageByDay(since) {
+      const groups = new Map<string, UsageDay>()
+      for (const event of usage) {
+        if (event.createdAt < since) continue
+        const day = event.createdAt.toISOString().slice(0, 10)
+        const key = `${day}|${event.userId}|${event.kind}`
+        const group = groups.get(key) ?? {
+          day,
+          userId: event.userId,
+          kind: event.kind,
+          requests: 0,
+        }
+        group.requests += 1
+        groups.set(key, group)
+      }
+      return [...groups.values()]
+    },
+    async usageByUser() {
+      const groups = new Map<string, UsageUser>()
+      for (const event of usage) {
+        if (!event.userId) continue
+        const group = groups.get(event.userId) ?? {
+          userId: event.userId,
+          lastAt: event.createdAt,
+          requests: 0,
+        }
+        group.requests += 1
+        if (event.createdAt > group.lastAt) group.lastAt = event.createdAt
+        groups.set(event.userId, group)
+      }
+      return [...groups.values()]
+    },
+    async usageClients(since, limit) {
+      const counts = new Map<string | null, number>()
+      for (const event of usage) {
+        if (event.createdAt < since) continue
+        counts.set(event.client, (counts.get(event.client) ?? 0) + 1)
+      }
+      return [...counts]
+        .map(([client, requests]) => ({ client, requests }))
+        .sort((a, b) => b.requests - a.requests)
+        .slice(0, limit)
+    },
+    async saveAdminSession(session) {
+      sessions.set(session.tokenHash, { ...session, createdAt: new Date() })
+    },
+    adminSession: async (tokenHash) => sessions.get(tokenHash) ?? null,
+    async deleteAdminSession(tokenHash) {
+      sessions.delete(tokenHash)
+    },
     close: async () => {},
   }
 }

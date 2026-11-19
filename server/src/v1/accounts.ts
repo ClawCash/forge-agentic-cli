@@ -16,7 +16,12 @@ import type { ApiReviewStore } from "./store.ts"
 // the agent keeps. Reading reviews never needs any of this.
 
 export const KEY_HEADER = "x-reviews-key"
-export type SendCode = (email: string, code: string) => Promise<void>
+// "admin" codes sign in to the admin dashboard; the rest finish a signup.
+export type SendCode = (
+  email: string,
+  code: string,
+  purpose?: "signup" | "admin"
+) => Promise<void>
 
 const CODE_TTL_MS = 10 * 60_000
 const RESEND_AFTER_MS = 60_000
@@ -36,7 +41,8 @@ export function resendSender(
 ): SendCode | null {
   const { RESEND_API_KEY: apiKey, RESEND_FROM_EMAIL: from } = env
   if (!apiKey || !from) return null
-  return async (email, code) => {
+  return async (email, code, purpose = "signup") => {
+    const admin = purpose === "admin"
     const res = await fetcher("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -46,8 +52,12 @@ export function resendSender(
       body: JSON.stringify({
         from: senderOf(from),
         to: email,
-        subject: `${code} is your 402reviews code`,
-        text: `Your 402reviews code is ${code}.\n\nGive it to your agent to finish signing up. It expires in 10 minutes.\n\nIf you didn't ask for this, you can ignore this email.`,
+        subject: admin
+          ? `${code} is your 402reviews admin code`
+          : `${code} is your 402reviews code`,
+        text: admin
+          ? `Your 402reviews admin sign-in code is ${code}.\n\nIt expires in 10 minutes. If you didn't try to sign in, you can ignore this email.`
+          : `Your 402reviews code is ${code}.\n\nGive it to your agent to finish signing up. It expires in 10 minutes.\n\nIf you didn't ask for this, you can ignore this email.`,
       }),
       signal: AbortSignal.timeout(10_000),
     })

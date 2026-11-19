@@ -27,6 +27,7 @@ import {
 } from "./brief.ts"
 import { fingerprintOf } from "./fingerprint.ts"
 import { isSeeded } from "./seed.ts"
+import { adminRoutes } from "./admin.ts"
 import { domainHealth, healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
@@ -198,6 +199,8 @@ export interface V1Deps {
   baseRpcUrl?: string
   findPayments: FindPayments
   sendCode: SendCode | null
+  // Emails that can sign in to the admin dashboard.
+  adminEmails?: string[]
   readTerms: ReadTerms
   readAdvertised?: (url: string) => Promise<string[]>
   readProfile?: ReadProfile
@@ -417,6 +420,16 @@ export function v1Routes(deps: V1Deps) {
       store: deps.store,
       secret: deps.secret,
       sendCode: deps.sendCode,
+    })
+  )
+
+  app.route(
+    "/admin",
+    adminRoutes({
+      store: deps.store,
+      secret: deps.secret,
+      sendCode: deps.sendCode,
+      adminEmails: deps.adminEmails ?? [],
     })
   )
 

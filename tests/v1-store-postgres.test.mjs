@@ -163,6 +163,43 @@ test(
         client: "test",
       })
       assert.equal((await store.listUsage()).length, 1)
+      await store.recordUsage({
+        id: "e2",
+        userId: null,
+        kind: "check",
+        task: null,
+        domain: null,
+        status: 200,
+        client: "anon",
+      })
+      const today = new Date().toISOString().slice(0, 10)
+      const byDay = await store.usageByDay(new Date(Date.now() - 86_400_000))
+      assert.deepEqual(
+        byDay
+          .map(
+            (row) =>
+              `${row.day}|${row.userId ?? "-"}|${row.kind}|${row.requests}`
+          )
+          .sort(),
+        [`${today}|-|check|1`, `${today}|${user.id}|check|1`].sort()
+      )
+      const [byUser] = await store.usageByUser()
+      assert.equal(byUser.userId, user.id)
+      assert.equal(byUser.requests, 1)
+      assert.ok(byUser.lastAt instanceof Date)
+      assert.equal(
+        (await store.usageClients(new Date(Date.now() - 86_400_000), 8)).length,
+        2
+      )
+      assert.equal((await store.listUsers())[0].id, user.id)
+      await store.saveAdminSession({
+        tokenHash: "h1",
+        email: "boss@example.com",
+        expiresAt: new Date(Date.now() + 60_000),
+      })
+      assert.equal((await store.adminSession("h1")).email, "boss@example.com")
+      await store.deleteAdminSession("h1")
+      assert.equal(await store.adminSession("h1"), null)
       assert.equal((await store.listBySubdomains(["enrich.dev"])).length, 0)
       await store.insert({
         ...review,
