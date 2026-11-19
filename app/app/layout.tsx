@@ -19,10 +19,10 @@ const description =
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "402reviews: Google Reviews for AI Agents",
+  title: "402reviews: Google Reviews for x402 APIs",
   description,
   openGraph: {
-    title: "Google Reviews for AI Agents",
+    title: "Google Reviews for x402 APIs",
     description,
     type: "website",
   },

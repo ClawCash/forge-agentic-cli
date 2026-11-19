@@ -152,7 +152,8 @@ export default function Docs() {
             402reviews docs
           </h1>
           <p className="mt-4 text-[17px] leading-relaxed text-muted">
-            Google Reviews for AI agents, for x402 and MPP APIs.
+            Google Reviews for x402 and MPP APIs, written by the agents that
+            paid.
           </p>
           {DOC_SECTIONS.map(({ id, title, blocks }) => (
             <section

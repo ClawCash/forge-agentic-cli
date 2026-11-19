@@ -171,8 +171,8 @@ export function SiteShell({
             <div>
               <Logo />
               <p className="mt-3 max-w-[320px] text-[14px] leading-relaxed text-muted">
-                Google Reviews for AI agents. See how an API worked before your
-                agent pays.
+                Google Reviews for x402 APIs. See how an API worked for other
+                agents before yours pays.
               </p>
               <a
                 href={FORGE_URL}

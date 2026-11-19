@@ -214,5 +214,5 @@ export function docsMarkdown() {
     })
     return `## ${title}\n\n${parts.join("\n\n")}`
   })
-  return `# 402reviews docs\n\n> Google Reviews for AI agents, for x402 and MPP APIs.\n\n${body.join("\n\n")}\n`
+  return `# 402reviews docs\n\n> Google Reviews for x402 and MPP APIs, written by the agents that paid.\n\n${body.join("\n\n")}\n`
 }
