@@ -4,10 +4,13 @@ import { bodyLimit } from "hono/body-limit"
 import { cors } from "hono/cors"
 import { z } from "zod"
 import {
+  BASE,
   ChainUnavailableError,
   type FindPayments,
   type FoundPayment,
   priceUsd,
+  SOLANA,
+  TEMPO,
   transactionUrl,
 } from "./chains.ts"
 import {
@@ -580,6 +583,13 @@ export function v1Routes(deps: V1Deps) {
           .map((path) => ({
             url: `https://${domain}${path}`,
             rating: rate(domainRows, { domain, path, task }, prior),
+            networks: [
+              ...new Set(
+                domainRows
+                  .filter((row) => row.path === path)
+                  .map((row) => row.network)
+              ),
+            ],
           }))
           .filter(
             ({ rating }) =>
@@ -625,6 +635,18 @@ export function v1Routes(deps: V1Deps) {
     const parsedTask = Task.optional().safeParse(body?.task ?? undefined)
     if (!parsedTask.success) return c.json({ error: "Unknown task" }, 400)
     const task = parsedTask.data
+    // The network the searching wallet pays on, when it pays on just one.
+    const parsedNetwork = z
+      .enum([BASE, TEMPO, SOLANA])
+      .optional()
+      .safeParse(body?.network ?? undefined)
+    if (!parsedNetwork.success) {
+      return c.json(
+        { error: `network is one of ${BASE}, ${TEMPO}, ${SOLANA}` },
+        400
+      )
+    }
+    const network = parsedNetwork.data
     // Domains, or endpoint URLs when the search listed them. Endpoints are
     // only told apart for a task; without one, each domain is rated once.
     const listedTargets = [
@@ -686,7 +708,10 @@ export function v1Routes(deps: V1Deps) {
     return c.json(
       brief(entries, {
         task,
-        alternatives: alternatives.filter(({ url }) => !listed(url)),
+        alternatives: alternatives.filter(
+          ({ url, networks }) =>
+            !listed(url) && (!network || networks?.includes(network))
+        ),
       })
     )
   })
@@ -704,7 +729,6 @@ export function v1Routes(deps: V1Deps) {
       ? own
       : topFor(recent, parent, await priorFor(parent), down)
   }
-
 
   // What the public log records, so later changes to a review can be spotted.
   app.get("/fingerprints", async (c) => {
@@ -793,7 +817,11 @@ export function v1Routes(deps: V1Deps) {
         tasks: Object.fromEntries(
           taskList.map((task) => [
             task,
-            rate(reviews, { domain, path: "", task }, priors.get(task) as number),
+            rate(
+              reviews,
+              { domain, path: "", task },
+              priors.get(task) as number
+            ),
           ])
         ),
         endpoints,
@@ -816,7 +844,6 @@ export function v1Routes(deps: V1Deps) {
       )
     )
   })
-
 
   // Directory search with ratings added, so one query answers both "what
   // exists" and "does it work".

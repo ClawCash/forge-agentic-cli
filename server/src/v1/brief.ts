@@ -29,6 +29,9 @@ export interface BriefEntry {
 export interface Alternative {
   url: string
   rating: Rating
+  // The networks its reviewed payments settled on, so a wallet that pays on
+  // one network is only pointed at APIs it can pay.
+  networks?: string[]
 }
 
 export function briefDomains(input: unknown) {
@@ -144,8 +147,7 @@ export function briefDetails({
       (counted
         ? `Top problem: ${problem}, in ${counted.reviews} of ${counted.of} reviews`
         : `Top problem: ${problem}`),
-    rating.payment_failures &&
-      `Also, ${failureWords(rating.payment_failures)}`,
+    rating.payment_failures && `Also, ${failureWords(rating.payment_failures)}`,
     down && "Not responding when last checked",
   ]
   return `${sentences.filter(Boolean).join(". ")}.`
@@ -233,7 +235,10 @@ export const alternativeLine = ({ url, rating }: Alternative) =>
 
 export function brief(
   entries: BriefEntry[],
-  { task, alternatives = [] }: { task?: string; alternatives?: Alternative[] } = {}
+  {
+    task,
+    alternatives = [],
+  }: { task?: string; alternatives?: Alternative[] } = {}
 ) {
   const lines = entries.flatMap((entry) => briefLine(entry, task) ?? [])
   const reviewed = entries.filter((e) => e.rating.stars !== null).length
@@ -262,10 +267,7 @@ export function ratingsFile(
     Object.fromEntries(
       Object.entries(ratings)
         .filter(([, rating]) => rating.stars !== null)
-        .map(([task, rating]) => [
-          task,
-          briefDetails({ rating, down: isDown }),
-        ])
+        .map(([task, rating]) => [task, briefDetails({ rating, down: isDown })])
     )
   for (const entry of entries) {
     if (entry.down) down.push(entry.domain)
@@ -300,6 +302,7 @@ export function ratingsFile(
           url: alternative.url,
           task: alternative.rating.rated_for,
           line: briefDetails({ rating: alternative.rating, down: false }),
+          networks: alternative.networks ?? [],
         })),
       ])
     ),

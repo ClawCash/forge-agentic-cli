@@ -37,10 +37,9 @@ import { dirname, join } from "node:path"
 import { createInterface } from "node:readline"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-const VERSION = "0.3.0"
+const VERSION = "0.4.0"
 const RATINGS_URL =
-  process.env.AGENT_REVIEWS_RATINGS_URL ??
-  "https://402reviews.xyz/ratings.json"
+  process.env.AGENT_REVIEWS_RATINGS_URL ?? "https://402reviews.xyz/ratings.json"
 const RATINGS_FILE =
   process.env.AGENT_REVIEWS_RATINGS ??
   join(homedir(), ".config", "402reviews", "ratings.json")
@@ -79,14 +78,19 @@ const TOOLS = [
   [
     /^mcp__.*agentcash.*__search$/,
     (node) =>
-      typeof node.path === "string" ? endpointUrl(node.origin?.url, node.path) : undefined,
+      typeof node.path === "string"
+        ? endpointUrl(node.origin?.url, node.path)
+        : undefined,
   ],
   [
     /^mcp__.*agentcash.*__discover_api_endpoints$/,
     (node) => (Array.isArray(node.endpoints) ? node.origin : undefined),
   ],
   // Coinbase Payments MCP
-  [/^mcp__.*__bazaar_(search|list|get_resource_details)$/, (node) => node.resource],
+  [
+    /^mcp__.*__bazaar_(search|list|get_resource_details)$/,
+    (node) => node.resource,
+  ],
   // Coinbase's hosted Bazaar
   [/^mcp__.*(bazaar|cdp|coinbase).*__search_resources$/, bazaarTool],
   // pay.sh (`pay mcp`): each provider and its endpoints. Its catalog listing
@@ -126,7 +130,9 @@ const listed = (node) => [
   node.serviceUrl,
   node.endpoint_url,
   node.endpointUrl,
-  typeof node.path === "string" ? endpointUrl(node.origin?.url, node.path) : undefined,
+  typeof node.path === "string"
+    ? endpointUrl(node.origin?.url, node.path)
+    : undefined,
   Array.isArray(node.endpoints) ? node.origin : undefined,
   node.integration !== undefined ? node.url : undefined,
 ]
@@ -153,6 +159,31 @@ const COMMANDS = [
 
 export const isSearchCommand = (words) =>
   COMMANDS.some((pattern) => pattern.test(words.join(" ")))
+
+// Wallets that pay on one network only, by the command, server address or
+// tool name. Their suggestions are kept to APIs reviewed on that network.
+const TEMPO = "eip155:4217"
+const BASE = "eip155:8453"
+const ONE_NETWORK = [
+  [/(^|[^a-z])(mppx|tempo)([^a-z]|$)|mpp\.dev/, TEMPO],
+  [/(^|[^a-z])(awal|payments-mcp)([^a-z]|$)/, BASE],
+]
+// The wallet command itself, without npx, flags or the search words.
+export const commandName = (words) => {
+  let i = 0
+  while (i < words.length && /^\w+=/.test(words[i])) i++
+  if (words[i] === "npx" || words[i] === "bunx") {
+    i++
+    while (words[i]?.startsWith("-")) i++
+  } else if (/^(pnpm|yarn)$/.test(words[i] ?? "") && words[i + 1] === "dlx") {
+    i += 2
+  }
+  return (words[i] ?? "").replace(/(.)@[^@/]*$/, "$1")
+}
+export const networkOf = (text) =>
+  ONE_NETWORK.find(([pattern]) =>
+    pattern.test(String(text).toLowerCase())
+  )?.[1] ?? null
 
 // Picks the rating for the job at hand. This only reads the search on this
 // machine, so the query itself is never sent anywhere.
@@ -361,7 +392,7 @@ function splitTarget(target) {
 // the two together. `targets` are domains or endpoint URLs. With a task, only
 // reviews for that task count, endpoints are told apart, and well-reviewed
 // APIs the search missed are added.
-export function briefFrom(ratings, targets, task = null) {
+export function briefFrom(ratings, targets, task = null, network = null) {
   if (!ratings?.rated || !ratings.generated_at) return null
   if (Date.now() - Date.parse(ratings.generated_at) > TOO_OLD_MS) return null
   const { rated } = ratings
@@ -386,7 +417,9 @@ export function briefFrom(ratings, targets, task = null) {
   let reviewed = 0
   for (const { domain, path } of listed) {
     const label = `${domain}${path}`
-    const stillDown = down.has(domain) ? ". Not responding when last checked" : ""
+    const stillDown = down.has(domain)
+      ? ". Not responding when last checked"
+      : ""
     // A directory can list a company's site while reviews name its API host.
     const name = Object.hasOwn(rated, domain)
       ? domain
@@ -431,12 +464,19 @@ export function briefFrom(ratings, targets, task = null) {
         : []
   const domains = listed.map(({ domain }) => domain)
   const alternatives = suggested
-    .filter(({ url }) => {
+    .filter(({ url, networks }) => {
       const host = hostOf(url)
-      return host && !domains.some((d) => host === d || host.endsWith(`.${d}`))
+      return (
+        host &&
+        !domains.some((d) => host === d || host.endsWith(`.${d}`)) &&
+        (!network || (networks ?? []).includes(network))
+      )
     })
     .slice(0, MAX_ALTERNATIVES)
-    .map(({ url, task: ratedFor, line }) => `${url}${ratedFor ? ` (${ratedFor})` : ""}: ${line}`)
+    .map(
+      ({ url, task: ratedFor, line }) =>
+        `${url}${ratedFor ? ` (${ratedFor})` : ""}: ${line}`
+    )
   const reviews = task ? `${task} reviews` : "reviews"
   const others = alternatives.length
     ? [
@@ -520,7 +560,10 @@ async function refresh() {
   const partial = `${RATINGS_FILE}.${process.pid}`
   writeFileSync(partial, body)
   renameSync(partial, RATINGS_FILE)
-  return { rated: Object.keys(ratings.rated).length, asOf: ratings.generated_at }
+  return {
+    rated: Object.keys(ratings.rated).length,
+    asOf: ratings.generated_at,
+  }
 }
 
 // The wallet's search tools are told apart by the command or address that
@@ -572,7 +615,12 @@ export function withRatings(searches, line) {
     try {
       refreshInBackground()
     } catch {}
-    const text = briefFrom(loadRatings(), targets, taskOf(event))
+    const text = briefFrom(
+      loadRatings(),
+      targets,
+      taskOf(event),
+      networkOf(search.name)
+    )
     if (!text) continue
     const content = Array.isArray(m.result.content) ? m.result.content : []
     m.result.content = [
@@ -764,14 +812,20 @@ function runCommand(command, args) {
     try {
       const output = (name) => Buffer.concat(kept[name]).toString("utf8")
       const stdout = targetsInOutput(output("stdout"))
-      const domains = stdout.length > 0 ? stdout : targetsInOutput(output("stderr"))
+      const domains =
+        stdout.length > 0 ? stdout : targetsInOutput(output("stderr"))
       if (domains.length === 0) return
       await download
       try {
         refreshInBackground()
       } catch {}
       const event = { tool_input: { query: words.join(" ") } }
-      const text = briefFrom(loadRatings(), domains, taskOf(event))
+      const text = briefFrom(
+        loadRatings(),
+        domains,
+        taskOf(event),
+        networkOf(commandName(words))
+      )
       if (text) process.stderr.write(`\n${text.slice(0, MAX_TEXT)}\n`)
     } catch {}
   })

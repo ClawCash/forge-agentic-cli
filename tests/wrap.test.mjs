@@ -15,6 +15,8 @@ import { setTimeout as wait } from "node:timers/promises"
 import { test } from "node:test"
 import {
   briefFrom,
+  commandName,
+  networkOf,
   domainsIn,
   domainsInOutput,
   isSearchCommand,
@@ -83,7 +85,10 @@ test("reads AgentCash's endpoint list and Coinbase's search", () => {
 
 test("ignores every other tool and every other address", () => {
   assert.deepEqual(
-    domainsIn({ tool_name: "mcp__notion__search", tool_response: SEARCH_RESULT }),
+    domainsIn({
+      tool_name: "mcp__notion__search",
+      tool_response: SEARCH_RESULT,
+    }),
     []
   )
   assert.deepEqual(
@@ -170,13 +175,27 @@ test("reads pay.sh and the MPP directory", () => {
             fqn: "apify/agi",
             description: "See https://docs.apify.com for details",
             endpoints: [
-              { method: "POST", path: "runs", url: "https://agi.apify.com/api-proxy/runs/{receipt}" },
-              { method: "GET", path: "protocols", url: "https://agi.apify.com/protocols" },
+              {
+                method: "POST",
+                path: "runs",
+                url: "https://agi.apify.com/api-proxy/runs/{receipt}",
+              },
+              {
+                method: "GET",
+                path: "protocols",
+                url: "https://agi.apify.com/protocols",
+              },
             ],
           },
           {
             fqn: "exa/search",
-            endpoints: [{ method: "POST", path: "search", url: "https://api.exa.ai/search" }],
+            endpoints: [
+              {
+                method: "POST",
+                path: "search",
+                url: "https://api.exa.ai/search",
+              },
+            ],
           },
         ],
         next_step: "Call get_catalog_entry, then https://example.com/how",
@@ -319,7 +338,10 @@ test("finds each wallet's search tools from the command that starts it, and noth
     [["npx", "-y", "agentcash@latest"], "discover_api_endpoints"],
     [["/usr/local/bin/agentcash", "mcp"], "search"],
     [["npx", "@coinbase/payments-mcp"], "bazaar_search"],
-    [["https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp"], "search_resources"],
+    [
+      ["https://api.cdp.coinbase.com/platform/v2/x402/discovery/mcp"],
+      "search_resources",
+    ],
     [["https://mpp.dev/mcp/services"], "search_services"],
     [["npx", "-y", "@solana/pay", "mcp"], "search_catalog"],
     [["pay", "mcp"], "get_catalog_entry"],
@@ -392,7 +414,9 @@ const ratings = (extra) => ({
 test("uses the rating for the task at hand, and never another task's", () => {
   const file = ratings({
     rated: { "a.example": "overall" },
-    tasks: { "a.example": { weather: "for weather", enrichment: "for enrichment" } },
+    tasks: {
+      "a.example": { weather: "for weather", enrichment: "for enrichment" },
+    },
   })
   assert.match(briefFrom(file, ["a.example"]), /- a\.example: overall/)
   assert.match(
@@ -419,13 +443,63 @@ test("adds well-reviewed APIs for the task that the search missed", () => {
       ],
     },
   })
-  const text = briefFrom(file, ["4yearcycle.com", "other.example"], "web-search")
+  const text = briefFrom(
+    file,
+    ["4yearcycle.com", "other.example"],
+    "web-search"
+  )
   assert.match(
     text,
     /\nReviewed for web-search, not in these results:\n- https:\/\/atlas\.example\/search: 4\.8\/5 from 2 agents\n- https:\/\/two\.example\/s: second\nSee what/
   )
   assert.doesNotMatch(text, /listed already|third/)
-  assert.doesNotMatch(briefFrom(file, ["4yearcycle.com"]), /not in these results/)
+  assert.doesNotMatch(
+    briefFrom(file, ["4yearcycle.com"]),
+    /not in these results/
+  )
+})
+
+test("keeps suggestions to APIs a one-network wallet can pay", () => {
+  const file = ratings({
+    top: {
+      "web-search": [
+        {
+          url: "https://base.example/s",
+          line: "on base",
+          networks: ["eip155:8453"],
+        },
+        {
+          url: "https://tempo.example/s",
+          line: "on tempo",
+          networks: ["eip155:4217"],
+        },
+      ],
+    },
+  })
+  const tempo = briefFrom(file, ["other.example"], "web-search", "eip155:4217")
+  assert.match(tempo, /tempo\.example/)
+  assert.doesNotMatch(tempo, /base\.example/)
+  assert.match(
+    briefFrom(file, ["other.example"], "web-search"),
+    /base\.example/
+  )
+})
+
+test("tells a one-network wallet by its command, not its search words", () => {
+  for (const [words, network] of [
+    [["npx", "-y", "mppx", "services", "list", "-q", "search"], "eip155:4217"],
+    [["npx", "-y", "@tempo/wallet@1.2", "services"], "eip155:4217"],
+    [["tempo", "wallet", "services"], "eip155:4217"],
+    [["npx", "awal@latest", "x402", "bazaar", "search", "mppx"], "eip155:8453"],
+    [["npx", "agentcash@latest", "search", "tempo"], null],
+  ]) {
+    assert.equal(networkOf(commandName(words)), network, words.join(" "))
+  }
+  assert.equal(
+    networkOf("mcp__https-//mpp.dev/mcp/services__search_services"),
+    "eip155:4217"
+  )
+  assert.equal(networkOf("mcp__npx--y-agentcash__search"), null)
 })
 
 test("works out the task from the search, on this machine", () => {
@@ -470,19 +544,28 @@ async function until(condition) {
   assert.ok(condition(), "timed out")
 }
 
-function wrap(args, { file = ratingsPath(), url = "http://127.0.0.1:9/" } = {}) {
-  const child = spawn(process.execPath, ["app/public/wrap.mjs", "mcp", ...args], {
-    env: {
-      ...process.env,
-      AGENT_REVIEWS_RATINGS: file,
-      AGENT_REVIEWS_RATINGS_URL: url,
-      FAKE_SEARCH: text,
-    },
-  })
+function wrap(
+  args,
+  { file = ratingsPath(), url = "http://127.0.0.1:9/" } = {}
+) {
+  const child = spawn(
+    process.execPath,
+    ["app/public/wrap.mjs", "mcp", ...args],
+    {
+      env: {
+        ...process.env,
+        AGENT_REVIEWS_RATINGS: file,
+        AGENT_REVIEWS_RATINGS_URL: url,
+        FAKE_SEARCH: text,
+      },
+    }
+  )
   const lines = []
   let stderr = ""
   child.stderr.on("data", (chunk) => (stderr += chunk))
-  createInterface({ input: child.stdout }).on("line", (line) => lines.push(line))
+  createInterface({ input: child.stdout }).on("line", (line) =>
+    lines.push(line)
+  )
   const exited = new Promise((resolve) => child.on("close", resolve))
   return {
     lines,
@@ -513,7 +596,12 @@ async function fakeSite(respond) {
     let body = ""
     req.on("data", (chunk) => (body += chunk))
     req.on("end", () => {
-      requests.push({ method: req.method, url: req.url, body, headers: req.headers })
+      requests.push({
+        method: req.method,
+        url: req.url,
+        body,
+        headers: req.headers,
+      })
       respond(res, body)
     })
   })
@@ -548,13 +636,22 @@ test("everything else passes through byte for byte, both ways", async () => {
       jsonrpc: "2.0",
       id: 2,
       method: "tools/call",
-      params: { name: "fetch", arguments: { url: "https://4yearcycle.com/x402/web-search", body: text } },
+      params: {
+        name: "fetch",
+        arguments: {
+          url: "https://4yearcycle.com/x402/web-search",
+          body: text,
+        },
+      },
     }),
   ]
   for (const line of sent) wallet.send(line)
   wallet.send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
   wallet.send(search(3, "broken"))
-  for (const [id, line] of [["a", sent[0]], [2, sent[1]]]) {
+  for (const [id, line] of [
+    ["a", sent[0]],
+    [2, sent[1]],
+  ]) {
     assert.equal(
       await wallet.reply(id),
       `{"jsonrpc":"2.0",  "id":${JSON.stringify(id)},  "result":{"echo":${JSON.stringify(line)}}}`
@@ -598,7 +695,10 @@ test("with no file it fetches one as the wallet starts, so the first search has 
   const wallet = wrap(WALLET, { file, url: site.url })
   await until(() => existsSync(file))
   wallet.send(search(1))
-  assert.equal(JSON.parse(await wallet.reply(1)).result.content.at(-1).text, TEXT)
+  assert.equal(
+    JSON.parse(await wallet.reply(1)).result.content.at(-1).text,
+    TEXT
+  )
   await wallet.end()
   site.close()
   assert.equal(site.requests.length, 1)
@@ -633,7 +733,9 @@ test("a failed refresh keeps the last good file and isn't retried at once", asyn
 
 test("very old ratings aren't shown", async () => {
   const old = new Date(Date.now() - 8 * 86_400_000).toISOString()
-  const wallet = wrap(WALLET, { file: ratingsPath(ratings({ generated_at: old })) })
+  const wallet = wrap(WALLET, {
+    file: ratingsPath(ratings({ generated_at: old })),
+  })
   wallet.send(search(1))
   assert.equal(JSON.parse(await wallet.reply(1)).result.content.length, 1)
   await wallet.end()
@@ -649,7 +751,10 @@ test("stops when the wallet stops, with its exit code", async () => {
 test("says so when the wallet can't start", async () => {
   const wallet = wrap(["agent-reviews-no-such-wallet-command"])
   assert.equal(await wallet.exited, 1)
-  assert.match(wallet.stderr(), /couldn't start agent-reviews-no-such-wallet-command/)
+  assert.match(
+    wallet.stderr(),
+    /couldn't start agent-reviews-no-such-wallet-command/
+  )
 })
 
 test("wraps a remote wallet server over HTTP", async () => {
@@ -755,21 +860,37 @@ test("reads each CLI wallet's output, as text or JSON", () => {
   ].join("\n")
   const awalJson = `added 70 packages\n${JSON.stringify({
     items: [
-      { resource: "https://x402.agentindex.world/search", description: "See https://docs.example" },
+      {
+        resource: "https://x402.agentindex.world/search",
+        description: "See https://docs.example",
+      },
       { resource: "https://search.openverbs.com/v1/web" },
     ],
   })}`
   const agentcash = JSON.stringify({ success: true, data: SEARCH_RESULT })
   const payJson = JSON.stringify([
-    { service: "exa/search", title: "Exa", url: "https://api.exa.ai", endpoints: [{ url: "https://api.exa.ai/search" }] },
+    {
+      service: "exa/search",
+      title: "Exa",
+      url: "https://api.exa.ai",
+      endpoints: [{ url: "https://api.exa.ai/search" }],
+    },
   ])
-  const payText = "\n  \x1b[1mExa\x1b[0m\n  fqn: exa/search\n  url: https://api.exa.ai\n  │ POST $0.007 / req   │\n"
+  const payText =
+    "\n  \x1b[1mExa\x1b[0m\n  fqn: exa/search\n  url: https://api.exa.ai\n  │ POST $0.007 / req   │\n"
   const mppxTable = [
     "aisa     109 paid  AIsa MPP Data APIs  https://api.aisa.one",
     "brave      6 paid  Brave Search  https://brave.mpp.paywithlocus.com",
   ].join("\n")
   const mppxJson = JSON.stringify({
-    services: [{ id: "aisa", name: "AIsa", url: "https://api.aisa.one", paidEndpoints: 109 }],
+    services: [
+      {
+        id: "aisa",
+        name: "AIsa",
+        url: "https://api.aisa.one",
+        paidEndpoints: 109,
+      },
+    ],
   })
   for (const [output, domains] of [
     [awalText, ["x402.agentindex.world", "search.openverbs.com"]],
@@ -825,9 +946,17 @@ test("a shell search comes back unchanged, with ratings after it on stderr", asy
 test("keeps the wallet's exit code, and adds nothing to other commands", async () => {
   const file = ratingsPath(ratings())
   const stdout = JSON.stringify(SEARCH_RESULT)
-  const failed = await runWrapped([CLI, "search", "x"], { file, stdout: "", stderr: "Error: offline\n", exit: 3 })
+  const failed = await runWrapped([CLI, "search", "x"], {
+    file,
+    stdout: "",
+    stderr: "Error: offline\n",
+    exit: 3,
+  })
   assert.deepEqual(failed, { code: 3, out: "", err: "Error: offline\n" })
-  const other = await runWrapped([CLI, "fetch", "https://4yearcycle.com/x402/web-search"], { file, stdout, exit: 0 })
+  const other = await runWrapped(
+    [CLI, "fetch", "https://4yearcycle.com/x402/web-search"],
+    { file, stdout, exit: 0 }
+  )
   assert.deepEqual(other, { code: 0, out: stdout, err: "" })
 })
 
@@ -865,17 +994,22 @@ test("a first shell search downloads the ratings while it runs and shows them", 
 
 test("other commands don't download anything", async () => {
   const site = await fakeSite((res) => res.end(JSON.stringify(ratings())))
-  const result = await runWrapped([CLI, "fetch", "https://4yearcycle.com/x402/web-search"], {
-    file: ratingsPath(),
-    url: site.url,
-  })
+  const result = await runWrapped(
+    [CLI, "fetch", "https://4yearcycle.com/x402/web-search"],
+    {
+      file: ratingsPath(),
+      url: site.url,
+    }
+  )
   site.close()
   assert.equal(result.code, 0)
   assert.equal(site.requests.length, 0)
 })
 
 test("--version prints the published package's version", async () => {
-  const { version } = JSON.parse(readFileSync("packages/402reviews/package.json", "utf8"))
+  const { version } = JSON.parse(
+    readFileSync("packages/402reviews/package.json", "utf8")
+  )
   for (const flag of ["--version", "-v"]) {
     const result = await runWrapped([flag], { file: ratingsPath() })
     assert.deepEqual(result, { code: 0, out: `${version}\n`, err: "" })

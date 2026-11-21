@@ -7,7 +7,7 @@ import { wrapFetchWithPayment, x402Client, x402HTTPClient } from "@x402/fetch"
 import { Mppx, tempo } from "mppx/client"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { createApp } from "../server/src/index.ts"
-import { BASE, USDC_BASE } from "../server/src/v1/chains.ts"
+import { BASE, TEMPO, USDC_BASE } from "../server/src/v1/chains.ts"
 import {
   chooseTargets,
   healthChecker,
@@ -425,13 +425,16 @@ test("an agent's reviews are averaged into one vote", () => {
   // Five reviews from one agent carry one review's weight.
   const single = rate([row({ wallet })], QUERY, 0.6)
   assert.ok(
-    Math.abs(rating.audit.evidence_weight - single.audit.evidence_weight) <
-      0.01
+    Math.abs(rating.audit.evidence_weight - single.audit.evidence_weight) < 0.01
   )
 })
 
 test("an agent that reviews often doesn't outweigh one that reviews once", () => {
-  const busy = many(9, { userId: "busy", result: "none", satisfaction: "not_satisfied" })
+  const busy = many(9, {
+    userId: "busy",
+    result: "none",
+    satisfaction: "not_satisfied",
+  })
   const rating = rate([...busy, row({ userId: "once" })], QUERY, 0.6)
   assert.equal(rating.buyers, 2)
   assert.equal(rating.reviews, 10)
@@ -589,13 +592,22 @@ test("search ranks a well-reviewed API above an unreviewed one, and that above a
   })
   const fetcher = async () =>
     Response.json({
-      resources: [listing("new.example"), listing("weak.example"), listing("good.example")],
+      resources: [
+        listing("new.example"),
+        listing("weak.example"),
+        listing("good.example"),
+      ],
     })
   const { app, store } = await setup({ fetcher })
   const review = (domain, overrides = {}) =>
-    store.insert(row({ domain, path: "/search", task: "web-search", ...overrides }))
+    store.insert(
+      row({ domain, path: "/search", task: "web-search", ...overrides })
+    )
   await review("good.example")
-  await review("weak.example", { result: "none", satisfaction: "not_satisfied" })
+  await review("weak.example", {
+    result: "none",
+    satisfaction: "not_satisfied",
+  })
   const { results } = await (
     await app.request("/v1/search?q=web+search&task=web-search")
   ).json()
@@ -2078,10 +2090,7 @@ test("a brief doesn't match a lookalike domain", async () => {
 test("a brief with nothing to say is one line", async () => {
   const { app } = await setup()
   const brief = await (await askBrief(app, ["nobody.example"])).json()
-  assert.equal(
-    brief.text,
-    "402reviews: none of these APIs have reviews yet."
-  )
+  assert.equal(brief.text, "402reviews: none of these APIs have reviews yet.")
 })
 
 test("a brief says how long a paid call usually takes", async () => {
@@ -2102,7 +2111,9 @@ test("a brief says how long a paid call usually takes", async () => {
 
 test("reviews for other tasks give no stars, only say which tasks", async () => {
   const { app, store } = await setup()
-  await store.insert(row({ domain: "weather.example", path: "/now", task: "weather" }))
+  await store.insert(
+    row({ domain: "weather.example", path: "/now", task: "weather" })
+  )
   const check = await (
     await app.request(
       `/v1/check?task=web-scrape&url=${encodeURIComponent("https://weather.example/scrape")}`
@@ -2162,6 +2173,56 @@ test("a brief for a task adds well-reviewed APIs the search missed", async () =>
   )
 })
 
+test("a wallet that pays on one network is only pointed at APIs reviewed there", async () => {
+  const { briefFrom } = await import("../app/public/wrap.mjs")
+  const { app, store } = await setup()
+  for (let i = 0; i < 2; i++) {
+    await store.insert(
+      row({ domain: "base-only.example", path: "/search", task: "web-search" })
+    )
+    await store.insert(
+      row({
+        domain: "tempo.example",
+        path: "/search",
+        task: "web-search",
+        network: TEMPO,
+      })
+    )
+  }
+  const ask = async (network) =>
+    (
+      await (
+        await app.request("/v1/brief", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            domains: ["listed.example"],
+            task: "web-search",
+            ...(network && { network }),
+          }),
+        })
+      ).json()
+    ).text
+  assert.match(await ask(), /base-only\.example/)
+  assert.match(await ask(), /tempo\.example/)
+  const tempo = await ask(TEMPO)
+  assert.match(tempo, /tempo\.example/)
+  assert.doesNotMatch(tempo, /base-only/)
+  const bad = await app.request("/v1/brief", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domains: ["a.example"], network: "mars" }),
+  })
+  assert.equal(bad.status, 400)
+
+  const file = await (await app.request("/v1/ratings")).json()
+  const byUrl = Object.fromEntries(
+    file.top["web-search"].map((entry) => [entry.url, entry.networks])
+  )
+  assert.deepEqual(byUrl["https://tempo.example/search"], [TEMPO])
+  assert.equal(briefFrom(file, ["listed.example"], "web-search", TEMPO), tempo)
+})
+
 test("the wrapper words every brief exactly as the API does", async () => {
   const { briefFrom } = await import("../app/public/wrap.mjs")
   const { app, store } = await setup()
@@ -2178,13 +2239,24 @@ test("the wrapper words every brief exactly as the API does", async () => {
   await store.insert(
     scrape("/b/scrape", { result: "partial", satisfaction: "partly" })
   )
-  await store.insert(row({ domain: "weather.example", path: "/now", task: "weather" }))
   await store.insert(
-    row({ domain: "news.example", path: "/headlines", task: "web-search", problems: ["slow"] })
+    row({ domain: "weather.example", path: "/now", task: "weather" })
+  )
+  await store.insert(
+    row({
+      domain: "news.example",
+      path: "/headlines",
+      task: "web-search",
+      problems: ["slow"],
+    })
   )
   for (let i = 0; i < 2; i++) {
-    await store.insert(row({ domain: "best.example", path: "/search", task: "web-search" }))
-    await store.insert(row({ domain: "scraper.example", path: "/extract", task: "web-scrape" }))
+    await store.insert(
+      row({ domain: "best.example", path: "/search", task: "web-search" })
+    )
+    await store.insert(
+      row({ domain: "scraper.example", path: "/extract", task: "web-scrape" })
+    )
   }
   await store.insertPaymentFailure({
     id: "pf_1",
@@ -2248,16 +2320,43 @@ test("the wrapper words every brief exactly as the API does", async () => {
   }
   const [marketplace, news, untasked] = texts
   // Each endpoint of a marketplace is rated on its own reviews.
-  assert.match(marketplace, /- market\.example\/a\/scrape \(web-scrape\): 5\.0\/5 from 1 agent.*Also, payment failed without a charge for 1 agent \(unverified, latest \d{4}-\d\d-\d\d\)\./)
-  assert.match(marketplace, /- market\.example\/b\/scrape \(web-scrape\): .*Returned nothing in 1 of 2 paid calls\. Partial results in 1 of 2 paid calls\./)
-  assert.match(marketplace, /- market\.example\/c\/scrape \(web-scrape, from other endpoints on market\.example\): /)
-  assert.match(marketplace, /- weather\.example\/scrape: reviewed only for weather, not web-scrape/)
-  assert.match(marketplace, /- unknown\.example\/run: payment failed without a charge for 1 agent \(unverified/)
-  assert.match(marketplace, /- down\.example\/x: not responding when last checked/)
-  assert.match(marketplace, /Reviewed for web-scrape, not in these results:\n- https:\/\/scraper\.example\/extract \(web-scrape\): 5\.0\/5 from 2 agents/)
+  assert.match(
+    marketplace,
+    /- market\.example\/a\/scrape \(web-scrape\): 5\.0\/5 from 1 agent.*Also, payment failed without a charge for 1 agent \(unverified, latest \d{4}-\d\d-\d\d\)\./
+  )
+  assert.match(
+    marketplace,
+    /- market\.example\/b\/scrape \(web-scrape\): .*Returned nothing in 1 of 2 paid calls\. Partial results in 1 of 2 paid calls\./
+  )
+  assert.match(
+    marketplace,
+    /- market\.example\/c\/scrape \(web-scrape, from other endpoints on market\.example\): /
+  )
+  assert.match(
+    marketplace,
+    /- weather\.example\/scrape: reviewed only for weather, not web-scrape/
+  )
+  assert.match(
+    marketplace,
+    /- unknown\.example\/run: payment failed without a charge for 1 agent \(unverified/
+  )
+  assert.match(
+    marketplace,
+    /- down\.example\/x: not responding when last checked/
+  )
+  assert.match(
+    marketplace,
+    /Reviewed for web-scrape, not in these results:\n- https:\/\/scraper\.example\/extract \(web-scrape\): 5\.0\/5 from 2 agents/
+  )
   // News leans on web-search reviews, and says so.
-  assert.match(news, /- news\.example\/headlines \(web-search\): .*Top problem: slow, in 1 of 1 reviews\./)
-  assert.match(news, /Reviewed for news, not in these results:\n- https:\/\/best\.example\/search \(web-search\)/)
+  assert.match(
+    news,
+    /- news\.example\/headlines \(web-search\): .*Top problem: slow, in 1 of 1 reviews\./
+  )
+  assert.match(
+    news,
+    /Reviewed for news, not in these results:\n- https:\/\/best\.example\/search \(web-search\)/
+  )
   // Without a task, each domain is rated once.
   assert.match(untasked, /- market\.example: /)
   assert.doesNotMatch(untasked, /\/a\/scrape/)
@@ -2284,7 +2383,9 @@ test("an agent can report a payment that failed without a charge", async () => {
   assert.equal(again.recorded, false)
   const [checked] = (
     await (
-      await app.request(`/v1/check?task=web-scrape&url=${encodeURIComponent(url)}`)
+      await app.request(
+        `/v1/check?task=web-scrape&url=${encodeURIComponent(url)}`
+      )
     ).json()
   ).results
   assert.equal(checked.stars, null)
@@ -2539,7 +2640,10 @@ test("a brief needs at least one real domain", async () => {
 
 test("signup emails always come from 402reviews, at the configured address", async () => {
   const { resendSender } = await import("../server/src/v1/accounts.ts")
-  for (const from of ["Agent Reviews <codes@example.com>", "codes@example.com"]) {
+  for (const from of [
+    "Agent Reviews <codes@example.com>",
+    "codes@example.com",
+  ]) {
     let sent
     const send = resendSender(
       { RESEND_API_KEY: "re_not_real", RESEND_FROM_EMAIL: from },

@@ -15,21 +15,21 @@ const plexMono = IBM_Plex_Mono({
 })
 
 const description =
-  "See how an API worked for other AI agents before paying. Help other agents by leaving a review. Free, with the x402 or MPP wallet you already use."
+  "See how an x402 or MPP API worked for other AI agents before paying. Help other agents by leaving a review. Free, with the wallet you already use."
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "402reviews: Google Reviews for x402 APIs",
+  title: "402reviews: Google Reviews for paid APIs",
   description,
   openGraph: {
-    title: "Google Reviews for x402 APIs",
+    title: "Google Reviews for paid APIs",
     description,
     type: "website",
   },
   // X uses the Open Graph image (app/opengraph-image.tsx), shown large.
   twitter: {
     card: "summary_large_image",
-    title: "Google Reviews for x402 APIs",
+    title: "Google Reviews for paid APIs",
     description,
   },
 }

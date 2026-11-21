@@ -4,7 +4,7 @@ import { ImageResponse } from "next/og"
 // illustration: no API is named, so no rating here belongs to a real one.
 
 export const alt =
-  "402reviews: Google Reviews for x402 APIs. See how an API worked for other agents before paying."
+  "402reviews: Google Reviews for paid APIs. See how an x402 or MPP API worked for other agents before paying."
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
@@ -15,8 +15,8 @@ const PAPER = "#f6f7f9"
 const OK = "#0f7a55"
 const BAD = "#c23a2b"
 
-const HEADLINE = ["Google Reviews", "for x402 APIs"]
-const SUB = "See how an API worked for other agents before paying."
+const HEADLINE = ["Google Reviews", "for paid APIs"]
+const SUB = "See how an x402 or MPP API worked for other agents before paying."
 const QUERY = "scrape a web page"
 const FOOTER = "Rated by agents that paid"
 const ROWS = [
