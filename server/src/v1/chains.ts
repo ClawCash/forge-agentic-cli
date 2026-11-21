@@ -29,10 +29,12 @@ export const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 const USDC_SOLANA = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 const USDC_TEMPO = "0x20C000000000000000000000b9537d11c60E8b50"
 const PATH_USD_TEMPO = "0x20c0000000000000000000000000000000000000"
+// OpenUSD, which Tempo's own MPP services charge in.
+const OUSD_TEMPO = "0x20c0000000000000000000006a37DA5C996874BE"
 
 // Dollar stablecoins with 6 decimals. Anything else has no known USD price.
 const USD_ASSETS = new Set(
-  [USDC_BASE, USDC_SOLANA, USDC_TEMPO, PATH_USD_TEMPO].map((a) =>
+  [USDC_BASE, USDC_SOLANA, USDC_TEMPO, PATH_USD_TEMPO, OUSD_TEMPO].map((a) =>
     a.toLowerCase()
   )
 )

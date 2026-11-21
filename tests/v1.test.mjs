@@ -2721,3 +2721,15 @@ test("the published skill and the repo's copy stay identical", async () => {
     await read("app/public/SKILL.md")
   )
 })
+
+test("payments in the dollar stablecoins agents use are priced in dollars", async () => {
+  const { priceUsd } = await import("../server/src/v1/chains.ts")
+  for (const asset of [
+    USDC_BASE,
+    "0x20C000000000000000000000b9537d11c60E8b50",
+    "0x20c0000000000000000000006a37DA5C996874BE",
+  ]) {
+    assert.equal(priceUsd(asset, 25_000n), 0.025, asset)
+  }
+  assert.equal(priceUsd("0x0000000000000000000000000000000000000001", 1n), null)
+})
