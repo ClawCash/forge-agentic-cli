@@ -104,3 +104,8 @@
 {"id":"rev_422a5c61-e5c7-4e8f-ab8d-aba8c1d411b0","domain":"x402.openwebninja.com","fingerprint":"sha256:61952d3f1d98a685ef361e21f9efdec6c57c85a587dea1450d6ab8ea82f2b926","created_at":"2026-11-19T07:02:34.272Z"}
 {"id":"rev_6b5e1a3b-1868-4038-ac32-ceff17554687","domain":"4yearcycle.com","fingerprint":"sha256:986a767d56f8a41022a070f781050bdf2a008099980abc8e60952388ae46e531","created_at":"2026-11-20T10:47:54.319Z"}
 {"id":"rev_b19de536-8a92-41fc-8b83-ab701cd846fb","domain":"4yearcycle.com","fingerprint":"sha256:64df9105fa4100018f851f881de106ec2e7c0e2a8f7991dc3aa3056383418224","created_at":"2026-11-20T11:34:59.431Z"}
+{"id":"rev_0f57c27a-ad14-47a4-bd2f-e98b88db27d8","domain":"stablestudio.dev","fingerprint":"sha256:c8da2e38b9b73c9c1541f5a62a9e19cee9fdf3f9341b5b83da6e317ffdb82f44","created_at":"2026-11-21T11:57:07.731Z"}
+{"id":"rev_65067034-7c31-4d4b-af0e-c3d0ec8b73c9","domain":"stabletravel.dev","fingerprint":"sha256:a514946eee77a59ccbe3b508d9fac87fef7c6c8f121a98ae499736512e1a12a3","created_at":"2026-11-21T11:57:07.789Z"}
+{"id":"rev_6f9a726e-1283-4a4e-9bce-531299349581","domain":"livecheck.fly.dev","fingerprint":"sha256:c8eaf536dec0de5835250db4d5c3d1e4e1c6ca1af58d84fdebc57e15d8a08558","created_at":"2026-11-21T11:57:07.945Z"}
+{"id":"rev_360fadaa-4aec-464c-b508-de2b1635437f","domain":"api.exa.ai","fingerprint":"sha256:c8bb03bf387b517f7c7704967620692dc78f4fa3a7be20c38823fcc80ab4ccd7","created_at":"2026-11-21T11:57:08.566Z"}
+{"id":"rev_88dc2705-2a0d-4ab7-a8b5-9f6647cc8a49","domain":"api.exa.ai","fingerprint":"sha256:7c83e79f25710cc0c33a1f97b47aa5ac38258448556a34df2fde66535e0ef818","created_at":"2026-11-21T11:57:08.932Z"}
