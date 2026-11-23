@@ -45,9 +45,18 @@ export interface Claim {
   payment_failures?: { endpoint: string; error: string; created_at: string }[]
 }
 
+// A key for the providers MCP, as the dashboard lists it. Never the key.
+export interface ProviderKeyView {
+  id: string
+  prefix: string
+  created_at: string
+  last_used_at: string | null
+}
+
 export interface MerchantMe {
   email: string
   claims: Claim[]
+  provider_keys?: ProviderKeyView[]
   limits: { seed_max_price_usd: number; seed_max_endpoints: number }
 }
 

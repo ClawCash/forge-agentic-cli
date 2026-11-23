@@ -5,6 +5,7 @@ import {
   gte,
   inArray,
   isNotNull,
+  isNull,
   like,
   lt,
   or,
@@ -24,6 +25,7 @@ import {
   merchantSessions,
   paymentFailures,
   pendingReviews,
+  providerKeys,
   seedingRequests,
   serviceProfiles,
   usageEvents,
@@ -45,6 +47,7 @@ export type MerchantSession = typeof merchantSessions.$inferSelect
 export type MerchantClaim = typeof merchantClaims.$inferSelect
 export type MerchantProfile = typeof merchantProfiles.$inferSelect
 export type SeedingRequest = typeof seedingRequests.$inferSelect
+export type ProviderKey = typeof providerKeys.$inferSelect
 // Requests per UTC day ("YYYY-MM-DD"), account and kind.
 export interface UsageDay {
   day: string
@@ -103,6 +106,14 @@ export interface ApiReviewStore {
   ): Promise<void>
   merchantSession(tokenHash: string): Promise<MerchantSession | null>
   deleteMerchantSession(tokenHash: string): Promise<void>
+  // Keys for the providers MCP. Lookups skip revoked keys.
+  insertProviderKey(
+    key: Omit<ProviderKey, "createdAt" | "lastUsedAt" | "revokedAt">
+  ): Promise<void>
+  providerKey(keyHash: string): Promise<ProviderKey | null>
+  providerKeys(email: string): Promise<ProviderKey[]>
+  revokeProviderKey(id: string, email: string): Promise<boolean>
+  touchProviderKey(id: string): Promise<void>
   claimsFor(filter: {
     email?: string
     domain?: string
@@ -413,6 +424,44 @@ export async function postgresApiReviewStore(
         .delete(merchantSessions)
         .where(eq(merchantSessions.tokenHash, tokenHash))
     },
+    async insertProviderKey(key) {
+      await db.insert(providerKeys).values(key)
+    },
+    async providerKey(keyHash) {
+      const [row] = await db
+        .select()
+        .from(providerKeys)
+        .where(
+          and(eq(providerKeys.keyHash, keyHash), isNull(providerKeys.revokedAt))
+        )
+      return row ?? null
+    },
+    providerKeys: (email) =>
+      db
+        .select()
+        .from(providerKeys)
+        .where(and(eq(providerKeys.email, email), isNull(providerKeys.revokedAt)))
+        .orderBy(desc(providerKeys.createdAt)),
+    async revokeProviderKey(id, email) {
+      const rows = await db
+        .update(providerKeys)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(providerKeys.id, id),
+            eq(providerKeys.email, email),
+            isNull(providerKeys.revokedAt)
+          )
+        )
+        .returning({ id: providerKeys.id })
+      return rows.length > 0
+    },
+    async touchProviderKey(id) {
+      await db
+        .update(providerKeys)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(providerKeys.id, id))
+    },
     claimsFor: ({ email, domain }) =>
       db
         .select()
@@ -483,6 +532,7 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const usage: (UsageEvent & { createdAt: Date })[] = []
   const sessions = new Map<string, AdminSession>()
   const merchantLogins = new Map<string, MerchantSession>()
+  const providerKeyRows = new Map<string, ProviderKey>()
   const claims = new Map<string, MerchantClaim>()
   const merchantPages = new Map<string, MerchantProfile>()
   const seeding: SeedingRequest[] = []
@@ -672,6 +722,32 @@ export function memoryApiReviewStore(): ApiReviewStore {
     merchantSession: async (tokenHash) => merchantLogins.get(tokenHash) ?? null,
     async deleteMerchantSession(tokenHash) {
       merchantLogins.delete(tokenHash)
+    },
+    async insertProviderKey(key) {
+      providerKeyRows.set(key.id, {
+        ...key,
+        createdAt: new Date(),
+        lastUsedAt: null,
+        revokedAt: null,
+      })
+    },
+    providerKey: async (keyHash) =>
+      [...providerKeyRows.values()].find(
+        (key) => key.keyHash === keyHash && !key.revokedAt
+      ) ?? null,
+    providerKeys: async (email) =>
+      [...providerKeyRows.values()]
+        .filter((key) => key.email === email && !key.revokedAt)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    async revokeProviderKey(id, email) {
+      const key = providerKeyRows.get(id)
+      if (!key || key.email !== email || key.revokedAt) return false
+      providerKeyRows.set(id, { ...key, revokedAt: new Date() })
+      return true
+    },
+    async touchProviderKey(id) {
+      const key = providerKeyRows.get(id)
+      if (key) providerKeyRows.set(id, { ...key, lastUsedAt: new Date() })
     },
     claimsFor: async ({ email, domain }) =>
       [...claims.values()]

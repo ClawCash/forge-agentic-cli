@@ -212,6 +212,22 @@ test(
       )
       await store.deleteMerchantSession("m1")
       assert.equal(await store.merchantSession("m1"), null)
+
+      await store.insertProviderKey({
+        id: "pk_1",
+        email: "owner@example.com",
+        keyHash: "kh1",
+        prefix: "mpk_abcdefgh",
+      })
+      assert.equal((await store.providerKey("kh1")).email, "owner@example.com")
+      assert.equal((await store.providerKeys("owner@example.com")).length, 1)
+      await store.touchProviderKey("pk_1")
+      assert.ok((await store.providerKey("kh1")).lastUsedAt)
+      assert.equal(await store.revokeProviderKey("pk_1", "someone@else.com"), false)
+      assert.equal(await store.revokeProviderKey("pk_1", "owner@example.com"), true)
+      assert.equal(await store.revokeProviderKey("pk_1", "owner@example.com"), false)
+      assert.equal(await store.providerKey("kh1"), null)
+      assert.equal((await store.providerKeys("owner@example.com")).length, 0)
       const claim = {
         id: "mc_1",
         domain: "api.example.com",

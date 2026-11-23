@@ -21,6 +21,9 @@ const ACTIONS: Record<
     path: `claims/${encodeURIComponent(domain)}/seeding`,
     method: "POST",
   }),
+  key_create: () => ({ path: "keys", method: "POST" }),
+  // For keys, "domain" carries the key's id.
+  key_revoke: (id) => ({ path: `keys/${encodeURIComponent(id)}`, method: "DELETE" }),
 }
 
 export async function POST(request: Request) {

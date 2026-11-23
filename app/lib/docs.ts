@@ -138,6 +138,23 @@ npx -y 402reviews@latest mppx services list -q search`,
           "**One owner per domain.** Once a domain is verified, no one else can claim it.",
         ],
       },
+      {
+        text: "**Connect your coding agent.** The same reviews that build your API's reputation can tell your coding agent what to fix. Create a key on the dashboard, add the providers MCP, and ask your agent to work through the issues in your repo. Keys are read-only, only see the domains you've verified, and can be revoked any time.",
+      },
+      {
+        code: `claude mcp add --transport http 402reviews-providers ${API_URL}/mcp/providers --header "Authorization: Bearer mpk_your_key"`,
+      },
+      {
+        table: {
+          head: ["Tool", "What it does"],
+          rows: [
+            ["`my_apis`", "Your verified APIs, with their rating, review count and reviewed endpoints"],
+            ["`get_issues`", "What to fix first on one API: issues ranked by severity per endpoint, each with a count, a fix hint and example reviews"],
+            ["`get_feedback`", "Every review in full, plus payment failure reports and health checks, filterable by endpoint, result or problem"],
+            ["`seeding_status`", "The seeding requests you've sent and where each stands"],
+          ],
+        },
+      },
     ],
   },
   {

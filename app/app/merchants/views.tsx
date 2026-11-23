@@ -24,23 +24,19 @@ import { Textarea } from "@/components/arc/textarea/textarea"
 import { LinkButton } from "@/components/merchant/link-button"
 import { Card, Grid, Page } from "@/components/merchant/page"
 import { PromptBox } from "@/components/merchant/prompt-box"
-import type { ApiData, ApiReview, Claim, SeedingRequest } from "@/lib/merchant"
+import type {
+  ApiData,
+  ApiReview,
+  Claim,
+  ProviderKeyView,
+  SeedingRequest,
+} from "@/lib/merchant"
 import type { Pointer } from "@/lib/merchant-pointers"
 import { verifyPrompt } from "@/lib/merchant-prompt"
+import { ConnectAgent } from "./connect-agent"
+import { act } from "./act"
 import styles from "./views.module.css"
 
-async function act(action: string, domain: string, body: unknown) {
-  const res = await fetch("/merchants/action", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, domain, body }),
-  }).catch(() => null)
-  const data = ((await res?.json().catch(() => ({}))) ?? {}) as Record<
-    string,
-    unknown
-  >
-  return { ok: !!res?.ok, data }
-}
 
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", {
@@ -655,6 +651,8 @@ export function OverviewView({
   requests,
   publicUrl,
   maxPrice,
+  keys,
+  verifiedDomains,
 }: {
   claim: Claim
   data: ApiData | null
@@ -662,6 +660,8 @@ export function OverviewView({
   requests: SeedingRequest[]
   publicUrl: string
   maxPrice: number
+  keys: ProviderKeyView[]
+  verifiedDomains: string[]
 }) {
   const rating = data?.rating
   const reviews = data?.reviews ?? []
@@ -736,6 +736,8 @@ export function OverviewView({
           <Seeding claim={claim} requests={requests} maxPrice={maxPrice} />
         </div>
       </Grid>
+
+      <ConnectAgent keys={keys} domains={verifiedDomains} />
 
       <ProfileForm claim={claim} />
     </Page>

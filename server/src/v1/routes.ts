@@ -41,6 +41,7 @@ import {
 import { domainHealth, healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
+import { providerRoutes } from "./provider.ts"
 import { type WalletProof, walletProver } from "./proof.ts"
 import {
   outcomeValue,
@@ -464,6 +465,17 @@ export function v1Routes(deps: V1Deps) {
       fetch: deps.fetch,
       google: deps.google,
       ...(deps.resolveTxt && { assertPublic: async () => {} }),
+    })
+  )
+
+  // A merchant's coding agent reads the feedback on their verified APIs.
+  app.route(
+    "/provider",
+    providerRoutes({
+      store: deps.store,
+      review: publicReview,
+      rating: async (rows, domain, path) =>
+        rate(rows, { domain, path, task: undefined }, await priorFor(undefined)),
     })
   )
 

@@ -12,6 +12,7 @@ import { resendMailer, resendNotifier, resendSender } from "./v1/accounts.ts"
 import { chainFinder } from "./v1/chains.ts"
 import { parseAdminEmails } from "./v1/admin.ts"
 import { mcpRoutes } from "./v1/mcp.ts"
+import { providerMcpRoutes } from "./v1/provider.ts"
 import { type V1Deps, v1Routes } from "./v1/routes.ts"
 import { memoryApiReviewStore, postgresApiReviewStore } from "./v1/store.ts"
 import { healthChecker, listingFinder } from "./v1/health.ts"
@@ -49,6 +50,10 @@ export function createApp(
 
   if (deps.v1) {
     app.route("/v1", v1Routes(deps.v1))
+    app.route(
+      "/mcp/providers",
+      providerMcpRoutes({ call: (path, init) => app.request(path, init) })
+    )
     app.route(
       "/mcp",
       mcpRoutes({

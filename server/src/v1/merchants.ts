@@ -22,6 +22,7 @@ import type {
   ApiReviewStore,
   MerchantClaim,
   MerchantProfile,
+  ProviderKey,
   SeedingRequest,
 } from "./store.ts"
 import { assertPublicHttps, locate, type ReadTerms } from "./terms.ts"
@@ -37,6 +38,17 @@ const CODE_TTL_MS = 10 * 60_000
 const RESEND_AFTER_MS = 60_000
 const MAX_ATTEMPTS = 5
 const MAX_CLAIMS_PER_EMAIL = 20
+const MAX_PROVIDER_KEYS = 5
+
+// What a merchant sees about one of their provider keys. Never the key itself.
+function providerKeyView(key: ProviderKey) {
+  return {
+    id: key.id,
+    prefix: key.prefix,
+    created_at: key.createdAt.toISOString(),
+    last_used_at: key.lastUsedAt?.toISOString() ?? null,
+  }
+}
 
 // 402reviews pays for seeding, so it covers only cheap calls, and a few of them.
 export const SEED_MAX_PRICE_USD = 0.05
@@ -399,16 +411,57 @@ export function merchantRoutes(deps: {
   app.get("/me", async (c) => {
     const email = await sessionEmail(c)
     if (!email) return c.json({ error: "Sign in again" }, 401)
-    const claims = await deps.store.claimsFor({ email })
+    const [claims, keys] = await Promise.all([
+      deps.store.claimsFor({ email }),
+      deps.store.providerKeys(email),
+    ])
     c.header("Cache-Control", "no-store")
     return c.json({
       email,
       claims: await Promise.all(claims.map(claimView)),
+      provider_keys: keys.map(providerKeyView),
       limits: {
         seed_max_price_usd: SEED_MAX_PRICE_USD,
         seed_max_endpoints: SEED_MAX_ENDPOINTS,
       },
     })
+  })
+
+  // Keys for the providers MCP. A key reads feedback on the merchant's
+  // verified domains and nothing else; it is shown once, then only its prefix.
+  app.post("/keys", async (c) => {
+    const email = await sessionEmail(c)
+    if (!email) return c.json({ error: "Sign in again" }, 401)
+    if (limited(c, "keys", 10, email)) {
+      return c.json({ error: "Too many tries. Wait a minute." }, 429)
+    }
+    const existing = await deps.store.providerKeys(email)
+    if (existing.length >= MAX_PROVIDER_KEYS) {
+      return c.json(
+        { error: `You can have ${MAX_PROVIDER_KEYS} keys. Revoke one first.` },
+        409
+      )
+    }
+    const key = `mpk_${randomBytes(32).toString("base64url")}`
+    const row = {
+      id: randomUUID(),
+      email,
+      keyHash: hashKey(key),
+      prefix: key.slice(0, 12),
+    }
+    await deps.store.insertProviderKey(row)
+    const [saved] = (await deps.store.providerKeys(email)).filter(
+      (k) => k.id === row.id
+    )
+    return c.json({ key, ...providerKeyView(saved) }, 201)
+  })
+
+  app.delete("/keys/:id", async (c) => {
+    const email = await sessionEmail(c)
+    if (!email) return c.json({ error: "Sign in again" }, 401)
+    const revoked = await deps.store.revokeProviderKey(c.req.param("id"), email)
+    if (!revoked) return c.json({ error: "No such key" }, 404)
+    return c.json({ revoked: true })
   })
 
   app.post("/claims", bodyLimit({ maxSize: 2048 }), async (c) => {

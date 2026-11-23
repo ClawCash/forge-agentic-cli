@@ -113,6 +113,10 @@ export default async function MerchantsPage({
         requests={requests}
         publicUrl={`${SITE_URL}/s/${current.domain}`}
         maxPrice={me.limits.seed_max_price_usd}
+        keys={me.provider_keys ?? []}
+        verifiedDomains={claims
+          .filter((claim) => claim.status === "verified")
+          .map((claim) => claim.domain)}
       />
     )
   }

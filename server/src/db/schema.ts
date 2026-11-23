@@ -202,6 +202,20 @@ export const merchantSessions = pgTable("merchant_sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 })
 
+// A merchant's key for the providers MCP: read-only access to the feedback on
+// the domains that merchant has verified. Only its hash is stored.
+export const providerKeys = pgTable("provider_keys", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  prefix: text("prefix").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+})
+
 // A merchant's claim to an API's domain. It's verified once the domain shows
 // the claim's code in a DNS TXT record or a well-known file; only one claim
 // per domain can be verified.

@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   BadgeCheck,
   MessageSquareText,
+  Plug,
   Sprout,
 } from "lucide-react"
 import type { CSSProperties, ReactNode } from "react"
@@ -321,6 +322,11 @@ const PROVIDER_POINTS = [
     icon: Sprout,
     title: "Request seeding",
     line: "One click. We pay for real calls, up to $0.05 each, and post honest reviews.",
+  },
+  {
+    icon: Plug,
+    title: "Connect your coding agent",
+    line: "Give Claude Code, Codex or Cursor the feedback over MCP and let it fix what agents ran into.",
   },
 ]
 
