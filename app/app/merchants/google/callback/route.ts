@@ -4,13 +4,19 @@ import { GOOGLE_COOKIE, MERCHANT_COOKIE, merchantApi } from "@/lib/merchant"
 
 export const dynamic = "force-dynamic"
 
-const back = (path: string) =>
-  new NextResponse(null, { status: 303, headers: { Location: path } })
-
 // Google sends the merchant back here with a code. The state must match the
 // cookie set on the way out, so a stranger can't sign someone in.
 export async function GET(request: Request) {
   const url = new URL(request.url)
+  // On app.402reviews.xyz the app lives at the root.
+  const home = (request.headers.get("host") ?? "").startsWith("app.")
+    ? "/"
+    : "/merchants"
+  const back = (path: string) =>
+    new NextResponse(null, {
+      status: 303,
+      headers: { Location: path.replace("/merchants", home) },
+    })
   const [state, verifier] = (
     (await cookies()).get(GOOGLE_COOKIE)?.value ?? ""
   ).split(".")

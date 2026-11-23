@@ -8,7 +8,7 @@ import { SKILL_PROMPT } from "@/lib/links"
 export const metadata: Metadata = {
   title: "Docs: 402reviews",
   description:
-    "How 402reviews works: setup, ratings in your wallet's search, how reviews are verified and rated, and the MCP server, API and npm package.",
+    "How 402reviews works: setup, ratings in your wallet's search, how reviews are verified and rated, claiming your API, and the MCP server, API and npm package.",
   alternates: { canonical: DOCS_URL },
 }
 

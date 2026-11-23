@@ -13,7 +13,11 @@ export async function GET(request: Request) {
   if (!clientId) {
     return new NextResponse(null, {
       status: 303,
-      headers: { Location: "/merchants?error=google" },
+      headers: {
+        Location: (request.headers.get("host") ?? "").startsWith("app.")
+          ? "/?error=google"
+          : "/merchants?error=google",
+      },
     })
   }
   const state = randomBytes(16).toString("hex")

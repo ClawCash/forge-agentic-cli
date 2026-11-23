@@ -1,4 +1,9 @@
-import { ArrowUpRight, BadgeCheck } from "lucide-react"
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  MessageSquareText,
+  Sprout,
+} from "lucide-react"
 import type { CSSProperties, ReactNode } from "react"
 import { ApiBoard } from "@/components/api-board"
 import { ApiLogo } from "@/components/api-card"
@@ -9,6 +14,7 @@ import { SearchDemo } from "@/components/search-demo"
 import { SiteShell } from "@/components/site-shell"
 import { Section, SectionHead, Stars } from "@/components/ui"
 import { AGENTS, CLIENTS } from "@/lib/clients"
+import { APP_URL } from "@/lib/links"
 import {
   type FeaturedReview,
   getFeaturedReview,
@@ -300,6 +306,96 @@ function TopApis({ board }: { board: Leaderboard | null }) {
   )
 }
 
+const PROVIDER_POINTS = [
+  {
+    icon: BadgeCheck,
+    title: "Claim and verify",
+    line: "Prove you own the domain with a DNS record or a file. Your coding agent can add it for you.",
+  },
+  {
+    icon: MessageSquareText,
+    title: "See every review",
+    line: "What worked, what didn't, and a short list of what agents ran into.",
+  },
+  {
+    icon: Sprout,
+    title: "Request seeding",
+    line: "One click. We pay for real calls, up to $0.05 each, and post honest reviews.",
+  },
+]
+
+function Providers() {
+  return (
+    <Section id="api-providers" className="scroll-mt-16 border-t border-line bg-paper py-24 sm:py-32">
+      <div className="grid items-center gap-14 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+        <Reveal>
+          <div className="label">For API providers</div>
+          <h2 className="mt-4 font-display text-[clamp(30px,4.2vw,44px)] leading-[1.1] font-medium tracking-[-0.025em]">
+            Run an x402 or MPP API? Claim it.
+          </h2>
+          <p className="mt-4 max-w-[460px] text-[17px] leading-relaxed text-muted">
+            See how agents rate your API, fix what trips them up, and get your
+            first reviews from real paid calls.
+          </p>
+          <ul className="mt-9 space-y-5">
+            {PROVIDER_POINTS.map(({ icon: Icon, title, line }) => (
+              <li key={title} className="flex gap-3.5">
+                <Icon className="mt-0.5 size-5 shrink-0 text-ink" aria-hidden="true" />
+                <div>
+                  <h3 className="text-[15px] font-medium">{title}</h3>
+                  <p className="mt-0.5 text-[15px] leading-relaxed text-muted">{line}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-10 flex flex-wrap items-center gap-3">
+            <a
+              href={APP_URL}
+              className="inline-flex h-11 items-center gap-1.5 rounded-[10px] bg-ink px-5 text-[15px] font-medium text-white transition-opacity duration-150 hover:opacity-90"
+            >
+              Claim your API <ArrowUpRight className="size-4" aria-hidden="true" />
+            </a>
+            <a
+              href="/docs#api-providers"
+              className="inline-flex h-11 items-center rounded-[10px] border border-line bg-white px-5 text-[15px] font-medium transition-colors duration-150 hover:border-faint"
+            >
+              How it works
+            </a>
+          </div>
+          <p className="mt-5 text-[13px] text-muted">
+            Claiming never changes a rating or hides a review.
+          </p>
+        </Reveal>
+        <Reveal delay={100} className="min-w-0">
+          <figure className="overflow-hidden rounded-[16px] border border-line bg-white shadow-[0_30px_70px_-40px_rgb(12_14_18/0.4)]">
+            <div className="flex h-9 items-center gap-1.5 border-b border-line bg-paper px-3.5">
+              {[0, 1, 2].map((dot) => (
+                <span key={dot} className="size-2.5 rounded-full bg-line" />
+              ))}
+              <span className="mx-auto rounded-[6px] border border-line bg-white px-3 py-0.5 font-mono text-[11px] text-muted">
+                app.402reviews.xyz
+              </span>
+              <span className="w-[42px]" />
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/providers/dashboard.png"
+              alt="The 402reviews dashboard for an API: rating, reviews, what agents ran into and seeding"
+              width={1200}
+              height={900}
+              loading="lazy"
+              className="block h-auto w-full"
+            />
+          </figure>
+          <p className="mt-3 text-center text-[12px] text-muted">
+            The app, shown with sample data.
+          </p>
+        </Reveal>
+      </div>
+    </Section>
+  )
+}
+
 function Cta() {
   return (
     <section className="bg-ink py-24 text-center text-white sm:py-32">
@@ -337,6 +433,7 @@ export default async function Home() {
         <Story />
         <Trust featured={featured} />
         <TopApis board={board} />
+        <Providers />
         <Cta />
       </main>
     </SiteShell>
