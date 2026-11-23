@@ -17,6 +17,7 @@ import {
   accountRoutes,
   hashKey,
   KEY_HEADER,
+  type Notify,
   type SendCode,
 } from "./accounts.ts"
 import {
@@ -31,6 +32,11 @@ import {
 import { fingerprintOf } from "./fingerprint.ts"
 import { isSeeded } from "./seed.ts"
 import { adminRoutes } from "./admin.ts"
+import {
+  merchantRoutes,
+  profileView as merchantProfileView,
+  type ResolveTxt,
+} from "./merchants.ts"
 import { domainHealth, healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type { ReadProfile } from "./profiles.ts"
@@ -204,6 +210,10 @@ export interface V1Deps {
   sendCode: SendCode | null
   // Emails that can sign in to the admin dashboard.
   adminEmails?: string[]
+  // Emails the team about new seeding requests.
+  notify?: Notify | null
+  // Overrides DNS lookups when merchants verify a domain, in tests.
+  resolveTxt?: ResolveTxt
   readTerms: ReadTerms
   readAdvertised?: (url: string) => Promise<string[]>
   readProfile?: ReadProfile
@@ -433,6 +443,20 @@ export function v1Routes(deps: V1Deps) {
       secret: deps.secret,
       sendCode: deps.sendCode,
       adminEmails: deps.adminEmails ?? [],
+    })
+  )
+
+  app.route(
+    "/merchant",
+    merchantRoutes({
+      store: deps.store,
+      secret: deps.secret,
+      sendCode: deps.sendCode,
+      notify: deps.notify,
+      readTerms: deps.readTerms,
+      resolveTxt: deps.resolveTxt,
+      fetch: deps.fetch,
+      ...(deps.resolveTxt && { assertPublic: async () => {} }),
     })
   )
 
@@ -940,11 +964,31 @@ export function v1Routes(deps: V1Deps) {
           (!problem || row.problems.includes(problem))
       )
       .slice(0, limit)
+    const owner = (await deps.store.claimsFor({ domain })).find(
+      (claim) => claim.status === "verified"
+    )
+    const ownerProfile = owner
+      ? merchantProfileView(
+          (await deps.store.merchantProfiles([domain])).get(domain)
+        )
+      : null
     return c.json({
       domain,
       task: task ?? null,
       known,
       profile: profileView(domain, profile),
+      // Claimed and verified by the API's owner. Their words, never a rating.
+      owner: owner
+        ? {
+            claimed: true,
+            verified_at: owner.verifiedAt?.toISOString() ?? null,
+            name: ownerProfile?.name ?? null,
+            description: ownerProfile?.description ?? null,
+            docs_url: ownerProfile?.docs_url ?? null,
+            spec_url: ownerProfile?.spec_url ?? null,
+            pricing_url: ownerProfile?.pricing_url ?? null,
+          }
+        : null,
       health: domainHealth(healthRows),
       rating: rate(rows, { domain, path: "", task }, prior),
       endpoints: paths.map((p) => ({

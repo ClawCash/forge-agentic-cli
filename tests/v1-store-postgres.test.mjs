@@ -200,6 +200,89 @@ test(
       assert.equal((await store.adminSession("h1")).email, "boss@example.com")
       await store.deleteAdminSession("h1")
       assert.equal(await store.adminSession("h1"), null)
+
+      await store.saveMerchantSession({
+        tokenHash: "m1",
+        email: "owner@example.com",
+        expiresAt: new Date(Date.now() + 60_000),
+      })
+      assert.equal(
+        (await store.merchantSession("m1")).email,
+        "owner@example.com"
+      )
+      await store.deleteMerchantSession("m1")
+      assert.equal(await store.merchantSession("m1"), null)
+      const claim = {
+        id: "mc_1",
+        domain: "api.example.com",
+        email: "owner@example.com",
+        code: "abc",
+        status: "pending",
+        method: null,
+        lastError: null,
+        createdAt: new Date(),
+        checkedAt: null,
+        verifiedAt: null,
+      }
+      await store.saveClaim(claim)
+      await store.saveClaim({
+        ...claim,
+        status: "verified",
+        method: "dns",
+        verifiedAt: new Date(),
+      })
+      const [savedClaim] = await store.claimsFor({ domain: "api.example.com" })
+      assert.equal(savedClaim.status, "verified")
+      assert.equal(
+        (await store.claimsFor({ email: "owner@example.com" })).length,
+        1
+      )
+      assert.equal((await store.claimsFor({})).length, 1)
+      await assert.rejects(
+        store.saveClaim({
+          ...claim,
+          id: "mc_2",
+          email: "rival@example.com",
+          status: "verified",
+        })
+      )
+      await store.saveMerchantProfile({
+        domain: "api.example.com",
+        name: "Example",
+        description: null,
+        docsUrl: "https://docs.example.com",
+        specUrl: null,
+        pricingUrl: null,
+        contactEmail: null,
+        updatedBy: "owner@example.com",
+        updatedAt: new Date(),
+      })
+      assert.equal(
+        (await store.merchantProfiles(["api.example.com"])).get(
+          "api.example.com"
+        ).name,
+        "Example"
+      )
+      await store.insertSeedingRequest({
+        id: "sr_1",
+        domain: "api.example.com",
+        email: "owner@example.com",
+        endpoints: [{ url: "https://api.example.com/x", priceUsd: 0.01 }],
+        notes: null,
+        status: "open",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      assert.equal(
+        (await store.seedingRequests({ domain: "api.example.com" }))[0]
+          .endpoints[0].priceUsd,
+        0.01
+      )
+      assert.equal(
+        (await store.setSeedingStatus("sr_1", "seeded")).status,
+        "seeded"
+      )
+      assert.equal(await store.setSeedingStatus("nope", "seeded"), null)
       assert.equal((await store.listBySubdomains(["enrich.dev"])).length, 0)
       await store.insert({
         ...review,

@@ -192,6 +192,86 @@ export const adminSessions = pgTable("admin_sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 })
 
+// A signed-in merchant, by email. Only the token's hash is stored.
+export const merchantSessions = pgTable("merchant_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  email: text("email").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+})
+
+// A merchant's claim to an API's domain. It's verified once the domain shows
+// the claim's code in a DNS TXT record or a well-known file; only one claim
+// per domain can be verified.
+export const merchantClaims = pgTable(
+  "merchant_claims",
+  {
+    id: text("id").primaryKey(),
+    domain: text("domain").notNull(),
+    email: text("email").notNull(),
+    code: text("code").notNull(),
+    status: text("status").notNull().default("pending"),
+    method: text("method"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("merchant_claims_domain_email_idx").on(
+      table.domain,
+      table.email
+    ),
+    uniqueIndex("merchant_claims_verified_idx")
+      .on(table.domain)
+      .where(sql`${table.status} = 'verified'`),
+  ]
+)
+
+// What a verified merchant says about their API. Shown on its page; never
+// part of a rating.
+export const merchantProfiles = pgTable("merchant_profiles", {
+  domain: text("domain").primaryKey(),
+  name: text("name"),
+  description: text("description"),
+  docsUrl: text("docs_url"),
+  specUrl: text("spec_url"),
+  pricingUrl: text("pricing_url"),
+  contactEmail: text("contact_email"),
+  updatedBy: text("updated_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+// A verified merchant asking 402reviews to seed reviews of a few cheap
+// endpoints, paid by 402reviews.
+export const seedingRequests = pgTable(
+  "seeding_requests",
+  {
+    id: text("id").primaryKey(),
+    domain: text("domain").notNull(),
+    email: text("email").notNull(),
+    endpoints: jsonb("endpoints")
+      .$type<{ url: string; priceUsd: number }[]>()
+      .notNull(),
+    notes: text("notes"),
+    // open → seeded | declined
+    status: text("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("seeding_requests_domain_idx").on(table.domain)]
+)
+
 // One row per API request. No request or response content.
 export const usageEvents = pgTable(
   "usage_events",

@@ -10,6 +10,7 @@ import { bodyLimit } from "hono/body-limit"
 import { z } from "zod"
 import { hashKey, type SendCode } from "./accounts.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
+import { seedingView } from "./merchants.ts"
 import { isSeeded } from "./seed.ts"
 import type {
   ApiReview,
@@ -354,10 +355,45 @@ export function adminRoutes(deps: {
         deps.store.usageByUser(),
         deps.store.usageClients(new Date(at.getTime() - 7 * DAY_MS), 8),
       ])
+    const [claims, seeding] = await Promise.all([
+      deps.store.claimsFor({}),
+      deps.store.seedingRequests(),
+    ])
     c.header("Cache-Control", "no-store")
-    return c.json(
-      buildAdminStats({ users, reviews, failures, byDay, byUser, clients }, at)
+    return c.json({
+      ...buildAdminStats(
+        { users, reviews, failures, byDay, byUser, clients },
+        at
+      ),
+      merchants: {
+        claims: claims.map((claim) => ({
+          domain: claim.domain,
+          email: claim.email,
+          status: claim.status,
+          method: claim.method,
+          created_at: claim.createdAt.toISOString(),
+          verified_at: claim.verifiedAt?.toISOString() ?? null,
+        })),
+        seeding_requests: seeding.map(seedingView),
+      },
+    })
+  })
+
+  // Marks a merchant's seeding request done or declined.
+  app.post("/seeding/:id", bodyLimit({ maxSize: 1024 }), async (c) => {
+    if (!(await session(c))) return c.json({ error: "Sign in again" }, 401)
+    const body = z
+      .object({ status: z.enum(["open", "seeded", "declined"]) })
+      .safeParse(await c.req.json().catch(() => null))
+    if (!body.success)
+      return c.json({ error: "status is open, seeded or declined" }, 400)
+    const updated = await deps.store.setSeedingStatus(
+      c.req.param("id"),
+      body.data.status
     )
+    return updated
+      ? c.json(seedingView(updated))
+      : c.json({ error: "No such request" }, 404)
   })
 
   app.post("/logout", async (c) => {

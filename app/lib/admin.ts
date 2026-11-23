@@ -1,10 +1,10 @@
-import { API_URL } from "@/lib/links"
+import { SERVER_API_URL } from "@/lib/links"
 
 // The admin dashboard reads GET /v1/admin/stats with the session token kept in
 // an httpOnly cookie, so the token never reaches the page's scripts.
 
 export const ADMIN_COOKIE = "admin_session"
-export const ADMIN_API_URL = process.env.ADMIN_API_URL ?? API_URL
+export const ADMIN_API_URL = process.env.ADMIN_API_URL ?? SERVER_API_URL
 
 export interface AdminStats {
   generated_at: string
@@ -48,6 +48,25 @@ export interface AdminStats {
   }[]
   requests_by_kind: { kind: string; signed_in: number; anonymous: number }[]
   clients: { client: string; requests: number }[]
+  merchants?: {
+    claims: {
+      domain: string
+      email: string
+      status: "pending" | "verified"
+      method: string | null
+      created_at: string
+      verified_at: string | null
+    }[]
+    seeding_requests: {
+      id: string
+      domain: string
+      email: string
+      endpoints: { url: string; price_usd: number }[]
+      notes: string | null
+      status: "open" | "seeded" | "declined"
+      created_at: string
+    }[]
+  }
 }
 
 export type StatsResult =

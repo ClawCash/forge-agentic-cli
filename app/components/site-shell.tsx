@@ -12,6 +12,7 @@ const FOOTER_LINKS: [string, [string, string][]][] = [
     "Product",
     [
       ["Leaderboard", "/leaderboard"],
+      ["For API providers", "/merchants"],
       ["Works with", "/#works-with"],
       ["Why it's trusted", "/#trust"],
     ],
@@ -152,6 +153,12 @@ export function SiteShell({
               className="text-[14px] text-muted transition-colors duration-150 hover:text-ink"
             >
               Docs
+            </a>
+            <a
+              href="/merchants"
+              className="hidden text-[14px] text-muted transition-colors duration-150 hover:text-ink md:inline"
+            >
+              For API providers
             </a>
             <a
               href="/SKILL.md"

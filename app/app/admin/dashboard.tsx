@@ -7,6 +7,7 @@ import {
 import type { ReactNode } from "react"
 import { Mark } from "@/components/ui"
 import type { AdminStats } from "@/lib/admin"
+import { SeedingActions } from "./seeding-actions"
 
 const number = (value: number) => value.toLocaleString("en-US")
 
@@ -361,6 +362,99 @@ function Requests({ stats }: { stats: AdminStats }) {
   )
 }
 
+function Merchants({ stats, now }: { stats: AdminStats; now: number }) {
+  const merchants = stats.merchants
+  if (!merchants) return null
+  const open = merchants.seeding_requests.filter(
+    (r) => r.status === "open"
+  ).length
+  const verified = merchants.claims.filter(
+    (c) => c.status === "verified"
+  ).length
+  return (
+    <Card
+      title="Merchants"
+      note={`${number(open)} open seeding requests, ${number(verified)} of ${number(merchants.claims.length)} claims verified`}
+    >
+      {merchants.seeding_requests.length === 0 ? (
+        <p className="text-[14px] text-muted">No seeding requests yet.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {merchants.seeding_requests.map((request) => (
+            <li key={request.id} className="py-3 first:pt-0">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="font-mono text-[13px] font-medium">
+                    {request.domain}
+                  </span>
+                  <span className="ml-2 text-[12px] text-muted">
+                    {request.email} · {ago(request.created_at, now)}
+                  </span>
+                </div>
+                <SeedingActions id={request.id} status={request.status} />
+              </div>
+              <ul className="mt-1.5 space-y-0.5 text-[12px]">
+                {request.endpoints.map((endpoint) => (
+                  <li key={endpoint.url} className="flex justify-between gap-3">
+                    <span
+                      className="min-w-0 truncate font-mono"
+                      title={endpoint.url}
+                    >
+                      {endpoint.url}
+                    </span>
+                    <span className="shrink-0 text-muted tabular-nums">
+                      ${endpoint.price_usd}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {request.notes && (
+                <p className="mt-1.5 text-[12px] text-muted">
+                  Notes: {request.notes}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {merchants.claims.length > 0 && (
+        <details className="mt-4 text-[13px]">
+          <summary className="cursor-pointer text-muted hover:text-ink">
+            All claims ({number(merchants.claims.length)})
+          </summary>
+          <table className="mt-3 w-full">
+            <thead className="text-left text-muted">
+              <tr>
+                <th className="py-1.5 pr-4 font-normal">Domain</th>
+                <th className="py-1.5 pr-4 font-normal">Email</th>
+                <th className="py-1.5 pr-4 font-normal">Status</th>
+                <th className="py-1.5 font-normal">Claimed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {merchants.claims.map((claim) => (
+                <tr
+                  key={`${claim.domain}-${claim.email}`}
+                  className="border-t border-line"
+                >
+                  <td className="py-1.5 pr-4 font-mono">{claim.domain}</td>
+                  <td className="py-1.5 pr-4">{claim.email}</td>
+                  <td className="py-1.5 pr-4">
+                    {claim.status === "verified"
+                      ? `Verified (${claim.method})`
+                      : "Pending"}
+                  </td>
+                  <td className="py-1.5">{ago(claim.created_at, now)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
+    </Card>
+  )
+}
+
 export function Dashboard({ stats }: { stats: AdminStats }) {
   const now = Date.parse(stats.generated_at)
   const { active, totals } = stats
@@ -439,6 +533,8 @@ export function Dashboard({ stats }: { stats: AdminStats }) {
         <Card title="Daily active users" note="Last 30 days, UTC">
           <DailyChart daily={stats.daily} />
         </Card>
+
+        <Merchants stats={stats} now={now} />
 
         <Card
           title="People"

@@ -16,12 +16,15 @@ import type { ApiReviewStore } from "./store.ts"
 // the agent keeps. Reading reviews never needs any of this.
 
 export const KEY_HEADER = "x-reviews-key"
-// "admin" codes sign in to the admin dashboard; the rest finish a signup.
+// "admin" and "merchant" codes sign in to those pages; the rest finish a
+// reviewer signup.
 export type SendCode = (
   email: string,
   code: string,
-  purpose?: "signup" | "admin"
+  purpose?: "signup" | "admin" | "merchant"
 ) => Promise<void>
+// A short plain-text email to the team, such as a new seeding request.
+export type Notify = (subject: string, text: string) => Promise<void>
 
 const CODE_TTL_MS = 10 * 60_000
 const RESEND_AFTER_MS = 60_000
@@ -35,30 +38,30 @@ export const hashKey = (key: string) =>
 export const senderOf = (from: string) =>
   `402reviews <${/<([^>]+)>/.exec(from)?.[1] ?? from.trim()}>`
 
-export function resendSender(
-  env: Record<string, string | undefined>,
-  fetcher: typeof fetch = fetch
-): SendCode | null {
-  const { RESEND_API_KEY: apiKey, RESEND_FROM_EMAIL: from } = env
-  if (!apiKey || !from) return null
-  return async (email, code, purpose = "signup") => {
-    const admin = purpose === "admin"
+const CODE_EMAILS = {
+  signup: (code: string) => ({
+    subject: `${code} is your 402reviews code`,
+    text: `Your 402reviews code is ${code}.\n\nGive it to your agent to finish signing up. It expires in 10 minutes.\n\nIf you didn't ask for this, you can ignore this email.`,
+  }),
+  admin: (code: string) => ({
+    subject: `${code} is your 402reviews admin code`,
+    text: `Your 402reviews admin sign-in code is ${code}.\n\nIt expires in 10 minutes. If you didn't try to sign in, you can ignore this email.`,
+  }),
+  merchant: (code: string) => ({
+    subject: `${code} is your 402reviews sign-in code`,
+    text: `Your 402reviews sign-in code is ${code}.\n\nEnter it on the page to manage your API. It expires in 10 minutes. If you didn't try to sign in, you can ignore this email.`,
+  }),
+}
+
+function resendEmail(apiKey: string, from: string, fetcher: typeof fetch) {
+  return async (to: string | string[], subject: string, text: string) => {
     const res = await fetcher("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: senderOf(from),
-        to: email,
-        subject: admin
-          ? `${code} is your 402reviews admin code`
-          : `${code} is your 402reviews code`,
-        text: admin
-          ? `Your 402reviews admin sign-in code is ${code}.\n\nIt expires in 10 minutes. If you didn't try to sign in, you can ignore this email.`
-          : `Your 402reviews code is ${code}.\n\nGive it to your agent to finish signing up. It expires in 10 minutes.\n\nIf you didn't ask for this, you can ignore this email.`,
-      }),
+      body: JSON.stringify({ from: senderOf(from), to, subject, text }),
       signal: AbortSignal.timeout(10_000),
     })
     if (!res.ok) {
@@ -66,6 +69,30 @@ export function resendSender(
       throw new Error(`Resend returned HTTP ${res.status}: ${detail}`)
     }
   }
+}
+
+export function resendSender(
+  env: Record<string, string | undefined>,
+  fetcher: typeof fetch = fetch
+): SendCode | null {
+  const { RESEND_API_KEY: apiKey, RESEND_FROM_EMAIL: from } = env
+  if (!apiKey || !from) return null
+  const send = resendEmail(apiKey, from, fetcher)
+  return async (email, code, purpose = "signup") => {
+    const { subject, text } = CODE_EMAILS[purpose](code)
+    await send(email, subject, text)
+  }
+}
+
+export function resendNotifier(
+  env: Record<string, string | undefined>,
+  to: string[],
+  fetcher: typeof fetch = fetch
+): Notify | null {
+  const { RESEND_API_KEY: apiKey, RESEND_FROM_EMAIL: from } = env
+  if (!apiKey || !from || to.length === 0) return null
+  const send = resendEmail(apiKey, from, fetcher)
+  return (subject, text) => send(to, subject, text)
 }
 
 export function accountRoutes(deps: {

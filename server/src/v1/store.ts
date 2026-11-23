@@ -1,4 +1,5 @@
 import {
+  and,
   desc,
   eq,
   gte,
@@ -18,8 +19,12 @@ import {
   apiReviews,
   authCodes,
   endpointHealth,
+  merchantClaims,
+  merchantProfiles,
+  merchantSessions,
   paymentFailures,
   pendingReviews,
+  seedingRequests,
   serviceProfiles,
   usageEvents,
   usedProofs,
@@ -36,6 +41,10 @@ export type ApiUser = typeof users.$inferSelect
 export type AuthCode = typeof authCodes.$inferSelect
 export type UsageEvent = Omit<typeof usageEvents.$inferSelect, "createdAt">
 export type AdminSession = typeof adminSessions.$inferSelect
+export type MerchantSession = typeof merchantSessions.$inferSelect
+export type MerchantClaim = typeof merchantClaims.$inferSelect
+export type MerchantProfile = typeof merchantProfiles.$inferSelect
+export type SeedingRequest = typeof seedingRequests.$inferSelect
 // Requests per UTC day ("YYYY-MM-DD"), account and kind.
 export interface UsageDay {
   day: string
@@ -88,6 +97,25 @@ export interface ApiReviewStore {
   saveAdminSession(session: Omit<AdminSession, "createdAt">): Promise<void>
   adminSession(tokenHash: string): Promise<AdminSession | null>
   deleteAdminSession(tokenHash: string): Promise<void>
+  // Merchants: sign-in, domain claims, profiles and seeding requests.
+  saveMerchantSession(
+    session: Omit<MerchantSession, "createdAt">
+  ): Promise<void>
+  merchantSession(tokenHash: string): Promise<MerchantSession | null>
+  deleteMerchantSession(tokenHash: string): Promise<void>
+  claimsFor(filter: {
+    email?: string
+    domain?: string
+  }): Promise<MerchantClaim[]>
+  saveClaim(claim: MerchantClaim): Promise<void>
+  merchantProfiles(domains: string[]): Promise<Map<string, MerchantProfile>>
+  saveMerchantProfile(profile: MerchantProfile): Promise<void>
+  insertSeedingRequest(request: SeedingRequest): Promise<void>
+  seedingRequests(filter?: {
+    email?: string
+    domain?: string
+  }): Promise<SeedingRequest[]>
+  setSeedingStatus(id: string, status: string): Promise<SeedingRequest | null>
   getProfiles(domains: string[]): Promise<Map<string, ServiceProfile>>
   saveProfile(profile: ServiceProfile): Promise<void>
   savePending(pending: PendingReview): Promise<void>
@@ -367,6 +395,80 @@ export async function postgresApiReviewStore(
         .delete(adminSessions)
         .where(eq(adminSessions.tokenHash, tokenHash))
     },
+    async saveMerchantSession(session) {
+      await db
+        .delete(merchantSessions)
+        .where(lt(merchantSessions.expiresAt, sql`now()`))
+      await db.insert(merchantSessions).values(session)
+    },
+    async merchantSession(tokenHash) {
+      const [row] = await db
+        .select()
+        .from(merchantSessions)
+        .where(eq(merchantSessions.tokenHash, tokenHash))
+      return row ?? null
+    },
+    async deleteMerchantSession(tokenHash) {
+      await db
+        .delete(merchantSessions)
+        .where(eq(merchantSessions.tokenHash, tokenHash))
+    },
+    claimsFor: ({ email, domain }) =>
+      db
+        .select()
+        .from(merchantClaims)
+        .where(
+          and(
+            email ? eq(merchantClaims.email, email) : undefined,
+            domain ? eq(merchantClaims.domain, domain) : undefined
+          )
+        )
+        .orderBy(desc(merchantClaims.createdAt)),
+    async saveClaim(claim) {
+      await db
+        .insert(merchantClaims)
+        .values(claim)
+        .onConflictDoUpdate({ target: merchantClaims.id, set: claim })
+    },
+    async merchantProfiles(domains) {
+      if (domains.length === 0) return new Map()
+      const rows = await db
+        .select()
+        .from(merchantProfiles)
+        .where(inArray(merchantProfiles.domain, domains))
+      return new Map(rows.map((row) => [row.domain, row]))
+    },
+    async saveMerchantProfile(profile) {
+      await db
+        .insert(merchantProfiles)
+        .values(profile)
+        .onConflictDoUpdate({ target: merchantProfiles.domain, set: profile })
+    },
+    async insertSeedingRequest(request) {
+      await db.insert(seedingRequests).values(request)
+    },
+    seedingRequests: (filter = {}) =>
+      db
+        .select()
+        .from(seedingRequests)
+        .where(
+          and(
+            filter.email ? eq(seedingRequests.email, filter.email) : undefined,
+            filter.domain
+              ? eq(seedingRequests.domain, filter.domain)
+              : undefined
+          )
+        )
+        .orderBy(desc(seedingRequests.createdAt))
+        .limit(500),
+    async setSeedingStatus(id, status) {
+      const [row] = await db
+        .update(seedingRequests)
+        .set({ status, updatedAt: new Date() })
+        .where(eq(seedingRequests.id, id))
+        .returning()
+      return row ?? null
+    },
     close: () => client.end(),
   }
 }
@@ -380,6 +482,10 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const keys = new Map<string, string>()
   const usage: (UsageEvent & { createdAt: Date })[] = []
   const sessions = new Map<string, AdminSession>()
+  const merchantLogins = new Map<string, MerchantSession>()
+  const claims = new Map<string, MerchantClaim>()
+  const merchantPages = new Map<string, MerchantProfile>()
+  const seeding: SeedingRequest[] = []
   const profiles = new Map<string, ServiceProfile>()
   const pending = new Map<string, PendingReview>()
   const health = new Map<string, EndpointHealth>()
@@ -556,6 +662,64 @@ export function memoryApiReviewStore(): ApiReviewStore {
     adminSession: async (tokenHash) => sessions.get(tokenHash) ?? null,
     async deleteAdminSession(tokenHash) {
       sessions.delete(tokenHash)
+    },
+    async saveMerchantSession(session) {
+      merchantLogins.set(session.tokenHash, {
+        ...session,
+        createdAt: new Date(),
+      })
+    },
+    merchantSession: async (tokenHash) => merchantLogins.get(tokenHash) ?? null,
+    async deleteMerchantSession(tokenHash) {
+      merchantLogins.delete(tokenHash)
+    },
+    claimsFor: async ({ email, domain }) =>
+      [...claims.values()]
+        .filter(
+          (claim) =>
+            (!email || claim.email === email) &&
+            (!domain || claim.domain === domain)
+        )
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    async saveClaim(claim) {
+      const verified = [...claims.values()].find(
+        (other) =>
+          other.id !== claim.id &&
+          other.domain === claim.domain &&
+          other.status === "verified"
+      )
+      if (verified && claim.status === "verified") {
+        throw new Error("This domain is already verified by someone else")
+      }
+      claims.set(claim.id, claim)
+    },
+    merchantProfiles: async (domains) =>
+      new Map(
+        domains.flatMap((domain) => {
+          const profile = merchantPages.get(domain)
+          return profile ? [[domain, profile]] : []
+        })
+      ),
+    async saveMerchantProfile(profile) {
+      merchantPages.set(profile.domain, profile)
+    },
+    async insertSeedingRequest(request) {
+      seeding.push(request)
+    },
+    seedingRequests: async (filter = {}) =>
+      seeding
+        .filter(
+          (request) =>
+            (!filter.email || request.email === filter.email) &&
+            (!filter.domain || request.domain === filter.domain)
+        )
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    async setSeedingStatus(id, status) {
+      const request = seeding.find((row) => row.id === id)
+      if (!request) return null
+      request.status = status
+      request.updatedAt = new Date()
+      return request
     },
     close: async () => {},
   }

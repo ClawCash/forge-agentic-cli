@@ -113,6 +113,13 @@
       "when": 1795067636783,
       "tag": "0015_admin_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795430527431,
+      "tag": "0016_merchants",
+      "breakpoints": true
     }
   ]
 }

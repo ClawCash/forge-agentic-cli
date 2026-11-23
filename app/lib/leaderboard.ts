@@ -1,4 +1,4 @@
-import { API_URL } from "@/lib/links"
+import { API_URL, SERVER_API_URL } from "@/lib/links"
 
 export interface DomainHealth {
   status: string
@@ -63,9 +63,21 @@ export type ApiSummary = Omit<
   "rank" | "stars" | "works_for_task"
 > & { stars: number | null; works_for_task: number | null }
 
+// What the API's verified owner says about it. Never part of a rating.
+export interface ApiOwner {
+  claimed: true
+  verified_at: string | null
+  name: string | null
+  description: string | null
+  docs_url: string | null
+  spec_url: string | null
+  pricing_url: string | null
+}
+
 export interface ServiceDetail {
   summary: ApiSummary
   reviews: ServiceReview[]
+  owner: ApiOwner | null
 }
 
 export interface AgentSays {
@@ -202,7 +214,7 @@ export async function getService(
 ): Promise<ServiceDetail | null> {
   try {
     const res = await fetch(
-      `${API_URL}/v1/services/${encodeURIComponent(domain)}?limit=100`,
+      `${SERVER_API_URL}/v1/services/${encodeURIComponent(domain)}?limit=100`,
       { next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) }
     )
     if (!res.ok) return null
@@ -216,6 +228,7 @@ export async function getService(
         health: data.health,
       },
       reviews: data.reviews,
+      owner: data.owner ?? null,
     }
   } catch {
     return null
