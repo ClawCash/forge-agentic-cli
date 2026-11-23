@@ -26,6 +26,7 @@ function setup() {
   const store = memoryApiReviewStore()
   const inbox = []
   const notices = []
+  const mails = []
   const txt = new Map()
   const files = new Map()
   const app = createApp(null, {
@@ -53,6 +54,7 @@ function setup() {
       sendCode: async (email, code, purpose = "signup") =>
         inbox.push({ email, code, purpose }),
       notify: async (subject, text) => notices.push({ subject, text }),
+      sendEmail: async (to, subject, text) => mails.push({ to, subject, text }),
       adminEmails: [ADMIN],
       resolveTxt: async (name) => {
         if (!txt.has(name)) throw new Error("ENOTFOUND")
@@ -64,7 +66,7 @@ function setup() {
           : new Response("missing", { status: 404 }),
     },
   })
-  return { app, store, inbox, notices, txt, files }
+  return { app, store, inbox, notices, mails, txt, files }
 }
 
 async function signIn(
@@ -237,48 +239,27 @@ test("only a verified owner edits the profile, and the API's page shows it", asy
   assert.equal(unclaimed.owner, null)
 })
 
-test("seeding takes up to 3 cheap endpoints on the claimed domain, and tells the team", async () => {
+test("seeding is one click, sent once, and emails the merchant and the team", async () => {
   const ctx = setup()
   const token = await signIn(ctx)
   await claimAndVerify(ctx, token)
-  const seed = (endpoints, notes) =>
+  const seed = () =>
     ctx.app.request(
       "/v1/merchant/claims/api.example.com/seeding",
-      json({ endpoints, notes }, token)
+      json({}, token)
     )
 
-  const refused = await seed([
-    "https://api.example.com/cheap",
-    "https://api.example.com/pricey",
-    "https://elsewhere.example/cheap",
-  ])
-  assert.equal(refused.status, 400)
-  const { endpoints } = await refused.json()
-  assert.equal(endpoints[0].problem, null)
-  assert.match(endpoints[1].problem, /Costs \$1.25 a call/)
-  assert.match(endpoints[2].problem, /Not on api.example.com/)
-  assert.match(
-    (await (await seed(["https://api.example.com/unpaid"])).json()).endpoints[0]
-      .problem,
-    /payment terms/
-  )
-  assert.equal((await seed(["a", "b", "c", "d"])).status, 400)
-
-  const ok = await seed(
-    ["https://api.example.com/cheap", "https://api.example.com/also-cheap"],
-    "Try the search workflow"
-  )
+  const ok = await seed()
   assert.equal(ok.status, 201)
   const request = await ok.json()
-  assert.deepEqual(
-    request.endpoints.map((e) => e.price_usd),
-    [0.01, 0.0025]
-  )
+  assert.deepEqual(request.endpoints, [])
   assert.equal(ctx.notices.length, 1)
   assert.match(ctx.notices[0].subject, /api.example.com/)
-  assert.match(ctx.notices[0].text, /Try the search workflow/)
-
-  assert.equal((await seed(["https://api.example.com/cheap"])).status, 409)
+  assert.match(ctx.notices[0].text, /No endpoints listed/)
+  assert.equal(ctx.mails.length, 1)
+  assert.equal(ctx.mails[0].to, "owner@example.com")
+  assert.match(ctx.mails[0].subject, /seeding request for api.example.com/)
+  assert.equal((await seed()).status, 409)
 
   const me = await (
     await ctx.app.request("/v1/merchant/me", auth(token))
@@ -305,6 +286,46 @@ test("seeding takes up to 3 cheap endpoints on the claimed domain, and tells the
     ).status,
     401
   )
+  assert.equal((await seed()).status, 409)
+})
+
+test("listed endpoints must be cheap, paid and on the claimed domain", async () => {
+  const ctx = setup()
+  const token = await signIn(ctx)
+  await claimAndVerify(ctx, token)
+  const seed = (endpoints, notes) =>
+    ctx.app.request(
+      "/v1/merchant/claims/api.example.com/seeding",
+      json({ endpoints, notes }, token)
+    )
+  const refused = await seed([
+    "https://api.example.com/cheap",
+    "https://api.example.com/pricey",
+    "https://elsewhere.example/cheap",
+  ])
+  assert.equal(refused.status, 400)
+  const { endpoints } = await refused.json()
+  assert.equal(endpoints[0].problem, null)
+  assert.match(endpoints[1].problem, /Costs \$1.25 a call/)
+  assert.match(endpoints[2].problem, /Not on api.example.com/)
+  assert.match(
+    (await (await seed(["https://api.example.com/unpaid"])).json()).endpoints[0]
+      .problem,
+    /payment terms/
+  )
+  assert.equal((await seed(["a", "b", "c", "d"])).status, 400)
+
+  const ok = await seed(
+    ["https://api.example.com/cheap", "https://api.example.com/also-cheap"],
+    "Try the search workflow"
+  )
+  assert.equal(ok.status, 201)
+  assert.deepEqual(
+    (await ok.json()).endpoints.map((e) => e.price_usd),
+    [0.01, 0.0025]
+  )
+  assert.match(ctx.notices[0].text, /also-cheap \(\$0.0025 a call\)/)
+  assert.match(ctx.notices[0].text, /Try the search workflow/)
 })
 
 test("signing out ends the merchant session", async () => {

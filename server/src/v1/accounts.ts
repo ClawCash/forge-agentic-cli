@@ -25,6 +25,12 @@ export type SendCode = (
 ) => Promise<void>
 // A short plain-text email to the team, such as a new seeding request.
 export type Notify = (subject: string, text: string) => Promise<void>
+// A short plain-text email to one person.
+export type SendEmail = (
+  to: string,
+  subject: string,
+  text: string
+) => Promise<void>
 
 const CODE_TTL_MS = 10 * 60_000
 const RESEND_AFTER_MS = 60_000
@@ -82,6 +88,15 @@ export function resendSender(
     const { subject, text } = CODE_EMAILS[purpose](code)
     await send(email, subject, text)
   }
+}
+
+export function resendMailer(
+  env: Record<string, string | undefined>,
+  fetcher: typeof fetch = fetch
+): SendEmail | null {
+  const { RESEND_API_KEY: apiKey, RESEND_FROM_EMAIL: from } = env
+  if (!apiKey || !from) return null
+  return resendEmail(apiKey, from, fetcher)
 }
 
 export function resendNotifier(

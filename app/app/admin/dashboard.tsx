@@ -393,6 +393,12 @@ function Merchants({ stats, now }: { stats: AdminStats; now: number }) {
                 </div>
                 <SeedingActions id={request.id} status={request.status} />
               </div>
+              {request.endpoints.length === 0 && (
+                <p className="mt-1.5 text-[12px] text-muted">
+                  No endpoints listed. Pick a few that cost $0.05 or less a
+                  call.
+                </p>
+              )}
               <ul className="mt-1.5 space-y-0.5 text-[12px]">
                 {request.endpoints.map((endpoint) => (
                   <li key={endpoint.url} className="flex justify-between gap-3">

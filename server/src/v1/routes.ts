@@ -19,6 +19,7 @@ import {
   KEY_HEADER,
   type Notify,
   type SendCode,
+  type SendEmail,
 } from "./accounts.ts"
 import {
   type Alternative,
@@ -212,6 +213,8 @@ export interface V1Deps {
   adminEmails?: string[]
   // Emails the team about new seeding requests.
   notify?: Notify | null
+  // Emails one merchant, such as a seeding confirmation.
+  sendEmail?: SendEmail | null
   // Overrides DNS lookups when merchants verify a domain, in tests.
   resolveTxt?: ResolveTxt
   // Lets merchants sign in with Google.
@@ -455,6 +458,7 @@ export function v1Routes(deps: V1Deps) {
       secret: deps.secret,
       sendCode: deps.sendCode,
       notify: deps.notify,
+      sendEmail: deps.sendEmail,
       readTerms: deps.readTerms,
       resolveTxt: deps.resolveTxt,
       fetch: deps.fetch,

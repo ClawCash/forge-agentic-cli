@@ -10,7 +10,12 @@ import type { Context } from "hono"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { z } from "zod"
-import { hashKey, type Notify, type SendCode } from "./accounts.ts"
+import {
+  hashKey,
+  type Notify,
+  type SendCode,
+  type SendEmail,
+} from "./accounts.ts"
 import { priceUsd } from "./chains.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import type {
@@ -158,6 +163,8 @@ export function merchantRoutes(deps: {
   secret: string
   sendCode: SendCode | null
   notify?: Notify | null
+  // Emails one merchant, such as a seeding confirmation.
+  sendEmail?: SendEmail | null
   readTerms: ReadTerms
   resolveTxt?: ResolveTxt
   fetch?: typeof fetch
@@ -541,27 +548,28 @@ export function merchantRoutes(deps: {
     async (c) => {
       const found = await verifiedClaim(c)
       if ("error" in found) return found.error
+      // One click is enough: endpoints are optional, since 402reviews picks
+      // cheap ones itself when none are listed.
       const body = z
         .object({
           endpoints: z
             .array(z.string().trim().min(1).max(500))
-            .min(1)
-            .max(SEED_MAX_ENDPOINTS),
+            .max(SEED_MAX_ENDPOINTS)
+            .default([]),
           notes: z.string().trim().max(1000).optional(),
         })
-        .safeParse(await c.req.json().catch(() => null))
+        .safeParse((await c.req.json().catch(() => null)) ?? {})
       if (!body.success) {
         return c.json(
-          { error: `List 1 to ${SEED_MAX_ENDPOINTS} endpoint URLs to seed` },
+          { error: `List up to ${SEED_MAX_ENDPOINTS} endpoint URLs to seed` },
           400
         )
       }
-      const open = (
-        await deps.store.seedingRequests({ domain: found.domain })
-      ).find((request) => request.status === "open")
-      if (open) {
+      // Sent once per API.
+      const earlier = await deps.store.seedingRequests({ domain: found.domain })
+      if (earlier.length > 0) {
         return c.json(
-          { error: "There's already an open seeding request for this API." },
+          { error: "Seeding has already been requested for this API." },
           409
         )
       }
@@ -637,23 +645,43 @@ export function merchantRoutes(deps: {
         updatedAt: now(),
       }
       await deps.store.insertSeedingRequest(request)
-      await deps
-        .notify?.(
-          `Seeding request: ${found.domain}`,
-          [
-            `${found.email} asked 402reviews to seed ${found.domain}.`,
-            "",
-            ...request.endpoints.map(
-              (e) => `- ${e.url} ($${e.priceUsd} a call)`
-            ),
-            ...(request.notes ? ["", `Notes: ${request.notes}`] : []),
-            "",
-            "See it in the admin dashboard.",
-          ].join("\n")
-        )
-        .catch((error: Error) =>
-          console.error(`seeding notice failed: ${error.message}`)
-        )
+      const listed = request.endpoints.length
+        ? request.endpoints.map((e) => `- ${e.url} ($${e.priceUsd} a call)`)
+        : [
+            `No endpoints listed. Pick a few that cost $${SEED_MAX_PRICE_USD} or less a call.`,
+          ]
+      await Promise.all([
+        deps
+          .notify?.(
+            `Seeding request: ${found.domain}`,
+            [
+              `${found.email} asked 402reviews to seed ${found.domain}.`,
+              "",
+              ...listed,
+              ...(request.notes ? ["", `Notes: ${request.notes}`] : []),
+              "",
+              "See it in the admin dashboard.",
+            ].join("\n")
+          )
+          .catch((error: Error) =>
+            console.error(`seeding notice failed: ${error.message}`)
+          ),
+        deps
+          .sendEmail?.(
+            found.email,
+            `We got your seeding request for ${found.domain}`,
+            [
+              `Thanks for asking 402reviews to seed ${found.domain}.`,
+              "",
+              "We'll pay for a few real calls to your API, review what comes back honestly, and email you when the reviews are up. Seeded reviews are labelled as seeded, and claiming your API never changes a rating.",
+              "",
+              `Your API's page: https://402reviews.xyz/s/${found.domain}`,
+            ].join("\n")
+          )
+          .catch((error: Error) =>
+            console.error(`seeding confirmation failed: ${error.message}`)
+          ),
+      ])
       return c.json(seedingView(request), 201)
     }
   )

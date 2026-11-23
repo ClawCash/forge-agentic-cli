@@ -8,7 +8,7 @@ import { HEDERA_TESTNET } from "../../shared/src/networks.ts"
 import { approvalRoutes } from "./approvals.ts"
 import { loadConfig, publicBaseUrl, type ServerConfig } from "./config.ts"
 import { memoryStore, postgresStore } from "./db/store.ts"
-import { resendNotifier, resendSender } from "./v1/accounts.ts"
+import { resendMailer, resendNotifier, resendSender } from "./v1/accounts.ts"
 import { chainFinder } from "./v1/chains.ts"
 import { parseAdminEmails } from "./v1/admin.ts"
 import { mcpRoutes } from "./v1/mcp.ts"
@@ -121,6 +121,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     sendCode: resendSender(env),
     adminEmails: parseAdminEmails(env.ADMIN_EMAILS),
     notify: resendNotifier(env, parseAdminEmails(env.ADMIN_EMAILS)),
+    sendEmail: resendMailer(env),
     google:
       env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
         ? {

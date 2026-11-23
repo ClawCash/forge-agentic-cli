@@ -15,6 +15,7 @@ export interface SeedingRequest {
   notes: string | null
   status: "open" | "seeded" | "declined"
   created_at: string
+  updated_at: string
 }
 
 export interface MerchantProfile {

@@ -3,16 +3,14 @@
 import { Check, Copy, ExternalLink } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { type FormEvent, type ReactNode, useState } from "react"
-import type { Claim, MerchantProfile } from "@/lib/merchant"
+import type { Claim } from "@/lib/merchant"
 
 const field =
   "h-11 w-full rounded-[10px] border border-line bg-white px-3.5 text-[15px] outline-none transition-colors placeholder:text-faint focus:border-ink"
-const area =
-  "w-full rounded-[10px] border border-line bg-white px-3.5 py-2.5 text-[14px] leading-relaxed outline-none transition-colors placeholder:text-faint focus:border-ink"
 const primary =
-  "inline-flex h-11 items-center justify-center rounded-[10px] bg-ink px-5 text-[15px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+  "inline-flex h-10 shrink-0 items-center whitespace-nowrap justify-center rounded-[10px] bg-ink px-4 text-[14px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
 const secondary =
-  "inline-flex h-10 items-center justify-center rounded-[10px] border border-line bg-white px-4 text-[14px] font-medium transition-colors hover:border-faint disabled:opacity-50"
+  "inline-flex h-10 shrink-0 items-center whitespace-nowrap justify-center rounded-[10px] border border-line bg-white px-4 text-[14px] font-medium transition-colors hover:border-faint disabled:opacity-50"
 
 async function post(path: string, body: unknown) {
   const res = await fetch(path, {
@@ -29,6 +27,9 @@ async function post(path: string, body: unknown) {
 
 const act = (action: string, domain: string, body?: unknown) =>
   post("/merchants/action", { action, domain, body })
+
+const day = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" })
 
 function ErrorLine({ children }: { children: ReactNode }) {
   return (
@@ -100,12 +101,12 @@ export function MerchantSignIn({
   return (
     <div className="panel p-6 sm:p-7">
       <h2 className="font-display text-[20px] font-medium tracking-[-0.02em]">
-        Sign in to claim your API
+        Sign in
       </h2>
       <p className="mt-1 text-[14px] text-muted">
-        {google
-          ? "Use Google, or get a 6-digit code by email."
-          : "We'll email you a 6-digit code."}
+        {step === "email"
+          ? "We'll email you a 6-digit code."
+          : `We sent a code to ${email}.`}
       </p>
       {googleFailed && (
         <ErrorLine>
@@ -143,13 +144,16 @@ export function MerchantSignIn({
             onChange={(event) => setEmail(event.target.value)}
             className={field}
           />
-          <button type="submit" disabled={busy} className={`${primary} w-full`}>
+          <button
+            type="submit"
+            disabled={busy}
+            className={`${primary} h-11 w-full text-[15px]`}
+          >
             {busy ? "Sending…" : "Email me a code"}
           </button>
         </form>
       ) : (
         <form onSubmit={verify} className="mt-5 space-y-3">
-          <p className="text-[14px] text-muted">We sent a code to {email}.</p>
           <input
             inputMode="numeric"
             autoComplete="one-time-code"
@@ -166,7 +170,7 @@ export function MerchantSignIn({
           <button
             type="submit"
             disabled={busy || code.length !== 6}
-            className={`${primary} w-full`}
+            className={`${primary} h-11 w-full text-[15px]`}
           >
             {busy ? "Signing in…" : "Sign in"}
           </button>
@@ -210,17 +214,17 @@ export function ClaimForm({ initial = "" }: { initial?: string }) {
 
   return (
     <form onSubmit={claim}>
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex gap-2">
         <input
           required
           aria-label="Your API's domain"
           placeholder="api.yourcompany.com"
           value={domain}
           onChange={(event) => setDomain(event.target.value)}
-          className={`${field} font-mono text-[14px]`}
+          className={`${field} h-10 font-mono text-[14px]`}
         />
         <button type="submit" disabled={busy} className={`${primary} shrink-0`}>
-          {busy ? "Claiming…" : "Claim API"}
+          {busy ? "Adding…" : "Add API"}
         </button>
       </div>
       {error && <ErrorLine>{error}</ErrorLine>}
@@ -228,35 +232,33 @@ export function ClaimForm({ initial = "" }: { initial?: string }) {
   )
 }
 
-function CopyValue({ label, value }: { label: string; value: string }) {
+function CopyRow({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false)
   return (
-    <div>
-      <div className="label">{label}</div>
-      <div className="mt-1.5 flex items-center gap-2 rounded-[10px] border border-line bg-paper py-1.5 pr-1.5 pl-3">
-        <code
-          className="min-w-0 flex-1 truncate font-mono text-[13px]"
-          title={value}
-        >
-          {value}
-        </code>
-        <button
-          type="button"
-          aria-label={`Copy ${label}`}
-          onClick={async () => {
-            await navigator.clipboard.writeText(value).catch(() => {})
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1800)
-          }}
-          className="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-muted hover:bg-white hover:text-ink"
-        >
-          {copied ? (
-            <Check className="size-4 text-ok" />
-          ) : (
-            <Copy className="size-4" />
-          )}
-        </button>
-      </div>
+    <div className="flex items-center gap-3 py-2">
+      <span className="w-14 shrink-0 text-[13px] text-muted">{label}</span>
+      <code
+        className="min-w-0 flex-1 truncate font-mono text-[13px]"
+        title={value}
+      >
+        {value}
+      </code>
+      <button
+        type="button"
+        aria-label={`Copy ${label}`}
+        onClick={async () => {
+          await navigator.clipboard.writeText(value).catch(() => {})
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1800)
+        }}
+        className="flex size-8 shrink-0 items-center justify-center rounded-[8px] text-muted hover:bg-paper hover:text-ink"
+      >
+        {copied ? (
+          <Check className="size-4 text-ok" />
+        ) : (
+          <Copy className="size-4" />
+        )}
+      </button>
     </div>
   )
 }
@@ -280,26 +282,24 @@ function Verify({ claim }: { claim: Claim }) {
   }
 
   return (
-    <div className="mt-5">
+    <div className="mt-4">
       <p className="text-[14px] text-muted">
-        Prove you own {claim.domain} with either one of these, then check.
+        Add this DNS record to prove you own {claim.domain}.
       </p>
-      <div className="mt-4 grid gap-5 md:grid-cols-2">
-        <div className="space-y-3 rounded-[12px] border border-line p-4">
-          <div className="text-[14px] font-medium">
-            Option 1: DNS TXT record
-          </div>
-          <CopyValue label="Name" value={steps.dns.name} />
-          <CopyValue label="Value" value={steps.dns.value} />
-        </div>
-        <div className="space-y-3 rounded-[12px] border border-line p-4">
-          <div className="text-[14px] font-medium">
-            Option 2: a file on your domain
-          </div>
-          <CopyValue label="URL" value={steps.file.url} />
-          <CopyValue label="Contents" value={steps.file.contents} />
-        </div>
+      <div className="mt-3 divide-y divide-line rounded-[10px] border border-line px-3">
+        <CopyRow label="Type" value="TXT" />
+        <CopyRow label="Name" value={steps.dns.name} />
+        <CopyRow label="Value" value={steps.dns.value} />
       </div>
+      <details className="mt-3 text-[13px]">
+        <summary className="cursor-pointer text-muted hover:text-ink">
+          Can&apos;t edit DNS? Use a file instead
+        </summary>
+        <div className="mt-2 divide-y divide-line rounded-[10px] border border-line px-3">
+          <CopyRow label="URL" value={steps.file.url} />
+          <CopyRow label="Text" value={steps.file.contents} />
+        </div>
+      </details>
       <div className="mt-4 flex items-center gap-3">
         <button
           type="button"
@@ -310,7 +310,7 @@ function Verify({ claim }: { claim: Claim }) {
           {busy ? "Checking…" : "Check now"}
         </button>
         <span className="text-[13px] text-muted">
-          DNS changes can take a few minutes.
+          DNS can take a few minutes.
         </span>
       </div>
       {error && <ErrorLine>{error}</ErrorLine>}
@@ -318,24 +318,70 @@ function Verify({ claim }: { claim: Claim }) {
   )
 }
 
-const PROFILE_FIELDS: [keyof MerchantProfile, string, string][] = [
-  ["name", "API name", "Example Data"],
-  ["docs_url", "Docs", "https://docs.example.com"],
-  ["spec_url", "OpenAPI spec", "https://api.example.com/openapi.json"],
-  ["pricing_url", "Pricing", "https://example.com/pricing"],
-  ["contact_email", "Contact email (private)", "api@example.com"],
-]
+function Seeding({ claim }: { claim: Claim }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const request = claim.seeding_requests?.[0]
+
+  async function ask() {
+    setBusy(true)
+    setError(null)
+    const { ok, data } = await act("seeding", claim.domain, {})
+    setBusy(false)
+    if (!ok) {
+      setError(String(data.error ?? "Couldn't send the request."))
+      return
+    }
+    router.refresh()
+  }
+
+  if (request) {
+    const line =
+      request.status === "seeded"
+        ? `Seeded on ${day(request.updated_at)}. The reviews are on your API's page.`
+        : request.status === "declined"
+          ? "We couldn't seed this API. Reply to our email if you'd like to know why."
+          : `Seeding requested on ${day(request.created_at)}. We'll email you when the reviews are up.`
+    return (
+      <p className="flex items-start gap-2 text-[14px]">
+        {request.status !== "declined" && (
+          <Check className="mt-0.5 size-4 shrink-0 text-ok" />
+        )}
+        <span className={request.status === "declined" ? "text-muted" : ""}>
+          {line}
+        </span>
+      </p>
+    )
+  }
+  return (
+    <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[14px] text-muted">
+          We&apos;ll pay for a few real calls to your API and post honest
+          reviews.
+        </p>
+        <button
+          type="button"
+          onClick={ask}
+          disabled={busy}
+          className={`${primary} shrink-0`}
+        >
+          {busy ? "Sending…" : "Request seeding"}
+        </button>
+      </div>
+      {error && <ErrorLine>{error}</ErrorLine>}
+    </div>
+  )
+}
 
 function ProfileForm({ claim }: { claim: Claim }) {
   const router = useRouter()
-  const [values, setValues] = useState<Record<string, string>>(() => ({
+  const [values, setValues] = useState({
     name: claim.profile?.name ?? "",
     description: claim.profile?.description ?? "",
     docs_url: claim.profile?.docs_url ?? "",
-    spec_url: claim.profile?.spec_url ?? "",
-    pricing_url: claim.profile?.pricing_url ?? "",
-    contact_email: claim.profile?.contact_email ?? "",
-  }))
+  })
   const [state, setState] = useState<"idle" | "busy" | "saved">("idle")
   const [error, setError] = useState<string | null>(null)
 
@@ -343,7 +389,12 @@ function ProfileForm({ claim }: { claim: Claim }) {
     event.preventDefault()
     setState("busy")
     setError(null)
-    const { ok, data } = await act("profile", claim.domain, values)
+    const { ok, data } = await act("profile", claim.domain, {
+      ...values,
+      spec_url: claim.profile?.spec_url ?? "",
+      pricing_url: claim.profile?.pricing_url ?? "",
+      contact_email: claim.profile?.contact_email ?? "",
+    })
     if (!ok) {
       setState("idle")
       setError(String(data.error ?? "Couldn't save."))
@@ -353,40 +404,45 @@ function ProfileForm({ claim }: { claim: Claim }) {
     router.refresh()
   }
 
-  const set = (key: string) => (value: string) => {
+  const set = (key: keyof typeof values) => (value: string) => {
     setValues((old) => ({ ...old, [key]: value }))
     setState("idle")
   }
 
   return (
-    <form onSubmit={save} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        {PROFILE_FIELDS.map(([key, label, placeholder]) => (
-          <label key={key} className="block">
-            <span className="label">{label}</span>
-            <input
-              value={values[key]}
-              placeholder={placeholder}
-              onChange={(event) => set(key)(event.target.value)}
-              className={`${field} mt-1.5 h-10 text-[14px]`}
-            />
-          </label>
-        ))}
-      </div>
+    <form onSubmit={save} className="mt-3 space-y-3">
       <label className="block">
-        <span className="label">Short description</span>
-        <textarea
-          rows={2}
-          maxLength={280}
+        <span className="text-[13px] font-medium">Name</span>
+        <input
+          value={values.name}
+          maxLength={60}
+          placeholder="Acme Data"
+          onChange={(event) => set("name")(event.target.value)}
+          className={`${field} mt-1.5 h-10 text-[14px]`}
+        />
+      </label>
+      <label className="block">
+        <span className="text-[13px] font-medium">What it does</span>
+        <input
           value={values.description}
-          placeholder="What your API does, in a sentence or two."
+          maxLength={280}
+          placeholder="Market data for trading agents."
           onChange={(event) => set("description")(event.target.value)}
-          className={`${area} mt-1.5`}
+          className={`${field} mt-1.5 h-10 text-[14px]`}
+        />
+      </label>
+      <label className="block">
+        <span className="text-[13px] font-medium">Docs link</span>
+        <input
+          value={values.docs_url}
+          placeholder="https://docs.yourcompany.com"
+          onChange={(event) => set("docs_url")(event.target.value)}
+          className={`${field} mt-1.5 h-10 text-[14px]`}
         />
       </label>
       <div className="flex items-center gap-3">
         <button type="submit" disabled={state === "busy"} className={secondary}>
-          {state === "busy" ? "Saving…" : "Save profile"}
+          {state === "busy" ? "Saving…" : "Save"}
         </button>
         {state === "saved" && (
           <span className="flex items-center gap-1 text-[13px] text-ok">
@@ -399,218 +455,47 @@ function ProfileForm({ claim }: { claim: Claim }) {
   )
 }
 
-function SeedingForm({
-  claim,
-  maxPrice,
-  maxEndpoints,
-}: {
-  claim: Claim
-  maxPrice: number
-  maxEndpoints: number
-}) {
-  const router = useRouter()
-  const [endpoints, setEndpoints] = useState("")
-  const [notes, setNotes] = useState("")
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [problems, setProblems] = useState<
-    { url: string; problem: string | null; price_usd: number | null }[]
-  >([])
-  const open = claim.seeding_requests?.find(
-    (request) => request.status === "open"
-  )
-
-  async function request(event: FormEvent) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
-    setProblems([])
-    const list = endpoints
-      .split(/\s+/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-    const { ok, data } = await act("seeding", claim.domain, {
-      endpoints: list,
-      notes,
-    })
-    setBusy(false)
-    if (!ok) {
-      setError(String(data.error ?? "Couldn't send the request."))
-      if (Array.isArray(data.endpoints)) setProblems(data.endpoints)
-      return
-    }
-    setEndpoints("")
-    setNotes("")
-    router.refresh()
-  }
-
-  return (
-    <div>
-      {open ? (
-        <p className="text-[14px] text-muted">
-          Your seeding request is in. We'll pay for the calls, review what comes
-          back honestly, and update its status here.
-        </p>
-      ) : (
-        <form onSubmit={request} className="space-y-3">
-          <p className="text-[14px] text-muted">
-            List up to {maxEndpoints} endpoints on {claim.domain} that cost $
-            {maxPrice} or less a call. We pay for the calls and post honest
-            reviews, labelled as seeded.
-          </p>
-          <textarea
-            rows={3}
-            required
-            aria-label="Endpoint URLs, one per line"
-            value={endpoints}
-            placeholder={`https://${claim.domain}/v1/search`}
-            onChange={(event) => setEndpoints(event.target.value)}
-            className={`${area} font-mono text-[13px]`}
-          />
-          <textarea
-            rows={2}
-            maxLength={1000}
-            aria-label="Notes for the reviewer"
-            value={notes}
-            placeholder="Optional: a workflow to try, or sample inputs."
-            onChange={(event) => setNotes(event.target.value)}
-            className={area}
-          />
-          <button type="submit" disabled={busy} className={primary}>
-            {busy ? "Checking prices…" : "Request seeding"}
-          </button>
-          {error && <ErrorLine>{error}</ErrorLine>}
-          {problems.length > 0 && (
-            <ul className="space-y-1.5 text-[13px]">
-              {problems.map((item) => (
-                <li key={item.url} className="flex gap-2">
-                  {item.problem ? (
-                    <span className="text-bad">✕</span>
-                  ) : (
-                    <Check className="mt-0.5 size-3.5 text-ok" />
-                  )}
-                  <span className="min-w-0">
-                    <span className="font-mono break-all">{item.url}</span>
-                    <span className="text-muted">
-                      {" "}
-                      {item.problem ?? `$${item.price_usd} a call`}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </form>
-      )}
-      {claim.seeding_requests && claim.seeding_requests.length > 0 && (
-        <ul className="mt-5 divide-y divide-line rounded-[12px] border border-line">
-          {claim.seeding_requests.map((item) => (
-            <li key={item.id} className="p-4 text-[13px]">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted">
-                  Requested{" "}
-                  {new Date(item.created_at).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-                <StatusPill status={item.status} />
-              </div>
-              <ul className="mt-2 space-y-1">
-                {item.endpoints.map((endpoint) => (
-                  <li key={endpoint.url} className="flex justify-between gap-3">
-                    <span
-                      className="min-w-0 truncate font-mono"
-                      title={endpoint.url}
-                    >
-                      {endpoint.url}
-                    </span>
-                    <span className="shrink-0 text-muted">
-                      ${endpoint.price_usd}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-export function StatusPill({ status }: { status: string }) {
-  const style =
-    status === "verified" || status === "seeded"
-      ? "bg-[#e8f4ee] text-ok ring-[#cfe7da]"
-      : status === "declined"
-        ? "bg-[#fbeceb] text-bad ring-[#f3d3d0]"
-        : "bg-paper text-muted ring-line"
-  const label: Record<string, string> = {
-    verified: "Verified",
-    pending: "Pending verification",
-    open: "Requested",
-    seeded: "Seeded",
-    declined: "Declined",
-  }
-  return (
-    <span
-      className={`rounded-[6px] px-2 py-0.5 text-[12px] font-medium ring-1 ring-inset ${style}`}
-    >
-      {label[status] ?? status}
-    </span>
-  )
-}
-
-export function ClaimCard({
-  claim,
-  maxPrice,
-  maxEndpoints,
-}: {
-  claim: Claim
-  maxPrice: number
-  maxEndpoints: number
-}) {
+export function ClaimCard({ claim }: { claim: Claim }) {
   const verified = claim.status === "verified"
   return (
-    <section className="rounded-[14px] border border-line bg-white p-5 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <h3 className="truncate font-mono text-[16px] font-medium">
+    <section className="rounded-[14px] border border-line bg-white p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <h3 className="truncate font-mono text-[15px] font-medium">
             {claim.domain}
           </h3>
-          <StatusPill status={claim.status} />
+          <span
+            className={`shrink-0 rounded-[6px] px-2 py-0.5 text-[12px] font-medium ring-1 ring-inset ${
+              verified
+                ? "bg-[#e8f4ee] text-ok ring-[#cfe7da]"
+                : "bg-paper text-muted ring-line"
+            }`}
+          >
+            {verified ? "Verified" : "Not verified yet"}
+          </span>
         </div>
         {verified && (
           <a
             href={`/s/${claim.domain}`}
-            className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"
+            className="inline-flex shrink-0 items-center gap-1 text-[13px] text-muted hover:text-ink"
           >
-            View its page <ExternalLink className="size-3.5" />
+            Its page <ExternalLink className="size-3.5" />
           </a>
         )}
       </div>
       {!verified && <Verify claim={claim} />}
       {verified && (
-        <div className="mt-6 grid gap-8 lg:grid-cols-2">
-          <div>
-            <h4 className="text-[15px] font-medium">Profile</h4>
-            <p className="mt-1 mb-4 text-[13px] text-muted">
-              Shown on your API's page. It never changes a rating.
-            </p>
+        <>
+          <div className="mt-4 border-t border-line pt-4">
+            <Seeding claim={claim} />
+          </div>
+          <details className="mt-4 border-t border-line pt-4 text-[14px]">
+            <summary className="cursor-pointer text-muted hover:text-ink">
+              Add your docs and links (optional)
+            </summary>
             <ProfileForm claim={claim} />
-          </div>
-          <div>
-            <h4 className="text-[15px] font-medium">Seeding</h4>
-            <div className="mt-1">
-              <SeedingForm
-                claim={claim}
-                maxPrice={maxPrice}
-                maxEndpoints={maxEndpoints}
-              />
-            </div>
-          </div>
-        </div>
+          </details>
+        </>
       )}
     </section>
   )
