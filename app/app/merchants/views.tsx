@@ -699,7 +699,11 @@ export function OverviewView({
           label="Rating"
           value={rating?.stars ?? null}
           decimals={1}
-          context={`Out of 5, from ${reviews.length} ${reviews.length === 1 ? "review" : "reviews"}`}
+          context={
+            rating?.stars == null
+              ? "Shows after the first review"
+              : `Out of 5, from ${reviews.length} ${reviews.length === 1 ? "review" : "reviews"}`
+          }
           empty="No rating yet"
         />
         <Stat
