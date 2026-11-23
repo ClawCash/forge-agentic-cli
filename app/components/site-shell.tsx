@@ -3,7 +3,7 @@
 import { Check, Copy, Trophy } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
 import { Logo } from "@/components/ui"
-import { FORGE_URL, SITE_URL } from "@/lib/links"
+import { APP_URL, FORGE_URL, SITE_URL } from "@/lib/links"
 
 type View = "human" | "agent"
 
@@ -12,7 +12,7 @@ const FOOTER_LINKS: [string, [string, string][]][] = [
     "Product",
     [
       ["Leaderboard", "/leaderboard"],
-      ["For API providers", "/merchants"],
+      ["For API providers", APP_URL],
       ["Works with", "/#works-with"],
       ["Why it's trusted", "/#trust"],
     ],
@@ -155,7 +155,7 @@ export function SiteShell({
               Docs
             </a>
             <a
-              href="/merchants"
+              href={APP_URL}
               className="hidden text-[14px] text-muted transition-colors duration-150 hover:text-ink md:inline"
             >
               For API providers

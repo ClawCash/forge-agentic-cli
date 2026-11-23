@@ -219,7 +219,8 @@ export async function getService(
     )
     if (!res.ok) return null
     const data = await res.json()
-    if (!data.known) return null
+    // A claimed API gets a page even before its first review.
+    if (!data.known && !data.owner) return null
     return {
       summary: {
         domain: data.domain,

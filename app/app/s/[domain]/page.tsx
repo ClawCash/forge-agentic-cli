@@ -10,7 +10,7 @@ import {
   getService,
   type ServiceDetail,
 } from "@/lib/leaderboard"
-import { SITE_URL } from "@/lib/links"
+import { APP_URL, SITE_URL } from "@/lib/links"
 import { serviceMarkdown } from "@/lib/markdown"
 
 const DOMAIN = /^[a-z0-9][a-z0-9.-]{1,251}[a-z0-9]$/
@@ -84,7 +84,7 @@ function Owner({ owner, domain }: { owner: ApiOwner | null; domain: string }) {
       <p className="mt-4 text-[13px] text-muted">
         Is this your API?{" "}
         <a
-          href={`/merchants?domain=${encodeURIComponent(domain)}`}
+          href={`${APP_URL}/?domain=${encodeURIComponent(domain)}`}
           className="text-ink underline-offset-4 hover:underline"
         >
           Claim it

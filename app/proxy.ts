@@ -36,11 +36,22 @@ export function proxy(request: NextRequest) {
   }
   // docs.402reviews.xyz and admin.402reviews.xyz are pages of the same site.
   const host = request.headers.get("host") ?? ""
+  // The merchant app lives on app.402reviews.xyz; its old address on the
+  // main site sends people there.
+  if (
+    request.nextUrl.pathname === "/merchants" &&
+    /^(www\.)?402reviews\.xyz$/.test(host)
+  ) {
+    const url = new URL(`https://app.402reviews.xyz/${request.nextUrl.search}`)
+    return NextResponse.redirect(url, 308)
+  }
   const hostPage = host.startsWith("docs.")
     ? "/docs"
     : host.startsWith("admin.")
       ? "/admin"
-      : null
+      : host.startsWith("app.")
+        ? "/merchants"
+        : null
   const pathname =
     hostPage && request.nextUrl.pathname === "/"
       ? hostPage
@@ -66,5 +77,12 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/leaderboard", "/docs", "/skill.md", "/s/:domain"],
+  matcher: [
+    "/",
+    "/leaderboard",
+    "/docs",
+    "/skill.md",
+    "/s/:domain",
+    "/merchants",
+  ],
 }

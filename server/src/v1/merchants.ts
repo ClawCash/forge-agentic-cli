@@ -210,12 +210,17 @@ export function merchantRoutes(deps: {
 
   async function claimView(claim: MerchantClaim) {
     const verified = claim.status === "verified"
-    const [profile, requests] = verified
+    const [profile, requests, failures] = verified
       ? await Promise.all([
           deps.store.merchantProfiles([claim.domain]),
           deps.store.seedingRequests({ domain: claim.domain }),
+          deps.store.listPaymentFailures([claim.domain]),
         ])
-      : [new Map<string, MerchantProfile>(), [] as SeedingRequest[]]
+      : [
+          new Map<string, MerchantProfile>(),
+          [] as SeedingRequest[],
+          [] as Awaited<ReturnType<ApiReviewStore["listPaymentFailures"]>>,
+        ]
     return {
       domain: claim.domain,
       status: claim.status,
@@ -230,6 +235,13 @@ export function merchantRoutes(deps: {
       ...(verified && {
         profile: profileView(profile.get(claim.domain)),
         seeding_requests: requests.map(seedingView),
+        // Payments agents say failed without a charge. Unverified, so they
+        // never move a rating, but they point at a real bottleneck.
+        payment_failures: failures.map((failure) => ({
+          endpoint: failure.path || "/",
+          error: failure.error,
+          created_at: failure.createdAt.toISOString(),
+        })),
       }),
     }
   }

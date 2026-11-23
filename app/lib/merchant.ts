@@ -42,6 +42,7 @@ export interface Claim {
   }
   profile?: MerchantProfile | null
   seeding_requests?: SeedingRequest[]
+  payment_failures?: { endpoint: string; error: string; created_at: string }[]
 }
 
 export interface MerchantMe {
@@ -103,4 +104,50 @@ export async function loadMe(token: string | undefined): Promise<MeResult> {
 export async function googleEnabled() {
   const { status, data } = await merchantApi("config", { method: "GET" })
   return status === 200 && typeof data.google_client_id === "string"
+}
+
+// What the public API page knows about a domain: its rating, endpoints and
+// every review, read straight from GET /v1/services/:domain.
+export interface ApiReview {
+  id: string
+  task: string
+  endpoint: string
+  result: "full" | "partial" | "none" | "not_checked"
+  listing: string | null
+  problems: string[]
+  note: string | null
+  promised: string | null
+  delivered: string | null
+  created_at: string
+  seeded?: boolean
+  price_usd: number | null
+  transaction_url: string | null
+  tries: number | null
+}
+
+export interface ApiRating {
+  stars: number | null
+  works_for_task: number | null
+  typical_latency_ms: number | null
+  typical_tries: number | null
+  reviews: number
+  buyers: number
+}
+
+export interface ApiData {
+  rating: ApiRating
+  endpoints: (ApiRating & {
+    endpoint: string
+    health: { status: string; checked_at: string } | null
+  })[]
+  reviews: ApiReview[]
+}
+
+export async function loadApi(domain: string): Promise<ApiData | null> {
+  const res = await fetch(
+    `${BASE}/v1/services/${encodeURIComponent(domain)}?limit=100`,
+    { cache: "no-store", signal: AbortSignal.timeout(10_000) }
+  ).catch(() => null)
+  if (!res?.ok) return null
+  return (await res.json().catch(() => null)) as ApiData | null
 }

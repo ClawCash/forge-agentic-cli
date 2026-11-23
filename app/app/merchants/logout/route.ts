@@ -4,12 +4,14 @@ import { MERCHANT_COOKIE, merchantApi } from "@/lib/merchant"
 
 export const dynamic = "force-dynamic"
 
-export async function POST() {
+export async function POST(request: Request) {
   const token = (await cookies()).get(MERCHANT_COOKIE)?.value
   if (token) await merchantApi("logout", { token })
+  // A relative Location keeps the browser on the host it signed out from.
+  const host = request.headers.get("host") ?? ""
   const res = new NextResponse(null, {
     status: 303,
-    headers: { Location: "/merchants" },
+    headers: { Location: host.startsWith("app.") ? "/" : "/merchants" },
   })
   res.cookies.delete(MERCHANT_COOKIE)
   return res
