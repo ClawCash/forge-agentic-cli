@@ -236,9 +236,6 @@ export function SignIn({
           )}
         </AnimatePresence>
       </motion.div>
-      <p className={styles.note}>
-        Claiming your API never changes a rating or hides a review.
-      </p>
       </div>
     </main>
   )

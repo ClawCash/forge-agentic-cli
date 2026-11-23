@@ -135,18 +135,6 @@
   margin: 0 calc(var(--space-3) * -1);
 }
 
-.note {
-  max-width: 420px;
-  border-radius: var(--radius-pill);
-  padding: var(--space-1) var(--space-3);
-  background: color-mix(in oklab, var(--background) 80%, transparent);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  text-align: center;
-  text-wrap: balance;
-}
-
 @media (max-width: 480px) {
   .card {
     border-radius: var(--radius-panel);
