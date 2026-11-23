@@ -4,6 +4,8 @@ import { SERVER_API_URL } from "@/lib/links"
 // httpOnly cookie, so the token never reaches the page's scripts.
 
 export const MERCHANT_COOKIE = "merchant_session"
+// Holds Google sign-in's state and PKCE verifier for a few minutes.
+export const GOOGLE_COOKIE = "merchant_google"
 const BASE = SERVER_API_URL
 
 export interface SeedingRequest {
@@ -94,4 +96,10 @@ export async function loadMe(token: string | undefined): Promise<MeResult> {
     }
   }
   return { state: "ok", me: data as unknown as MerchantMe }
+}
+
+// Whether "Continue with Google" is set up on the API.
+export async function googleEnabled() {
+  const { status, data } = await merchantApi("config", { method: "GET" })
+  return status === 200 && typeof data.google_client_id === "string"
 }

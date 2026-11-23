@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import { cookies } from "next/headers"
 import { SiteShell } from "@/components/site-shell"
 import { Section } from "@/components/ui"
-import { loadMe, MERCHANT_COOKIE } from "@/lib/merchant"
+import { googleEnabled, loadMe, MERCHANT_COOKIE } from "@/lib/merchant"
 import { ClaimCard, ClaimForm, MerchantSignIn } from "./client"
 
 export const dynamic = "force-dynamic"
@@ -76,10 +76,13 @@ function Intro() {
 export default async function MerchantsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ domain?: string }>
+  searchParams: Promise<{ domain?: string; error?: string }>
 }) {
-  const { domain } = await searchParams
-  const result = await loadMe((await cookies()).get(MERCHANT_COOKIE)?.value)
+  const { domain, error } = await searchParams
+  const [result, google] = await Promise.all([
+    loadMe((await cookies()).get(MERCHANT_COOKIE)?.value),
+    googleEnabled(),
+  ])
 
   return (
     <SiteShell markdown={MARKDOWN}>
@@ -97,7 +100,10 @@ export default async function MerchantsPage({
                     </p>
                   </div>
                 ) : (
-                  <MerchantSignIn />
+                  <MerchantSignIn
+                    google={google}
+                    googleFailed={error === "google"}
+                  />
                 )}
               </div>
             </div>

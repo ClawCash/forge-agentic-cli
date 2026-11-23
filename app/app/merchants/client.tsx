@@ -38,7 +38,36 @@ function ErrorLine({ children }: { children: ReactNode }) {
   )
 }
 
-export function MerchantSignIn() {
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-[18px]" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M23.5 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.08 3.57-5.15 3.57-8.81Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.96-1.07 7.95-2.92l-3.87-3c-1.08.72-2.45 1.15-4.08 1.15-3.13 0-5.79-2.12-6.74-4.97H1.27v3.1A12 12 0 0 0 12 24Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.26 14.26a7.2 7.2 0 0 1 0-4.52v-3.1H1.27a12 12 0 0 0 0 10.72l3.99-3.1Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.43-3.43A11.5 11.5 0 0 0 12 0 12 12 0 0 0 1.27 6.64l3.99 3.1C6.21 6.89 8.87 4.77 12 4.77Z"
+      />
+    </svg>
+  )
+}
+
+export function MerchantSignIn({
+  google = false,
+  googleFailed = false,
+}: {
+  google?: boolean
+  googleFailed?: boolean
+}) {
   const [email, setEmail] = useState("")
   const [code, setCode] = useState("")
   const [step, setStep] = useState<"email" | "code">("email")
@@ -74,10 +103,36 @@ export function MerchantSignIn() {
         Sign in to claim your API
       </h2>
       <p className="mt-1 text-[14px] text-muted">
-        We'll email you a 6-digit code.
+        {google
+          ? "Use Google, or get a 6-digit code by email."
+          : "We'll email you a 6-digit code."}
       </p>
+      {googleFailed && (
+        <ErrorLine>
+          Google sign-in didn&apos;t finish. Try again, or use your email.
+        </ErrorLine>
+      )}
+      {google && step === "email" && (
+        <>
+          <a
+            href="/merchants/google"
+            className="mt-5 flex h-11 w-full items-center justify-center gap-2.5 rounded-[10px] border border-line bg-white text-[15px] font-medium transition-colors hover:border-faint"
+          >
+            <GoogleMark />
+            Continue with Google
+          </a>
+          <div className="my-4 flex items-center gap-3 text-[12px] text-faint">
+            <span className="h-px flex-1 bg-line" />
+            or
+            <span className="h-px flex-1 bg-line" />
+          </div>
+        </>
+      )}
       {step === "email" ? (
-        <form onSubmit={sendCode} className="mt-5 space-y-3">
+        <form
+          onSubmit={sendCode}
+          className={google ? "space-y-3" : "mt-5 space-y-3"}
+        >
           <input
             type="email"
             required

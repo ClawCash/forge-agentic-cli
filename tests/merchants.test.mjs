@@ -319,3 +319,78 @@ test("signing out ends the merchant session", async () => {
     401
   )
 })
+
+test("merchants can sign in with Google when it's set up", async () => {
+  const idToken = (claims) =>
+    `x.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.sig`
+  let claims = {}
+  const exchanges = []
+  const make = (google) =>
+    createApp(null, {
+      v1: {
+        store: memoryApiReviewStore(),
+        baseUrl: "https://reviews.test",
+        secret: "test-secret-test-secret-test-secret-00",
+        readTerms: async () => ({ live: false, status: 404, accepts: [] }),
+        findPayments: async () => [],
+        sendCode: async () => {},
+        google,
+        fetch: async (url, init) => {
+          exchanges.push({ url, body: String(init?.body) })
+          return Response.json({ id_token: idToken(claims) })
+        },
+      },
+    })
+  const off = make(null)
+  assert.deepEqual(await (await off.request("/v1/merchant/config")).json(), {
+    google_client_id: null,
+  })
+  const body = {
+    code: "auth-code",
+    redirect_uri: "https://402reviews.xyz/merchants/google/callback",
+    code_verifier: "v".repeat(43),
+  }
+  assert.equal(
+    (await off.request("/v1/merchant/google", json(body))).status,
+    503
+  )
+
+  const app = make({ clientId: "client-1", clientSecret: "secret-1" })
+  assert.equal(
+    (await (await app.request("/v1/merchant/config")).json()).google_client_id,
+    "client-1"
+  )
+  const good = {
+    aud: "client-1",
+    iss: "https://accounts.google.com",
+    exp: Math.floor(Date.now() / 1000) + 600,
+    email: "Owner@Example.com",
+    email_verified: true,
+  }
+  for (const bad of [
+    { ...good, aud: "someone-else" },
+    { ...good, email_verified: false },
+    { ...good, exp: 1 },
+    { ...good, iss: "https://evil.example" },
+  ]) {
+    claims = bad
+    assert.equal(
+      (await app.request("/v1/merchant/google", json(body))).status,
+      401
+    )
+  }
+  claims = good
+  const signedIn = await (
+    await app.request("/v1/merchant/google", json(body))
+  ).json()
+  assert.match(signedIn.token, /^mrs_/)
+  assert.equal(signedIn.email, "owner@example.com")
+  const me = await (
+    await app.request("/v1/merchant/me", auth(signedIn.token))
+  ).json()
+  assert.equal(me.email, "owner@example.com")
+  const sent = new URLSearchParams(exchanges.at(-1).body)
+  assert.equal(exchanges.at(-1).url, "https://oauth2.googleapis.com/token")
+  assert.equal(sent.get("client_secret"), "secret-1")
+  assert.equal(sent.get("code_verifier"), "v".repeat(43))
+})

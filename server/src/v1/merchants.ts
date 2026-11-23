@@ -162,6 +162,8 @@ export function merchantRoutes(deps: {
   resolveTxt?: ResolveTxt
   fetch?: typeof fetch
   assertPublic?: (url: string) => Promise<void>
+  // "Continue with Google", when GOOGLE_CLIENT_ID and _SECRET are set.
+  google?: { clientId: string; clientSecret: string } | null
   now?: () => Date
 }) {
   const app = new Hono()
@@ -287,6 +289,10 @@ export function merchantRoutes(deps: {
       return c.json({ error: "That code is not right." }, 401)
     }
     await deps.store.deleteCode(codeKey(email))
+    return c.json(await startSession(email))
+  })
+
+  async function startSession(email: string) {
     const token = `mrs_${randomBytes(32).toString("base64url")}`
     const expiresAt = new Date(now().getTime() + SESSION_MS)
     await deps.store.saveMerchantSession({
@@ -294,7 +300,73 @@ export function merchantRoutes(deps: {
       email,
       expiresAt,
     })
-    return c.json({ token, email, expires_at: expiresAt.toISOString() })
+    return { token, email, expires_at: expiresAt.toISOString() }
+  }
+
+  // What the sign-in page can offer.
+  app.get("/config", (c) =>
+    c.json({ google_client_id: deps.google?.clientId ?? null })
+  )
+
+  // Finishes "Continue with Google": the site sends the code Google gave it,
+  // and this swaps it for the account's verified email. The ID token comes
+  // straight from Google's token endpoint over TLS, so its claims are read
+  // as is and checked against this client.
+  app.post("/google", bodyLimit({ maxSize: 4096 }), async (c) => {
+    const google = deps.google
+    if (!google) return c.json({ error: "Google sign-in isn't set up" }, 503)
+    const body = z
+      .object({
+        code: z.string().min(1).max(2048),
+        redirect_uri: z.url().max(300),
+        code_verifier: z.string().min(43).max(128),
+      })
+      .safeParse(await c.req.json().catch(() => null))
+    if (!body.success)
+      return c.json({ error: "Google sign-in failed. Try again." }, 400)
+    if (limited(c, "google", 10)) {
+      return c.json({ error: "Too many tries. Wait a minute." }, 429)
+    }
+    const res = await (deps.fetch ?? fetch)(
+      "https://oauth2.googleapis.com/token",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code: body.data.code,
+          client_id: google.clientId,
+          client_secret: google.clientSecret,
+          redirect_uri: body.data.redirect_uri,
+          code_verifier: body.data.code_verifier,
+          grant_type: "authorization_code",
+        }),
+        signal: AbortSignal.timeout(10_000),
+      }
+    ).catch(() => null)
+    const tokens = res?.ok
+      ? ((await res.json().catch(() => null)) as { id_token?: string } | null)
+      : null
+    let claims: Record<string, unknown> | null = null
+    try {
+      const payload = tokens?.id_token?.split(".")[1]
+      claims = payload
+        ? JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
+        : null
+    } catch {}
+    const email =
+      typeof claims?.email === "string" ? claims.email.toLowerCase() : null
+    const valid =
+      claims &&
+      email &&
+      claims.aud === google.clientId &&
+      (claims.iss === "https://accounts.google.com" ||
+        claims.iss === "accounts.google.com") &&
+      typeof claims.exp === "number" &&
+      claims.exp * 1000 > now().getTime() &&
+      claims.email_verified === true
+    if (!valid)
+      return c.json({ error: "Google sign-in failed. Try again." }, 401)
+    return c.json(await startSession(email))
   })
 
   app.post("/logout", async (c) => {

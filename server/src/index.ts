@@ -121,6 +121,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     sendCode: resendSender(env),
     adminEmails: parseAdminEmails(env.ADMIN_EMAILS),
     notify: resendNotifier(env, parseAdminEmails(env.ADMIN_EMAILS)),
+    google:
+      env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? {
+            clientId: env.GOOGLE_CLIENT_ID,
+            clientSecret: env.GOOGLE_CLIENT_SECRET,
+          }
+        : null,
     readTerms: termsReader(undefined, undefined, {
       listings: listingFinder(),
     }),

@@ -214,6 +214,8 @@ export interface V1Deps {
   notify?: Notify | null
   // Overrides DNS lookups when merchants verify a domain, in tests.
   resolveTxt?: ResolveTxt
+  // Lets merchants sign in with Google.
+  google?: { clientId: string; clientSecret: string } | null
   readTerms: ReadTerms
   readAdvertised?: (url: string) => Promise<string[]>
   readProfile?: ReadProfile
@@ -456,6 +458,7 @@ export function v1Routes(deps: V1Deps) {
       readTerms: deps.readTerms,
       resolveTxt: deps.resolveTxt,
       fetch: deps.fetch,
+      google: deps.google,
       ...(deps.resolveTxt && { assertPublic: async () => {} }),
     })
   )
