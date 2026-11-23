@@ -76,22 +76,23 @@ function structuredData({ summary, reviews }: ServiceDetail) {
   return JSON.stringify(data).replaceAll("<", "\\u003c")
 }
 
-// The owner's own links, once they've verified the domain; otherwise a way
-// for the owner to claim it.
-function Owner({ owner, domain }: { owner: ApiOwner | null; domain: string }) {
-  if (!owner) {
-    return (
-      <p className="mt-4 text-[13px] text-muted">
-        Is this your API?{" "}
-        <a
-          href={`${APP_URL}/?domain=${encodeURIComponent(domain)}`}
-          className="text-ink underline-offset-4 hover:underline"
-        >
-          Claim it
-        </a>
-      </p>
-    )
-  }
+// How an API's owner claims it: a button by the name, until it's verified.
+function ClaimButton({ domain }: { domain: string }) {
+  return (
+    <a
+      href={`${APP_URL}/?domain=${encodeURIComponent(domain)}`}
+      title="Own this API? Claim it to see every review and ask for seeding."
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] border border-line bg-white px-3 text-[13px] font-medium whitespace-nowrap transition-colors hover:border-faint"
+    >
+      <BadgeCheck className="size-3.5 text-muted" />
+      <span className="sm:hidden">Claim</span>
+      <span className="hidden sm:inline">Claim this API</span>
+    </a>
+  )
+}
+
+// What the verified owner says about their API, when they've said anything.
+function Owner({ owner }: { owner: ApiOwner }) {
   const links = (
     [
       ["Docs", owner.docs_url],
@@ -99,13 +100,12 @@ function Owner({ owner, domain }: { owner: ApiOwner | null; domain: string }) {
       ["Pricing", owner.pricing_url],
     ] as const
   ).filter(([, url]) => url)
+  if (!owner.name && !owner.description && links.length === 0) return null
   return (
     <div className="mt-5 rounded-[12px] border border-line bg-paper p-4">
-      <div className="flex items-center gap-1.5 text-[13px] font-medium text-ok">
-        <BadgeCheck className="size-4" /> Claimed by its owner
-      </div>
+      <div className="text-[12px] text-muted">From the owner</div>
       {(owner.name || owner.description) && (
-        <p className="mt-2 text-[14px] leading-relaxed">
+        <p className="mt-1.5 text-[14px] leading-relaxed">
           {owner.name && <span className="font-medium">{owner.name}. </span>}
           <span className="text-muted">{owner.description}</span>
         </p>
@@ -126,7 +126,7 @@ function Owner({ owner, domain }: { owner: ApiOwner | null; domain: string }) {
         </div>
       )}
       <p className="mt-2 text-[12px] text-muted">
-        The owner&apos;s own words. Claiming never changes a rating.
+        Claiming never changes a rating or hides a review.
       </p>
     </div>
   )
@@ -149,10 +149,11 @@ export default async function ServicePage({ params }: Props) {
             >
               <ArrowLeft className="size-3.5" /> Leaderboard
             </a>
-            <div className="mt-6 flex">
+            <div className="mt-6 flex items-start gap-3">
               <ApiHeading entry={summary} />
+              {!service.owner && <ClaimButton domain={summary.domain} />}
             </div>
-            <Owner owner={service.owner} domain={summary.domain} />
+            {service.owner && <Owner owner={service.owner} />}
             <div className="mt-5">
               <ApiDetails entry={summary} reviews={reviews} />
             </div>

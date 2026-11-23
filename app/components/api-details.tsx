@@ -2,7 +2,12 @@
 
 import { ArrowUpRight, ChevronDown } from "lucide-react"
 import { type ReactNode, useState } from "react"
-import { ApiLogo, likelyToWork, verdictOf } from "@/components/api-card"
+import {
+  ApiLogo,
+  likelyToWork,
+  VerifiedBadge,
+  verdictOf,
+} from "@/components/api-card"
 import { Stars } from "@/components/ui"
 import {
   type ApiSummary,
@@ -442,8 +447,9 @@ export function ApiHeading({ entry }: { entry: ApiSummary }) {
     <div className="flex min-w-0 flex-1 items-start gap-3">
       <ApiLogo name={name} iconUrl={entry.icon_url} />
       <div className="min-w-0 flex-1">
-        <h2 className="truncate font-display text-[18px] leading-6 font-medium tracking-[-0.015em]">
-          {name}
+        <h2 className="flex items-center gap-1.5 font-display text-[18px] leading-6 font-medium tracking-[-0.015em]">
+          <span className="truncate">{name}</span>
+          {entry.verified && <VerifiedBadge className="size-[18px]" />}
         </h2>
         <div className="truncate font-mono text-[12px] leading-5 text-muted">
           {entry.domain}

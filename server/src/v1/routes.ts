@@ -646,6 +646,14 @@ export function v1Routes(deps: V1Deps) {
       .slice(0, limit)
   }
 
+  // Domains whose owner has claimed and verified them.
+  const verifiedDomains = async () =>
+    new Set(
+      (await deps.store.claimsFor({}))
+        .filter((claim) => claim.status === "verified")
+        .map((claim) => claim.domain)
+    )
+
   const downDomains = async () => {
     const domains = await deps.store.listHealthDomains()
     const health = await deps.store.listHealthByDomains(domains)
@@ -1495,6 +1503,7 @@ export function v1Routes(deps: V1Deps) {
     const topDomains = top.map((entry) => entry.domain)
     const profiles = await profilesFor(topDomains)
     const health = await deps.store.listHealthByDomains(topDomains)
+    const verified = await verifiedDomains()
     return c.json({
       updated_at: new Date().toISOString(),
       task: task ?? null,
@@ -1504,6 +1513,7 @@ export function v1Routes(deps: V1Deps) {
         return {
           ...entry,
           ...profileView(entry.domain, profiles.get(entry.domain)),
+          verified: verified.has(entry.domain),
           health: domainHealth(
             health.filter((row) => row.domain === entry.domain)
           ),

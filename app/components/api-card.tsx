@@ -1,3 +1,4 @@
+import { BadgeCheck } from "lucide-react"
 import { Stars } from "@/components/ui"
 import type { ApiSummary, LeaderboardEntry } from "@/lib/leaderboard"
 
@@ -19,6 +20,20 @@ export function likelyToWork(
 ) {
   if (entry.works_for_task === null || entry.buyers < 3) return null
   return `${Math.round(entry.works_for_task * 100)}%`
+}
+
+// Shown next to an API's name once its owner has claimed and verified it.
+export function VerifiedBadge({ className = "size-4" }: { className?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label="Verified owner"
+      title="Verified owner: claimed and verified by DNS"
+      className="inline-flex shrink-0"
+    >
+      <BadgeCheck className={`${className} fill-ok text-white`} />
+    </span>
+  )
 }
 
 export function ApiLogo({
@@ -67,8 +82,11 @@ export function ApiCard({
       <span className="flex w-full items-start gap-3">
         <ApiLogo name={name} iconUrl={entry.icon_url} size="size-9" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14px] leading-[18px] font-medium tracking-[-0.01em]">
-            {name}
+          <span className="flex items-center gap-1">
+            <span className="truncate text-[14px] leading-[18px] font-medium tracking-[-0.01em]">
+              {name}
+            </span>
+            {entry.verified && <VerifiedBadge className="size-[15px]" />}
           </span>
           <span className="flex items-center gap-1.5 font-mono text-[11px] leading-4 text-muted">
             <span className="truncate">{entry.domain}</span>

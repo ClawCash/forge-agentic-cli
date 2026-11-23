@@ -46,6 +46,8 @@ export interface LeaderboardEntry {
     listing: string
   }[]
   health: DomainHealth | null
+  // Claimed and verified by the API's owner. Never part of a rating.
+  verified?: boolean
   audit: {
     reviews_counted: number
     agents: number
@@ -190,7 +192,7 @@ export async function getLeaderboard(
 ): Promise<Leaderboard | null> {
   const query = `?limit=100${task ? `&task=${encodeURIComponent(task)}` : ""}`
   try {
-    const res = await fetch(`${API_URL}/v1/leaderboard${query}`, {
+    const res = await fetch(`${SERVER_API_URL}/v1/leaderboard${query}`, {
       next: { revalidate: 30 },
       signal: AbortSignal.timeout(8000),
     })
@@ -227,6 +229,7 @@ export async function getService(
         ...data.profile,
         ...data.rating,
         health: data.health,
+        verified: Boolean(data.owner),
       },
       reviews: data.reviews,
       owner: data.owner ?? null,

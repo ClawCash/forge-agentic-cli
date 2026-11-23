@@ -239,6 +239,50 @@ test("only a verified owner edits the profile, and the API's page shows it", asy
   assert.equal(unclaimed.owner, null)
 })
 
+test("the leaderboard marks APIs their owner has verified", async () => {
+  const ctx = setup()
+  const review = (domain, n) => ({
+    id: `rev_${domain}_${n}`,
+    domain,
+    path: "/x",
+    url: `https://${domain}/x`,
+    task: "web-search",
+    language: null,
+    format: null,
+    result: "full",
+    listing: "accurate",
+    satisfaction: "satisfied",
+    satisfactionFrom: "agent",
+    problems: [],
+    checked: "against_source",
+    payAgain: null,
+    tries: null,
+    note: null,
+    noteStatus: "none",
+    wallet: `0x${String(n).padStart(40, "0")}`,
+    network: BASE,
+    paymentReference: `ref_${domain}_${n}`,
+    asset: USDC_BASE,
+    amountAtomic: "10000",
+    priceUsd: 0.01,
+    paidAt: new Date(),
+    proofMethod: "siwx",
+    createdAt: new Date(),
+  })
+  for (const domain of ["api.example.com", "other.example.com"]) {
+    for (const n of [1, 2, 3]) await ctx.store.insert(review(domain, n))
+  }
+  await claimAndVerify(ctx, await signIn(ctx))
+  const board = await (await ctx.app.request("/v1/leaderboard")).json()
+  const verified = Object.fromEntries(
+    board.top.map((entry) => [entry.domain, entry.verified])
+  )
+  assert.deepEqual(verified, {
+    "api.example.com": true,
+    "other.example.com": false,
+  })
+})
+
 test("seeding is one click, sent once, and emails the merchant and the team", async () => {
   const ctx = setup()
   const token = await signIn(ctx)
