@@ -1,7 +1,7 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, type ReactNode, useEffect, useState } from "react"
 import buttonStyles from "@/components/arc/button/button.module.css"
 import { Button } from "@/components/arc/button/button"
 import { Input } from "@/components/arc/input/input"
@@ -39,9 +39,11 @@ function GoogleMark() {
 export function SignIn({
   google = false,
   googleFailed = false,
+  backdrop,
 }: {
   google?: boolean
   googleFailed?: boolean
+  backdrop?: ReactNode
 }) {
   const reduce = !!useReducedMotion()
   const [email, setEmail] = useState("")
@@ -114,6 +116,8 @@ export function SignIn({
 
   return (
     <main className={styles.screen}>
+      {backdrop}
+      <div className={styles.center}>
       <motion.div
         className={styles.card}
         layout={!reduce}
@@ -124,10 +128,14 @@ export function SignIn({
         <motion.a
           layout={!reduce ? "position" : false}
           href="https://402reviews.xyz"
-          className={styles.mark}
+          className={styles.brand}
           aria-label="402reviews home"
         >
-          <ReviewsMark />
+          <span className={styles.mark}>
+            <ReviewsMark />
+          </span>
+          <span className={styles.wordmark}>402reviews</span>
+          <span className={styles.tag}>for API providers</span>
         </motion.a>
         <AnimatePresence mode="popLayout" initial={false}>
           {step === "email" ? (
@@ -138,8 +146,11 @@ export function SignIn({
               transition={reduce ? { duration: 0 } : motionTokens.spring.smooth}
             >
               <div className={styles.heading}>
-                <h1>Sign in to 402reviews</h1>
-                <p>See every review of your API and what agents ran into.</p>
+                <h1>Welcome</h1>
+                <p>
+                  Sign in, or create an account with your work email. Then
+                  claim your API and see every review agents leave.
+                </p>
               </div>
               {google && (
                 <>
@@ -226,9 +237,9 @@ export function SignIn({
         </AnimatePresence>
       </motion.div>
       <p className={styles.note}>
-        For API providers. Claiming your API never changes a rating or hides a
-        review.
+        Claiming your API never changes a rating or hides a review.
       </p>
+      </div>
     </main>
   )
 }

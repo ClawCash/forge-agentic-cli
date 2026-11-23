@@ -6,9 +6,11 @@ import {
   type NavEntry,
   type NavSection,
 } from "@/components/merchant/shell"
+import { getLeaderboard } from "@/lib/leaderboard"
 import { SITE_URL } from "@/lib/links"
 import { googleEnabled, loadApi, loadMe, MERCHANT_COOKIE } from "@/lib/merchant"
 import { pointersFor } from "@/lib/merchant-pointers"
+import { backdropReviews, ReviewBackdrop } from "./review-backdrop"
 import { SignIn } from "./sign-in"
 import { AddView, OverviewView, VerifyView } from "./views"
 
@@ -39,7 +41,14 @@ export default async function MerchantsPage({
   ])
 
   if (result.state === "signed-out") {
-    return <SignIn google={google} googleFailed={error === "google"} />
+    const board = await getLeaderboard()
+    return (
+      <SignIn
+        google={google}
+        googleFailed={error === "google"}
+        backdrop={<ReviewBackdrop reviews={backdropReviews(board)} />}
+      />
+    )
   }
   if (result.state === "error") {
     return (

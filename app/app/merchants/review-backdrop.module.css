@@ -1,0 +1,150 @@
+/* Reviews drifting behind the sign-in card. The field is tilted a little and
+   masked so the cards fade out toward the center and the edges. */
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  -webkit-mask-image:
+    radial-gradient(ellipse 34% 46% at 50% 50%, transparent 35%, black 100%),
+    linear-gradient(to bottom, transparent, black 14%, black 86%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    radial-gradient(ellipse 34% 46% at 50% 50%, transparent 35%, black 100%),
+    linear-gradient(to bottom, transparent, black 14%, black 86%, transparent);
+  mask-composite: intersect;
+}
+
+.field {
+  position: absolute;
+  inset: -30% -10%;
+  display: flex;
+  justify-content: center;
+  gap: var(--space-5);
+  transform: rotate(-7deg);
+}
+
+.column {
+  display: flex;
+  width: 288px;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-5);
+  animation: drift 120s linear infinite;
+  will-change: transform;
+}
+
+.column:nth-child(2n) {
+  animation-direction: reverse;
+  animation-duration: 140s;
+}
+
+.column:nth-child(3n) {
+  animation-duration: 105s;
+}
+
+@keyframes drift {
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-4);
+  background: var(--surface);
+  box-shadow: var(--shadow-resting);
+}
+
+.head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.icon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  object-fit: contain;
+}
+
+.name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stars {
+  display: flex;
+  flex: none;
+  gap: 1px;
+}
+
+.stars svg {
+  width: 11px;
+  height: 11px;
+  fill: var(--border-strong);
+}
+
+.stars svg[data-on] {
+  fill: var(--foreground);
+}
+
+.note {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.domain {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .backdrop {
+    -webkit-mask-image:
+      radial-gradient(ellipse 60% 38% at 50% 50%, transparent 40%, black 100%),
+      linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+    mask-image:
+      radial-gradient(ellipse 60% 38% at 50% 50%, transparent 40%, black 100%),
+      linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+  }
+
+  .column {
+    width: 240px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .column {
+    animation: none;
+  }
+}
