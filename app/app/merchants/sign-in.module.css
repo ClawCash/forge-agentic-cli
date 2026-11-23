@@ -1,0 +1,116 @@
+.screen {
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--space-12) var(--space-4);
+  background: var(--background);
+}
+
+.card {
+  display: grid;
+  width: 100%;
+  max-width: 400px;
+  gap: var(--space-6);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  padding: var(--space-10) var(--space-8) var(--space-8);
+  background: var(--surface);
+  box-shadow: var(--shadow-raised);
+}
+
+.mark {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: var(--foreground);
+}
+
+.mark svg {
+  width: 36px;
+  height: 36px;
+}
+
+.step {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.heading {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.heading h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 500;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+}
+
+.heading p {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.heading strong {
+  color: var(--foreground);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.full {
+  width: 100%;
+  gap: var(--space-2);
+  text-decoration: none;
+}
+
+.or {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.or span {
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0 calc(var(--space-3) * -1);
+}
+
+.note {
+  max-width: 400px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
+}
+
+@media (max-width: 480px) {
+  .card {
+    border-radius: var(--radius-panel);
+    padding: var(--space-8) var(--space-5) var(--space-6);
+  }
+}

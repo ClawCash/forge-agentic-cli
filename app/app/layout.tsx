@@ -43,6 +43,8 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${inter.variable} ${interTight.variable} ${plexMono.variable}`}
+      // The merchant app sets data-theme before React loads.
+      suppressHydrationWarning
     >
       <body>
         <noscript>
