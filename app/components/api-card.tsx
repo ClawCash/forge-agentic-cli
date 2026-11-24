@@ -66,9 +66,11 @@ export function ApiLogo({
 export function ApiCard({
   entry,
   onOpen,
+  starsShown = true,
 }: {
   entry: LeaderboardEntry
   onOpen: () => void
+  starsShown?: boolean
 }) {
   const name = entry.name ?? entry.domain
   const [verdict, tone] = verdictOf(entry)
@@ -77,7 +79,7 @@ export function ApiCard({
       type="button"
       onClick={onOpen}
       aria-haspopup="dialog"
-      className="flex h-full w-full flex-col rounded-[12px] border border-line bg-white p-4 text-left transition-colors duration-150 hover:border-faint focus-visible:border-ink focus-visible:outline-none"
+      className="lift flex h-full w-full flex-col rounded-[14px] border border-line bg-white p-4 text-left focus-visible:border-ink focus-visible:outline-none active:scale-[0.99]"
     >
       <span className="flex w-full items-start gap-3">
         <ApiLogo name={name} iconUrl={entry.icon_url} size="size-9" />
@@ -107,7 +109,7 @@ export function ApiCard({
         {entry.description}
       </span>
       <span className="mt-3 flex w-full items-center gap-1.5 text-[12px] text-muted">
-        <Stars value={entry.stars} size="size-3" />
+        <Stars value={entry.stars} size="size-3" shown={starsShown} />
         <span className="font-mono font-medium text-ink">
           {entry.stars.toFixed(1)}
         </span>
@@ -117,7 +119,15 @@ export function ApiCard({
             ? `${likelyToWork(entry)} likely to work`
             : "too early to tell"}
         </span>
-        <span className="ml-auto font-mono text-faint">#{entry.rank}</span>
+        <span
+          className={`ml-auto font-mono ${
+            entry.rank <= 3
+              ? "rounded-full bg-ink px-1.5 py-px text-[10.5px] font-medium text-white"
+              : "text-faint"
+          }`}
+        >
+          #{entry.rank}
+        </span>
       </span>
     </button>
   )

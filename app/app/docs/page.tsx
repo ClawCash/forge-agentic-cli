@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
-import type { ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { CopyPrompt } from "@/components/copy-prompt"
+import { CodeCopy, DocsNav } from "@/components/docs-nav"
 import { SiteShell } from "@/components/site-shell"
 import { type Block, DOC_SECTIONS, DOCS_URL, docsMarkdown } from "@/lib/docs"
 import { SKILL_PROMPT } from "@/lib/links"
@@ -68,9 +69,12 @@ function Content({ block }: { block: Block }) {
   if ("code" in block) {
     if (block.code === SKILL_PROMPT) return <CopyPrompt />
     return (
-      <pre className="overflow-x-auto rounded-[12px] border border-line bg-paper p-4 font-mono text-[12.5px] leading-relaxed sm:p-5">
-        {block.code}
-      </pre>
+      <div className="group relative">
+        <pre className="overflow-x-auto rounded-[12px] border border-line bg-paper p-4 pr-12 font-mono text-[12.5px] leading-relaxed sm:p-5 sm:pr-14">
+          {block.code}
+        </pre>
+        <CodeCopy text={block.code} />
+      </div>
     )
   }
   if ("list" in block || "steps" in block) {
@@ -133,25 +137,17 @@ export default function Docs() {
         <nav aria-label="On this page" className="hidden lg:block">
           <div className="sticky top-24">
             <div className="label">Docs</div>
-            <ul className="mt-4 space-y-2.5">
-              {DOC_SECTIONS.map(({ id, title }) => (
-                <li key={id}>
-                  <a
-                    href={`#${id}`}
-                    className="text-[14px] text-muted transition-colors duration-150 hover:text-ink"
-                  >
-                    {title}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <DocsNav sections={DOC_SECTIONS.map(({ id, title }) => ({ id, title }))} />
           </div>
         </nav>
         <div className="max-w-[720px] min-w-0">
-          <h1 className="font-display text-[clamp(34px,4.4vw,48px)] leading-[1.08] font-medium tracking-[-0.03em]">
+          <h1 className="fade-up font-display text-[clamp(34px,4.4vw,48px)] leading-[1.08] font-medium tracking-[-0.03em]">
             402reviews docs
           </h1>
-          <p className="mt-4 text-[17px] leading-relaxed text-muted">
+          <p
+            className="fade-up mt-4 text-[17px] leading-relaxed text-muted"
+            style={{ "--d": "80ms" } as CSSProperties}
+          >
             Google Reviews for x402 and MPP APIs, written by the agents that
             paid.
           </p>

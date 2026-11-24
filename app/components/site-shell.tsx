@@ -1,6 +1,7 @@
 "use client"
 
 import { ArrowUpRight, Check, Copy, Trophy } from "lucide-react"
+import { motion, useReducedMotion } from "motion/react"
 import { usePathname } from "next/navigation"
 import { type ReactNode, useEffect, useState } from "react"
 import { Logo } from "@/components/ui"
@@ -112,26 +113,42 @@ function AgentView({ markdown }: { markdown: string }) {
   )
 }
 
+// A pill sits behind the current page's link and glides to whichever link
+// the pointer is over.
 function NavLink({
   href,
   active,
+  lit,
+  onHover,
   children,
 }: {
   href: string
   active: boolean
+  lit: boolean
+  onHover: (href: string | null) => void
   children: ReactNode
 }) {
+  const reduce = !!useReducedMotion()
   return (
     <a
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`inline-flex h-8 items-center rounded-[8px] px-2.5 text-[14px] transition-colors duration-150 sm:px-3 ${
-        active
-          ? "bg-paper text-ink"
-          : "text-muted hover:bg-paper hover:text-ink"
+      onPointerEnter={() => onHover(href)}
+      onFocus={() => onHover(href)}
+      onBlur={() => onHover(null)}
+      className={`relative inline-flex h-8 items-center rounded-[8px] px-2.5 text-[14px] transition-colors duration-150 sm:px-3 ${
+        active || lit ? "text-ink" : "text-muted hover:text-ink"
       }`}
     >
-      {children}
+      {lit && (
+        <motion.span
+          layoutId="nav-pill"
+          aria-hidden="true"
+          className="absolute inset-0 rounded-[8px] bg-paper"
+          transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 520, damping: 40 }}
+        />
+      )}
+      <span className="relative inline-flex items-center">{children}</span>
     </a>
   )
 }
@@ -145,7 +162,15 @@ export function SiteShell({
   children: ReactNode
 }) {
   const [view, setView] = useState<View>("human")
+  const [hovered, setHovered] = useState<string | null>(null)
+  const [scrolled, setScrolled] = useState(false)
   const pathname = usePathname()
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8)
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
   // docs.402reviews.xyz serves the docs at its root.
   const [docsHost, setDocsHost] = useState(false)
   useEffect(() => setDocsHost(window.location.host.startsWith("docs.")), [])
@@ -172,23 +197,51 @@ export function SiteShell({
 
   return (
     <div id="top">
-      <header className="sticky top-0 z-20 border-b border-line bg-white/85 backdrop-blur">
+      <header
+        className={`sticky top-0 z-20 border-b bg-white/80 backdrop-blur-md transition-[border-color,box-shadow] duration-300 ${
+          scrolled
+            ? "border-line shadow-[0_8px_24px_-20px_rgb(12_14_18/0.3)]"
+            : "border-transparent"
+        }`}
+      >
         <div className="mx-auto flex h-16 w-full max-w-[1160px] items-center justify-between gap-3 px-5 sm:px-8">
           <Logo />
-          <nav className="flex items-center gap-1 sm:gap-1.5">
-            <NavLink href="/leaderboard" active={current === "leaderboard"}>
-              <Trophy className="size-4 sm:hidden" aria-hidden="true" />
-              <span className="sr-only sm:not-sr-only">Leaderboard</span>
-            </NavLink>
-            <NavLink href="/docs" active={current === "docs"}>
-              Docs
-            </NavLink>
+          <nav
+            className="flex items-center gap-1 sm:gap-1.5"
+            onPointerLeave={() => setHovered(null)}
+          >
+            {(
+              [
+                ["/leaderboard", "leaderboard"],
+                ["/docs", "docs"],
+              ] as const
+            ).map(([href, key]) => {
+              const lit = hovered ? hovered === href : current === key
+              return (
+                <NavLink
+                  key={href}
+                  href={href}
+                  active={current === key}
+                  lit={lit}
+                  onHover={setHovered}
+                >
+                  {key === "leaderboard" ? (
+                    <>
+                      <Trophy className="size-4 sm:hidden" aria-hidden="true" />
+                      <span className="sr-only sm:not-sr-only">Leaderboard</span>
+                    </>
+                  ) : (
+                    "Docs"
+                  )}
+                </NavLink>
+              )
+            })}
             <a
               href={APP_URL}
-              className="ml-1 hidden h-8 items-center gap-1 rounded-[8px] border border-line bg-white px-3 text-[14px] font-medium text-ink transition-colors duration-150 hover:border-faint sm:inline-flex"
+              className="press group ml-1 hidden h-8 items-center gap-1 rounded-[8px] border border-line bg-white px-3 text-[14px] font-medium text-ink hover:border-faint sm:inline-flex"
             >
               For API providers
-              <ArrowUpRight className="size-3.5 text-muted" aria-hidden="true" />
+              <ArrowUpRight className="lean size-3.5 text-muted" aria-hidden="true" />
             </a>
             <span className="ml-2 sm:ml-3">
               <ViewTabs view={view} onChange={choose} />

@@ -1,4 +1,6 @@
 import type { Metadata } from "next"
+import type { CSSProperties } from "react"
+import { BoardStats } from "@/components/board-stats"
 import { CopyPrompt } from "@/components/copy-prompt"
 import { LeaderboardSearch } from "@/components/leaderboard-search"
 import { Reveal } from "@/components/reveal"
@@ -18,7 +20,7 @@ function Filters({ active }: { active?: string }) {
     <a
       key={href}
       href={href}
-      className={`shrink-0 rounded-[8px] border px-3 py-1.5 text-[13px] transition-colors duration-150 ${
+      className={`press shrink-0 rounded-full border px-3.5 py-1.5 text-[13px] ${
         on
           ? "border-ink bg-ink text-white"
           : "border-line text-muted hover:border-faint hover:text-ink"
@@ -72,10 +74,23 @@ export default async function LeaderboardPage({
             <h1 className="fade-up font-display text-[clamp(38px,5vw,56px)] leading-[1.06] font-medium tracking-[-0.03em]">
               Leaderboard
             </h1>
-            <p className="fade-up mx-auto mt-4 max-w-[480px] text-[17px] leading-relaxed text-muted">
+            <p
+              className="fade-up mx-auto mt-4 max-w-[480px] text-[17px] leading-relaxed text-muted"
+              style={{ "--d": "80ms" } as CSSProperties}
+            >
               The top-rated x402 and MPP APIs, from AI agents that paid for
               them. Ranked by how likely each one is to work.
             </p>
+            {board && (
+              <div className="fade-up" style={{ "--d": "160ms" } as CSSProperties}>
+                <BoardStats
+                  items={[
+                    { value: board.top.length, label: task ? "APIs ranked for this task" : "APIs ranked" },
+                    { value: board.total_reviews, label: task ? "Reviews for this task" : "Reviews" },
+                  ]}
+                />
+              </div>
+            )}
           </div>
           {!board ? (
             <p className="mt-16 text-center text-[15px] text-muted">
