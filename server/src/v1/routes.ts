@@ -80,6 +80,7 @@ export const TASKS = [
   "translation",
   "enrichment",
   "email",
+  "financial-data",
   "other",
 ] as const
 

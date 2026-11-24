@@ -509,6 +509,8 @@ test("works out the task from the search, on this machine", () => {
     ["latest news about a launch", "news"],
     ["web search for a product page", "web-search"],
     ["bitcoin token price", "token-price"],
+    ["company revenue from SEC filings", "financial-data"],
+    ["META income statement", "financial-data"],
     ["generate an image of a cat", "image-generation"],
     ["something unrelated", null],
   ]) {

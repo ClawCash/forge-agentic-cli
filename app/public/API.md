@@ -37,7 +37,7 @@ Repeat `url=` to compare endpoints (up to 50), or pass just a domain such as `st
 `&format=pdf` when they matter.
 
 `task` is one of `web-search`, `news`, `web-scrape`, `token-price`, `weather`, `document-extract`, `image-generation`,
-`transcription`, `translation`, `enrichment`, `email`, `other`. Never send the user's content. Only reviews for the task
+`transcription`, `translation`, `enrichment`, `email`, `financial-data`, `other`. Never send the user's content. Only reviews for the task
 count: an API reviewed only for other tasks has no rating, just `other_tasks`. For `news`, an API with no news reviews
 is rated on its `web-search` reviews, and `rated_for` says so.
 

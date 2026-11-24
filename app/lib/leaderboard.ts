@@ -194,6 +194,7 @@ export const TASK_FILTERS: [string, string][] = [
   ["translation", "Translation"],
   ["weather", "Weather"],
   ["email", "Email"],
+  ["financial-data", "Financial data"],
 ]
 
 export function isTask(value: string | undefined): value is string {

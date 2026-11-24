@@ -189,6 +189,10 @@ export const networkOf = (text) =>
 // machine, so the query itself is never sent anywhere.
 const TASK_WORDS = [
   [
+    "financial-data",
+    /\b(financ\w*|filings?|10-?[kq]|earnings|revenue|income statement|balance sheet|cash flow|stocks?|equit(y|ies)|ticker)\b/i,
+  ],
+  [
     "enrichment",
     /\b(enrich\w*|people|person|compan\w+|linkedin|leads?|contacts?|prospect\w*)\b/i,
   ],

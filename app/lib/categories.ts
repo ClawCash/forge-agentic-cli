@@ -26,6 +26,7 @@ export const CATEGORIES: Category[] = [
   { task: "translation", slug: "translation-apis", label: "Translation", noun: "translation APIs", does: "translate text between languages" },
   { task: "weather", slug: "weather-apis", label: "Weather", noun: "weather APIs", does: "return current weather and forecasts" },
   { task: "email", slug: "email-apis", label: "Email", noun: "email APIs", does: "send email or check email addresses" },
+  { task: "financial-data", slug: "financial-data-apis", label: "Financial data", noun: "financial data APIs", does: "return company financials from filings, earnings and stock market data" },
 ]
 
 export const categoryBySlug = (slug: string) =>
