@@ -183,6 +183,15 @@ test(
           .sort(),
         [`${today}|-|check|1`, `${today}|${user.id}|check|1`].sort()
       )
+      await store.recordUsage({
+        id: "e3",
+        userId: null,
+        kind: "check",
+        task: null,
+        domain: null,
+        status: 200,
+        client: "402reviews-site",
+      })
       const stats = await store.stats()
       assert.equal(stats.checks, 2)
       assert.ok(stats.reviews >= 1 && stats.apisReviewed >= 1 && stats.buyers >= 1)
@@ -194,7 +203,7 @@ test(
       assert.ok(byUser.lastAt instanceof Date)
       assert.equal(
         (await store.usageClients(new Date(Date.now() - 86_400_000), 8)).length,
-        2
+        3
       )
       assert.equal((await store.listUsers())[0].id, user.id)
       await store.saveAdminSession({

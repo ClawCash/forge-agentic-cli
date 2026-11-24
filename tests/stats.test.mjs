@@ -54,6 +54,10 @@ test("stats count reviews, APIs, buyers, USDC paid, agent checks and tracked API
   for (const kind of ["check", "search", "brief", "leaderboard", "service"]) {
     await store.recordUsage({ id: kind, userId: null, kind, task: null, domain: null, status: 200, client: null })
   }
+  // The site's own pages and bare Node fetches aren't agents checking.
+  for (const client of ["402reviews-site", "node"]) {
+    await store.recordUsage({ id: client, userId: null, kind: "check", task: null, domain: null, status: 200, client })
+  }
   for (const domain of ["one.example.com", "three.example.com", "four.example.com"]) {
     await store.saveHealth({ url: `https://${domain}/`, domain, status: "live", checkedAt: new Date() })
   }

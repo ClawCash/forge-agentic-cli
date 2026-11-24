@@ -8,6 +8,7 @@ import {
   isNull,
   like,
   lt,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm"
@@ -156,6 +157,11 @@ export interface ApiReviewStore {
 }
 
 const CHECK_KINDS = ["check", "search", "brief"]
+// Calls that aren't an agent checking an API: the site's own pages (which say
+// so) and bare Node fetches, which is how they arrived before they did.
+const NOT_AGENTS = ["402reviews-site", "node"]
+const fromAgent = (event: { kind: string; client: string | null }) =>
+  CHECK_KINDS.includes(event.kind) && !NOT_AGENTS.includes(event.client ?? "")
 
 export async function postgresApiReviewStore(
   databaseUrl: string
@@ -289,7 +295,12 @@ export async function postgresApiReviewStore(
         db
           .select({ checks: sql<number>`count(*)::int` })
           .from(usageEvents)
-          .where(inArray(usageEvents.kind, CHECK_KINDS)),
+          .where(
+            and(
+              inArray(usageEvents.kind, CHECK_KINDS),
+              or(isNull(usageEvents.client), notInArray(usageEvents.client, NOT_AGENTS))
+            )
+          ),
         db
           .select({ apisTracked: sql<number>`count(distinct ${endpointHealth.domain})::int` })
           .from(endpointHealth),
@@ -656,7 +667,7 @@ export function memoryApiReviewStore(): ApiReviewStore {
         apisReviewed,
         buyers: new Set(rows.map((row) => row.wallet)).size,
         paidUsd: rows.reduce((sum, row) => sum + (row.priceUsd ?? 0), 0),
-        checks: usage.filter((event) => CHECK_KINDS.includes(event.kind)).length,
+        checks: usage.filter(fromAgent).length,
         apisTracked: Math.max(new Set([...health.values()].map((row) => row.domain)).size, apisReviewed),
       }
     },

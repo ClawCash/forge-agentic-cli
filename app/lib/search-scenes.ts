@@ -225,7 +225,8 @@ async function liveRatings(urls: string[]) {
   try {
     const res = await fetch(`${API_URL}/v1/check`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // So the API doesn't count the site's own lookups as agents checking.
+      headers: { "Content-Type": "application/json", "X-Client-Id": "402reviews-site" },
       body: JSON.stringify({ urls }),
       next: { revalidate: 60 },
       signal: AbortSignal.timeout(8000),
