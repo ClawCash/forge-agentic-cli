@@ -134,6 +134,13 @@
       "when": 1795519391166,
       "tag": "0018_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795520693888,
+      "tag": "0019_merchant_events",
+      "breakpoints": true
     }
   ]
 }

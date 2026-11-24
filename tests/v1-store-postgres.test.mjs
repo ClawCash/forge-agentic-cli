@@ -253,6 +253,13 @@ test(
       })
       assert.equal((await store.providerKey("kh2")).name, "Claude")
 
+      // What merchants did, newest first.
+      await store.recordMerchantEvent({ id: "me_1", email: "owner@example.com", kind: "signed_in", domain: null, detail: "email" })
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      await store.recordMerchantEvent({ id: "me_2", email: "owner@example.com", kind: "claimed", domain: "api.example.com", detail: null })
+      assert.deepEqual((await store.merchantEvents(10)).map((event) => event.kind), ["claimed", "signed_in"])
+      assert.equal((await store.merchantEvents(1)).length, 1)
+
       // Apps that register, and their one-time codes.
       await store.saveOauthClient({ id: "oc_1", name: "Cursor", redirectUris: ["cursor://cb"] })
       assert.deepEqual((await store.oauthClient("oc_1")).redirectUris, ["cursor://cb"])

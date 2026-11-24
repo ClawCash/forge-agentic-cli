@@ -219,6 +219,24 @@ export const providerKeys = pgTable("provider_keys", {
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 })
 
+// What merchants do, for the admin dashboard: signing in, claiming and
+// verifying a domain, saving a profile, asking for seeding, keys and apps.
+// Sessions expire and are deleted, so this is also the record of who signed up.
+export const merchantEvents = pgTable(
+  "merchant_events",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    kind: text("kind").notNull(),
+    domain: text("domain"),
+    detail: text("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("merchant_events_created_idx").on(table.createdAt)]
+)
+
 // An app that registered itself to sign providers in to the providers MCP
 // (OAuth dynamic client registration), such as Claude, Cursor or Codex.
 export const oauthClients = pgTable("oauth_clients", {

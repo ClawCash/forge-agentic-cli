@@ -8,6 +8,8 @@ export const ADMIN_API_URL = process.env.ADMIN_API_URL ?? SERVER_API_URL
 
 export interface AdminStats {
   generated_at: string
+  // Who is signed in to the dashboard.
+  admin_email?: string
   active: { dau: number; wau: number; mau: number; tau: number }
   totals: {
     users: number
@@ -49,6 +51,36 @@ export interface AdminStats {
   requests_by_kind: { kind: string; signed_in: number; anonymous: number }[]
   clients: { client: string; requests: number }[]
   merchants?: {
+    // What merchants did; older dashboards may not send these yet.
+    totals?: {
+      merchants: number
+      merchants_last_7_days: number
+      claims: number
+      verified: number
+      pending: number
+      connected_apps: number
+      keys: number
+      seeding_open: number
+    }
+    daily?: { day: string; signups: number }[]
+    accounts?: {
+      email: string
+      first_seen_at: string
+      last_active_at: string
+      sign_in: string | null
+      apis: { domain: string; status: "pending" | "verified" }[]
+      apps: string[]
+      keys: number
+      seeding_requests: number
+      actions: number
+    }[]
+    events?: {
+      at: string
+      email: string
+      kind: string
+      domain: string | null
+      detail: string | null
+    }[]
     claims: {
       domain: string
       email: string

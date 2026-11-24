@@ -16,7 +16,11 @@ import type {
   ApiReview,
   ApiReviewStore,
   ApiUser,
+  MerchantClaim,
+  MerchantEvent,
   PaymentFailure,
+  ProviderKey,
+  SeedingRequest,
   UsageClient,
   UsageDay,
   UsageUser,
@@ -230,6 +234,118 @@ export function buildAdminStats(input: AdminInput, now = new Date()) {
 
 export type AdminStats = ReturnType<typeof buildAdminStats>
 
+export interface MerchantInput {
+  claims: MerchantClaim[]
+  events: MerchantEvent[]
+  keys: ProviderKey[]
+  seeding: SeedingRequest[]
+}
+
+// Who the merchants are and what they did. A merchant's first day is their
+// first event, claim or key, so people who joined before events were logged
+// still count.
+export function buildMerchantStats(input: MerchantInput, now = new Date()) {
+  const days = Array.from({ length: DAYS_SHOWN }, (_, i) =>
+    dayOf(new Date(now.getTime() - (DAYS_SHOWN - 1 - i) * DAY_MS))
+  )
+  type Account = {
+    email: string
+    first: Date
+    last: Date
+    method: string | null
+    events: number
+  }
+  const accounts = new Map<string, Account>()
+  const touch = (email: string, at: Date | null | undefined) => {
+    if (!at) return
+    const account =
+      accounts.get(email) ??
+      ({ email, first: at, last: at, method: null, events: 0 } as Account)
+    if (at < account.first) account.first = at
+    if (at > account.last) account.last = at
+    accounts.set(email, account)
+  }
+  // Oldest first, so the latest sign-in method wins.
+  for (const event of [...input.events].reverse()) {
+    touch(event.email, event.createdAt)
+    const account = accounts.get(event.email)!
+    account.events += 1
+    if (event.kind === "signed_in") account.method = event.detail
+  }
+  for (const claim of input.claims) {
+    touch(claim.email, claim.createdAt)
+    touch(claim.email, claim.verifiedAt)
+  }
+  for (const key of input.keys) {
+    touch(key.email, key.createdAt)
+    touch(key.email, key.lastUsedAt)
+  }
+  for (const request of input.seeding) touch(request.email, request.createdAt)
+
+  const claimsBy = new Map<string, MerchantClaim[]>()
+  for (const claim of input.claims) {
+    claimsBy.set(claim.email, [...(claimsBy.get(claim.email) ?? []), claim])
+  }
+  const live = input.keys.filter((key) => !key.revokedAt)
+  const appsBy = new Map<string, string[]>()
+  const keysBy = new Map<string, number>()
+  for (const key of live) {
+    if (key.name) appsBy.set(key.email, [...(appsBy.get(key.email) ?? []), key.name])
+    else keysBy.set(key.email, (keysBy.get(key.email) ?? 0) + 1)
+  }
+  const seedingBy = new Map<string, number>()
+  for (const request of input.seeding) {
+    seedingBy.set(request.email, (seedingBy.get(request.email) ?? 0) + 1)
+  }
+  const signupsOn = new Map<string, number>()
+  for (const account of accounts.values()) {
+    const day = dayOf(account.first)
+    signupsOn.set(day, (signupsOn.get(day) ?? 0) + 1)
+  }
+  const list = [...accounts.values()]
+  const verified = input.claims.filter((claim) => claim.status === "verified")
+
+  return {
+    totals: {
+      merchants: list.length,
+      merchants_last_7_days: list.filter(
+        (account) => account.first.getTime() >= now.getTime() - 7 * DAY_MS
+      ).length,
+      claims: input.claims.length,
+      verified: verified.length,
+      pending: input.claims.length - verified.length,
+      connected_apps: live.filter((key) => key.name).length,
+      keys: live.filter((key) => !key.name).length,
+      seeding_open: input.seeding.filter((request) => request.status === "open")
+        .length,
+    },
+    daily: days.map((day) => ({ day, signups: signupsOn.get(day) ?? 0 })),
+    accounts: list
+      .map((account) => ({
+        email: account.email,
+        first_seen_at: account.first.toISOString(),
+        last_active_at: account.last.toISOString(),
+        sign_in: account.method,
+        apis: (claimsBy.get(account.email) ?? []).map((claim) => ({
+          domain: claim.domain,
+          status: claim.status,
+        })),
+        apps: [...new Set(appsBy.get(account.email) ?? [])],
+        keys: keysBy.get(account.email) ?? 0,
+        seeding_requests: seedingBy.get(account.email) ?? 0,
+        actions: account.events,
+      }))
+      .sort((a, b) => b.last_active_at.localeCompare(a.last_active_at)),
+    events: input.events.slice(0, 80).map((event) => ({
+      at: event.createdAt.toISOString(),
+      email: event.email,
+      kind: event.kind,
+      domain: event.domain,
+      detail: event.detail,
+    })),
+  }
+}
+
 export function adminRoutes(deps: {
   store: ApiReviewStore
   secret: string
@@ -342,7 +458,8 @@ export function adminRoutes(deps: {
   })
 
   app.get("/stats", async (c) => {
-    if (!(await session(c))) return c.json({ error: "Sign in again" }, 401)
+    const signedIn = await session(c)
+    if (!signedIn) return c.json({ error: "Sign in again" }, 401)
     const at = now()
     const [users, reviews, failures, byDay, byUser, clients] =
       await Promise.all([
@@ -355,17 +472,27 @@ export function adminRoutes(deps: {
         deps.store.usageByUser(),
         deps.store.usageClients(new Date(at.getTime() - 7 * DAY_MS), 8),
       ])
-    const [claims, seeding] = await Promise.all([
+    const [claims, seeding, events] = await Promise.all([
       deps.store.claimsFor({}),
       deps.store.seedingRequests(),
+      deps.store.merchantEvents(5000),
     ])
+    // Keys are looked up per merchant; there are few merchants.
+    const emails = [
+      ...new Set([...claims, ...events, ...seeding].map((row) => row.email)),
+    ]
+    const keys = (
+      await Promise.all(emails.map((email) => deps.store.providerKeys(email)))
+    ).flat()
     c.header("Cache-Control", "no-store")
     return c.json({
+      admin_email: signedIn.email,
       ...buildAdminStats(
         { users, reviews, failures, byDay, byUser, clients },
         at
       ),
       merchants: {
+        ...buildMerchantStats({ claims, events, keys, seeding }, at),
         claims: claims.map((claim) => ({
           domain: claim.domain,
           email: claim.email,

@@ -43,6 +43,8 @@ export function SignIn({
   title = "Sign in to 402reviews",
   intro = "Claim your API and see every review agents leave. New here? This creates your account.",
   next,
+  tag = "for API providers",
+  endpoints = { start: "/merchants/start", verify: "/merchants/verify" },
 }: {
   google?: boolean
   googleFailed?: boolean
@@ -52,6 +54,10 @@ export function SignIn({
   intro?: string
   // Where Google sign-in returns to, such as an app's approval page.
   next?: string
+  // The line beside the brand, and where the code is sent and checked. The
+  // admin dashboard signs in through the same screen.
+  tag?: string
+  endpoints?: { start: string; verify: string }
 }) {
   const reduce = !!useReducedMotion()
   const [email, setEmail] = useState("")
@@ -77,7 +83,7 @@ export function SignIn({
     setBusy(true)
     setEmailError(undefined)
     setCodeError(undefined)
-    const { ok, data } = await post("/merchants/start", { email })
+    const { ok, data } = await post(endpoints.start, { email })
     setBusy(false)
     if (!ok) {
       const message = String(data.error ?? "Couldn't send a code. Try again.")
@@ -93,7 +99,7 @@ export function SignIn({
   async function verify(full: string) {
     setBusy(true)
     setCodeError(undefined)
-    const { ok, data } = await post("/merchants/verify", { email, code: full })
+    const { ok, data } = await post(endpoints.verify, { email, code: full })
     if (ok) {
       window.location.reload()
       return
@@ -123,14 +129,14 @@ export function SignIn({
       }
 
   return (
-    <main className={styles.screen}>
+    <main className={styles.screen} data-single={!showcase || undefined}>
       <section className={styles.formSide}>
         <a href="https://402reviews.xyz" className={styles.brand} aria-label="402reviews home">
           <span className={styles.mark}>
             <ReviewsMark />
           </span>
           <span className={styles.wordmark}>402reviews</span>
-          <span className={styles.tag}>for API providers</span>
+          <span className={styles.tag}>{tag}</span>
         </a>
       <div className={styles.center}>
       <motion.div

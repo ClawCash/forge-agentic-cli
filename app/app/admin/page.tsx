@@ -1,8 +1,11 @@
 import type { Metadata } from "next"
 import { cookies } from "next/headers"
+import { Alert } from "@/components/arc/alert/alert"
+import { MerchantShell, type NavEntry, type NavSection } from "@/components/merchant/shell"
 import { ADMIN_COOKIE, loadStats } from "@/lib/admin"
-import { Dashboard } from "./dashboard"
-import { AdminSignIn } from "./sign-in"
+import { SITE_URL } from "@/lib/links"
+import { SignIn } from "../merchants/sign-in"
+import { ActivityView, AgentsView, OverviewView, ProvidersView } from "./views"
 
 export const dynamic = "force-dynamic"
 
@@ -11,20 +14,74 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export default async function AdminPage() {
+const VIEWS = {
+  overview: { label: "Overview", kind: "overview" },
+  agents: { label: "Agents", kind: "people" },
+  providers: { label: "API providers", kind: "providers" },
+  activity: { label: "Activity", kind: "activity" },
+} as const
+type View = keyof typeof VIEWS
+
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>
+}) {
+  const { view: asked } = await searchParams
   const result = await loadStats((await cookies()).get(ADMIN_COOKIE)?.value)
-  if (result.state === "signed-out") return <AdminSignIn />
+  if (result.state === "signed-out") {
+    return (
+      <SignIn
+        tag="admin"
+        title="Sign in to admin"
+        intro="For the 402reviews team. We'll email you a code."
+        endpoints={{ start: "/admin/start", verify: "/admin/verify" }}
+      />
+    )
+  }
   if (result.state === "error") {
     return (
-      <main className="flex min-h-svh items-center justify-center bg-paper px-4">
-        <div className="panel max-w-[380px] p-7 text-[14px]">
-          <p className="font-medium">Couldn&apos;t load the dashboard</p>
-          <p className="mt-1 text-muted">
-            {result.message}. Reload to try again.
-          </p>
-        </div>
+      <main style={{ display: "grid", minHeight: "100svh", placeItems: "center", padding: "var(--space-4)" }}>
+        <Alert tone="danger" title="Couldn't load the dashboard">
+          {result.message}. Reload to try again.
+        </Alert>
       </main>
     )
   }
-  return <Dashboard stats={result.stats} />
+
+  const { stats } = result
+  const view: View = asked && asked in VIEWS ? (asked as View) : "overview"
+  const sections: NavSection[] = [
+    {
+      id: "admin",
+      items: (Object.keys(VIEWS) as View[]).map((id) => ({
+        id,
+        label: VIEWS[id].label,
+        href: id === "overview" ? "?" : `?view=${id}`,
+        kind: VIEWS[id].kind,
+      })),
+    },
+  ]
+  const footer: NavEntry[] = [
+    { id: "site", label: "402reviews.xyz", href: SITE_URL, kind: "external" },
+    { id: "app", label: "Provider app", href: "https://app.402reviews.xyz", kind: "external" },
+  ]
+
+  return (
+    <MerchantShell
+      email={stats.admin_email ?? "Admin"}
+      sections={sections}
+      footer={footer}
+      active={view}
+      crumb={VIEWS[view].label}
+      product="Admin"
+      home="Admin"
+      logoutAction="/admin/logout"
+    >
+      {view === "overview" && <OverviewView stats={stats} />}
+      {view === "agents" && <AgentsView stats={stats} />}
+      {view === "providers" && <ProvidersView stats={stats} />}
+      {view === "activity" && <ActivityView stats={stats} />}
+    </MerchantShell>
+  )
 }

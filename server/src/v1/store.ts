@@ -22,6 +22,7 @@ import {
   authCodes,
   endpointHealth,
   merchantClaims,
+  merchantEvents,
   merchantProfiles,
   merchantSessions,
   oauthClients,
@@ -51,6 +52,7 @@ export type MerchantClaim = typeof merchantClaims.$inferSelect
 export type MerchantProfile = typeof merchantProfiles.$inferSelect
 export type SeedingRequest = typeof seedingRequests.$inferSelect
 export type ProviderKey = typeof providerKeys.$inferSelect
+export type MerchantEvent = typeof merchantEvents.$inferSelect
 export type OauthClient = typeof oauthClients.$inferSelect
 export type OauthCode = typeof oauthCodes.$inferSelect
 // Public totals for the site. `checks` counts agents looking APIs up before
@@ -133,6 +135,9 @@ export interface ApiReviewStore {
   // Apps that sign providers in to the providers MCP, and the one-time codes
   // they trade for a key. useOauthCode marks the code used and returns it
   // only if it was unused and unexpired.
+  // What merchants did, newest first, for the admin dashboard.
+  recordMerchantEvent(event: Omit<MerchantEvent, "createdAt">): Promise<void>
+  merchantEvents(limit: number): Promise<MerchantEvent[]>
   saveOauthClient(client: Omit<OauthClient, "createdAt">): Promise<void>
   oauthClient(id: string): Promise<OauthClient | null>
   saveOauthCode(code: Omit<OauthCode, "usedAt">): Promise<void>
@@ -523,6 +528,15 @@ export async function postgresApiReviewStore(
         .set({ lastUsedAt: new Date() })
         .where(eq(providerKeys.id, id))
     },
+    async recordMerchantEvent(event) {
+      await db.insert(merchantEvents).values(event)
+    },
+    merchantEvents: (limit) =>
+      db
+        .select()
+        .from(merchantEvents)
+        .orderBy(desc(merchantEvents.createdAt))
+        .limit(limit),
     async saveOauthClient(client) {
       await db.insert(oauthClients).values(client)
     },
@@ -623,6 +637,7 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const merchantLogins = new Map<string, MerchantSession>()
   const providerKeyRows = new Map<string, ProviderKey>()
   const oauthApps = new Map<string, OauthClient>()
+  const merchantLog: MerchantEvent[] = []
   const oauthGrants = new Map<string, OauthCode>()
   const claims = new Map<string, MerchantClaim>()
   const merchantPages = new Map<string, MerchantProfile>()
@@ -853,6 +868,10 @@ export function memoryApiReviewStore(): ApiReviewStore {
       const key = providerKeyRows.get(id)
       if (key) providerKeyRows.set(id, { ...key, lastUsedAt: new Date() })
     },
+    async recordMerchantEvent(event) {
+      merchantLog.push({ ...event, createdAt: new Date() })
+    },
+    merchantEvents: async (limit) => [...merchantLog].reverse().slice(0, limit),
     async saveOauthClient(client) {
       oauthApps.set(client.id, { ...client, createdAt: new Date() })
     },

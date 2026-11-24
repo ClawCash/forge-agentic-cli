@@ -459,3 +459,39 @@ test("merchants can sign in with Google when it's set up", async () => {
   assert.equal(sent.get("client_secret"), "secret-1")
   assert.equal(sent.get("code_verifier"), "v".repeat(43))
 })
+
+test("the admin dashboard sees who signed up as a merchant and what they did", async () => {
+  const ctx = setup()
+  const token = await signIn(ctx)
+  await claimAndVerify(ctx, token)
+  await ctx.app.request(
+    "/v1/merchant/claims/api.example.com/profile",
+    json({ name: "Example" }, token, "PUT")
+  )
+  await ctx.app.request("/v1/merchant/claims/api.example.com/seeding", json({}, token))
+  await ctx.app.request("/v1/merchant/keys", json({}, token))
+  // Someone who signs in and does nothing else still counts.
+  await signIn(ctx, "lurker@example.com")
+
+  const admin = await signIn(ctx, ADMIN, "admin")
+  const stats = await (await ctx.app.request("/v1/admin/stats", auth(admin))).json()
+  assert.equal(stats.admin_email, ADMIN)
+  const m = stats.merchants
+  assert.equal(m.totals.merchants, 2)
+  assert.equal(m.totals.merchants_last_7_days, 2)
+  assert.equal(m.totals.verified, 1)
+  assert.equal(m.totals.keys, 1)
+  assert.equal(m.totals.seeding_open, 1)
+  assert.equal(m.daily.at(-1).signups, 2)
+  assert.deepEqual(
+    m.events.map((event) => event.kind).reverse(),
+    ["signed_in", "claimed", "verified", "profile_saved", "seeding_requested", "key_created", "signed_in"]
+  )
+  assert.equal(m.events.find((event) => event.kind === "verified").detail, "dns")
+  const owner = m.accounts.find((account) => account.email === "owner@example.com")
+  assert.deepEqual(owner.apis, [{ domain: "api.example.com", status: "verified" }])
+  assert.equal(owner.sign_in, "email")
+  assert.equal(owner.keys, 1)
+  assert.equal(owner.seeding_requests, 1)
+  assert.equal(owner.actions, 6)
+})

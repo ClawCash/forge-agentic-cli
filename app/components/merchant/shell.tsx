@@ -7,13 +7,17 @@
 import * as Dialog from "@radix-ui/react-dialog"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import {
+  Activity,
+  Building2,
   CircleDashed,
   ExternalLink,
   Globe,
+  LayoutGrid,
   LogOut,
   type LucideIcon,
   Plug,
   Plus,
+  Users,
   X,
 } from "lucide-react"
 import {
@@ -56,7 +60,16 @@ export type NavEntry = {
   id: string
   label: string
   href: string
-  kind: "verified" | "pending" | "add" | "external" | "connect"
+  kind:
+    | "verified"
+    | "pending"
+    | "add"
+    | "external"
+    | "connect"
+    | "overview"
+    | "people"
+    | "providers"
+    | "activity"
   note?: string
 }
 
@@ -66,6 +79,10 @@ const ICONS: Record<NavEntry["kind"], LucideIcon> = {
   add: Plus,
   external: ExternalLink,
   connect: Plug,
+  overview: LayoutGrid,
+  people: Users,
+  providers: Building2,
+  activity: Activity,
 }
 
 const curve = (points: readonly number[]) =>
@@ -226,7 +243,7 @@ function Navigation({
   const height = reduce ? instant : motionTokens.spring.smooth
   const shared = { collapsed, tips, reduce, onNavigate }
   return (
-    <motion.nav className={styles.nav} aria-label="Your APIs" layoutScroll>
+    <motion.nav className={styles.nav} aria-label="Sections" layoutScroll>
       {sections.map((section) => {
         const headingId = `${baseId}-${variant}-${section.id}`
         return (
@@ -308,7 +325,15 @@ export function ReviewsMark() {
   )
 }
 
-function Brand({ collapsed, reduce }: { collapsed: boolean; reduce: boolean }) {
+function Brand({
+  collapsed,
+  reduce,
+  product,
+}: {
+  collapsed: boolean
+  reduce: boolean
+  product: string
+}) {
   return (
     <Link href="?" className={styles.brand}>
       <span className={styles.brandMark} aria-hidden="true">
@@ -321,7 +346,7 @@ function Brand({ collapsed, reduce }: { collapsed: boolean; reduce: boolean }) {
         transition={labelTiming(collapsed, reduce)}
       >
         <strong>402reviews</strong>
-        <span>For API providers</span>
+        <span>{product}</span>
       </motion.span>
     </Link>
   )
@@ -331,10 +356,12 @@ function Profile({
   email,
   collapsed,
   reduce,
+  logoutAction,
 }: {
   email: string
   collapsed: boolean
   reduce: boolean
+  logoutAction: string
 }) {
   return (
     <div className={styles.profile}>
@@ -349,7 +376,7 @@ function Profile({
         <span>Signed in</span>
       </motion.span>
       <motion.form
-        action="/merchants/logout"
+        action={logoutAction}
         method="post"
         className={styles.signOut}
         initial={false}
@@ -426,6 +453,9 @@ export function MerchantShell({
   active,
   crumb,
   children,
+  product = "For API providers",
+  home = "Your APIs",
+  logoutAction = "/merchants/logout",
 }: {
   email: string
   sections: NavSection[]
@@ -433,6 +463,10 @@ export function MerchantShell({
   active: string
   crumb: string
   children: ReactNode
+  // The line under the brand, the crumb's first step and where sign-out posts.
+  product?: string
+  home?: string
+  logoutAction?: string
 }) {
   const baseId = useId()
   const prefersReduced = !!useReducedMotion()
@@ -570,7 +604,7 @@ export function MerchantShell({
               data-collapsed={collapsed || undefined}
               data-floating={overlaid || undefined}
             >
-              <Brand collapsed={collapsed} reduce={reduce} />
+              <Brand collapsed={collapsed} reduce={reduce} product={product} />
               <Navigation
                 variant="side"
                 {...navProps}
@@ -578,7 +612,7 @@ export function MerchantShell({
                 reduce={reduce}
                 onNavigate={() => afterNavigate(false)}
               />
-              <Profile email={email} collapsed={collapsed} reduce={reduce} />
+              <Profile email={email} collapsed={collapsed} reduce={reduce} logoutAction={logoutAction} />
             </motion.div>
           </motion.div>
           <AnimatePresence>
@@ -645,7 +679,7 @@ export function MerchantShell({
               <nav className={styles.crumbs} aria-label="Breadcrumb">
                 <ol>
                   <li className={styles.crumbRoot}>
-                    <span className={styles.siteName}>Your APIs</span>
+                    <span className={styles.siteName}>{home}</span>
                   </li>
                   <li className={styles.crumbCurrent} aria-current="page">
                     <span>{crumb}</span>
@@ -715,7 +749,7 @@ export function MerchantShell({
                         Navigation
                       </Dialog.Title>
                       <div className={styles.sheetHead}>
-                        <Brand collapsed={false} reduce={reduce} />
+                        <Brand collapsed={false} reduce={reduce} product={product} />
                         <Dialog.Close asChild>
                           <button
                             type="button"
@@ -733,7 +767,7 @@ export function MerchantShell({
                         reduce={reduce}
                         onNavigate={() => afterNavigate(true)}
                       />
-                      <Profile email={email} collapsed={false} reduce={reduce} />
+                      <Profile email={email} collapsed={false} reduce={reduce} logoutAction={logoutAction} />
                     </motion.div>
                   </Dialog.Content>
                 </Dialog.Portal>

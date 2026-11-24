@@ -205,6 +205,12 @@ export function merchantRoutes(deps: {
       perMinute
     ).allowed
 
+  // For the admin dashboard. A failure here never fails the request.
+  const record = (email: string, kind: string, domain: string | null = null, detail: string | null = null) =>
+    deps.store
+      .recordMerchantEvent({ id: randomUUID(), email, kind, domain, detail })
+      .catch((error: Error) => console.error(`merchant event failed: ${error.message}`))
+
   async function sessionEmail(c: Context) {
     const token = /^Bearer (mrs_[\w-]{20,})$/.exec(
       c.req.header("authorization") ?? ""
@@ -325,10 +331,11 @@ export function merchantRoutes(deps: {
       return c.json({ error: "That code is not right." }, 401)
     }
     await deps.store.deleteCode(codeKey(email))
-    return c.json(await startSession(email))
+    return c.json(await startSession(email, "email"))
   })
 
-  async function startSession(email: string) {
+  async function startSession(email: string, method: "email" | "google") {
+    await record(email, "signed_in", null, method)
     const token = `mrs_${randomBytes(32).toString("base64url")}`
     const expiresAt = new Date(now().getTime() + SESSION_MS)
     await deps.store.saveMerchantSession({
@@ -402,7 +409,7 @@ export function merchantRoutes(deps: {
       claims.email_verified === true
     if (!valid)
       return c.json({ error: "Google sign-in failed. Try again." }, 401)
-    return c.json(await startSession(email))
+    return c.json(await startSession(email, "google"))
   })
 
   app.post("/logout", async (c) => {
@@ -458,6 +465,7 @@ export function merchantRoutes(deps: {
       name: null,
     }
     await deps.store.insertProviderKey(row)
+    await record(email, "key_created", null, row.prefix)
     const [saved] = (await deps.store.providerKeys(email)).filter(
       (k) => k.id === row.id
     )
@@ -469,6 +477,7 @@ export function merchantRoutes(deps: {
     if (!email) return c.json({ error: "Sign in again" }, 401)
     const revoked = await deps.store.revokeProviderKey(c.req.param("id"), email)
     if (!revoked) return c.json({ error: "No such key" }, 404)
+    await record(email, "key_revoked")
     return c.json({ revoked: true })
   })
 
@@ -507,6 +516,8 @@ export function merchantRoutes(deps: {
         },
         now()
       )
+      const client = await deps.store.oauthClient(text(body.client_id))
+      await record(email, "app_connected", null, client?.name ?? null)
       return c.json({ redirect })
     } catch (error) {
       if (error instanceof OauthError) {
@@ -558,6 +569,7 @@ export function merchantRoutes(deps: {
       verifiedAt: null,
     }
     await deps.store.saveClaim(claim)
+    await record(email, "claimed", claim.domain)
     return c.json(await claimView(claim), 201)
   })
 
@@ -602,6 +614,9 @@ export function merchantRoutes(deps: {
         { error: `${domain} has already been claimed by its owner.` },
         409
       )
+    }
+    if (updated.status === "verified" && mine.status !== "verified") {
+      await record(email, "verified", domain, updated.method)
     }
     return c.json(await claimView(updated))
   })
@@ -655,6 +670,7 @@ export function merchantRoutes(deps: {
         updatedAt: now(),
       }
       await deps.store.saveMerchantProfile(profile)
+      await record(found.email, "profile_saved", found.domain)
       return c.json(await claimView(found.claim))
     }
   )
@@ -762,6 +778,12 @@ export function merchantRoutes(deps: {
         updatedAt: now(),
       }
       await deps.store.insertSeedingRequest(request)
+      await record(
+        found.email,
+        "seeding_requested",
+        found.domain,
+        `${request.endpoints.length} endpoint${request.endpoints.length === 1 ? "" : "s"}`
+      )
       const listed = request.endpoints.length
         ? request.endpoints.map((e) => `- ${e.url} ($${e.priceUsd} a call)`)
         : [
