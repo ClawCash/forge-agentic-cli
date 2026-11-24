@@ -7,7 +7,7 @@ import {
   Sprout,
 } from "lucide-react"
 import type { Metadata } from "next"
-import type { CSSProperties, ReactNode } from "react"
+import type { CSSProperties } from "react"
 import { ApiBoard } from "@/components/api-board"
 import { ApiLogo } from "@/components/api-card"
 import { CopyPrompt } from "@/components/copy-prompt"
@@ -17,6 +17,7 @@ import { ReviewMarquee } from "@/components/review-marquee"
 import { SearchDemo } from "@/components/search-demo"
 import { SiteShell } from "@/components/site-shell"
 import { StatsBand } from "@/components/stats-band"
+import { TypedCommand, WorksWithGrid } from "@/components/works-with"
 import { Section, SectionHead, Stars } from "@/components/ui"
 import { AGENTS, CLIENTS } from "@/lib/clients"
 import { APP_URL, SITE_URL } from "@/lib/links"
@@ -129,36 +130,6 @@ function AgentsSay({ board }: { board: Leaderboard | null }) {
   )
 }
 
-function Tile({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <li>
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className="lift flex h-[84px] flex-col items-center justify-center gap-1.5 rounded-[12px] border border-line bg-white px-2 text-center text-[12px] leading-tight font-medium tracking-[-0.01em] sm:h-[72px] sm:flex-row sm:gap-2.5 sm:px-3 sm:text-[14px]"
-      >
-        {children}
-      </a>
-    </li>
-  )
-}
-
-function TileGroup({
-  label,
-  children,
-}: {
-  label: string
-  children: ReactNode
-}) {
-  return (
-    <div>
-      <h3 className="label">{label}</h3>
-      <ul className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">{children}</ul>
-    </div>
-  )
-}
-
 function WorksWith() {
   return (
     <Section
@@ -171,23 +142,23 @@ function WorksWith() {
           line="Add it to your agent once. It plugs into the wallet or CLI that already pays."
         />
       </Reveal>
-      <Reveal className="mt-14 grid gap-10 lg:grid-cols-2 lg:gap-8">
-        <TileGroup label="AI agents">
-          {AGENTS.map(({ name, logo, url }) => (
-            <Tile key={name} href={url}>
+      <WorksWithGrid
+        agents={AGENTS.map(({ name, logo, url }) => ({
+          key: name,
+          href: url,
+          label: (
+            <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/logos/${logo}`}
-                alt=""
-                className="size-6 rounded-[5px] object-contain"
-              />
+              <img src={`/logos/${logo}`} alt="" className="size-6 rounded-[5px] object-contain" />
               {name}
-            </Tile>
-          ))}
-        </TileGroup>
-        <TileGroup label="Wallets and CLIs">
-          {CLIENTS.map(({ name, logo, height, wordmark, url }) => (
-            <Tile key={name} href={url}>
+            </>
+          ),
+        }))}
+        clients={CLIENTS.map(({ name, logo, height, wordmark, url }) => ({
+          key: name,
+          href: url,
+          label: (
+            <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`/logos/clients/${logo}`}
@@ -196,19 +167,17 @@ function WorksWith() {
                 className="w-auto max-w-full"
               />
               {!wordmark && name}
-            </Tile>
-          ))}
-        </TileGroup>
-      </Reveal>
+            </>
+          ),
+        }))}
+      />
       <Reveal className="mt-10">
         <div className="flex flex-col gap-3 rounded-[12px] border border-line bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
           <div className="min-w-0">
             <h3 className="text-[14px] font-medium">
               Ratings right in your wallet&apos;s search
             </h3>
-            <code className="mt-1.5 block overflow-x-auto font-mono text-[12.5px] whitespace-nowrap text-muted">
-              {'npx -y 402reviews@latest npx awal@latest x402 bazaar search "web search"'}
-            </code>
+            <TypedCommand text={'npx -y 402reviews@latest npx awal@latest x402 bazaar search "web search"'} />
           </div>
           <a
             href="/docs#search-ratings"

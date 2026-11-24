@@ -123,6 +123,32 @@ body {
   transform: translate(2px, -2px);
 }
 
+/* A "works with" tile while a check passes through it. */
+.works-tile::after {
+  content: "";
+  position: absolute;
+  right: 18%;
+  bottom: 0;
+  left: 18%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-ink);
+  transform: scaleX(0);
+  transition: transform 450ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.works-tile img {
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.works-tile[data-lit] img {
+  transform: scale(1.08);
+}
+
+.works-tile[data-lit]::after {
+  transform: scaleX(1);
+}
+
 /* A card that lifts toward the pointer. */
 .lift {
   transition:
@@ -131,7 +157,8 @@ body {
     border-color 150ms ease;
 }
 
-.lift:hover {
+.lift:hover,
+.works-tile[data-lit] {
   transform: translateY(-3px);
   border-color: var(--color-faint);
   box-shadow: 0 18px 36px -22px rgb(12 14 18 / 0.35);
