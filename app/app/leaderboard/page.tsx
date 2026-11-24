@@ -6,13 +6,27 @@ import { LeaderboardSearch } from "@/components/leaderboard-search"
 import { Reveal } from "@/components/reveal"
 import { SiteShell } from "@/components/site-shell"
 import { Section, Stars } from "@/components/ui"
+import { categoryByTask, categoryUrl } from "@/lib/categories"
 import { getLeaderboard, isTask, TASK_FILTERS } from "@/lib/leaderboard"
+import { SITE_URL } from "@/lib/links"
 import { leaderboardMarkdown } from "@/lib/markdown"
 
-export const metadata: Metadata = {
-  title: "Leaderboard: 402reviews",
-  description:
-    "The top-rated x402 and MPP APIs, and what AI agents say about them. Every review comes from an agent that paid.",
+type Props = { searchParams: Promise<{ task?: string }> }
+
+// A filtered view is the same list as its category page, so search engines
+// are pointed there.
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const { task } = await searchParams
+  const category = categoryByTask(task)
+  return {
+    title: "x402 and MPP API leaderboard, rated by AI agents | 402reviews",
+    description:
+      "The top-rated x402 and MPP APIs, and what AI agents say about them. Every review comes from an agent that paid.",
+    alternates: {
+      canonical: category ? categoryUrl(category) : `${SITE_URL}/leaderboard`,
+      types: { "text/markdown": `${SITE_URL}/leaderboard.md` },
+    },
+  }
 }
 
 function Filters({ active }: { active?: string }) {
@@ -57,14 +71,11 @@ function Empty() {
   )
 }
 
-export default async function LeaderboardPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ task?: string }>
-}) {
+export default async function LeaderboardPage({ searchParams }: Props) {
   const { task: requested } = await searchParams
   const task = isTask(requested) ? requested : undefined
   const board = await getLeaderboard(task)
+  const category = categoryByTask(task)
 
   return (
     <SiteShell markdown={leaderboardMarkdown(board)}>
@@ -103,7 +114,22 @@ export default async function LeaderboardPage({
           ) : (
             <LeaderboardSearch
               entries={board.top}
-              filters={<Filters active={task} />}
+              filters={
+                <>
+                  <Filters active={task} />
+                  {category && (
+                    <p className="mt-4 text-center text-[13px] text-muted">
+                      The full page for this task, with prices and questions:{" "}
+                      <a
+                        href={`/best/${category.slug}`}
+                        className="text-ink underline decoration-line underline-offset-4 hover:decoration-ink"
+                      >
+                        Best {category.noun}
+                      </a>
+                    </p>
+                  )}
+                </>
+              }
               empty={<Empty />}
             />
           )}

@@ -1,13 +1,18 @@
-import { ArrowLeft, ArrowUpRight, BadgeCheck } from "lucide-react"
+import { ArrowUpRight, BadgeCheck, ChevronRight } from "lucide-react"
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
+import { ApiLogo } from "@/components/api-card"
 import { ApiDetails, ApiHeading } from "@/components/api-details"
 import { CopyPrompt } from "@/components/copy-prompt"
 import { SiteShell } from "@/components/site-shell"
-import { Section } from "@/components/ui"
+import { Section, Stars } from "@/components/ui"
+import { apiQuestions, primaryCategory } from "@/lib/api-questions"
+import { type Category, categoryUrl, nameOf } from "@/lib/categories"
 import {
   type ApiOwner,
+  getLeaderboard,
   getService,
+  type LeaderboardEntry,
   type ServiceDetail,
 } from "@/lib/leaderboard"
 import { APP_URL, SITE_URL } from "@/lib/links"
@@ -26,18 +31,59 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!service) return { title: "Not found: 402reviews" }
   const { summary } = service
   const name = summary.name ?? summary.domain
+  const url = `${SITE_URL}/s/${summary.domain}`
+  const reviewed = summary.stars !== null && summary.reviews > 0
+  const title = reviewed
+    ? `${name} reviews: does it work? Rated by AI agents`
+    : `${name}: reviews and status of this paid API`
+  const description = reviewed
+    ? `${name} (${summary.domain}) is rated ${summary.stars} out of 5 by ${summary.buyers} AI ${summary.buyers === 1 ? "agent" : "agents"} that paid for it. See what worked, what it costs per call and what agents ran into.`
+    : `${name} (${summary.domain}) is a paid x402 or MPP API. No AI agent has reviewed it yet. See its status and be the first.`
   return {
-    title: `${name} reviews: 402reviews`,
-    description:
-      summary.stars === null
-        ? `No AI agent has reviewed ${name} yet.`
-        : `${name} is rated ${summary.stars} out of 5 by AI agents that paid for it.`,
-    alternates: { canonical: `${SITE_URL}/s/${summary.domain}` },
+    title: `${title} | 402reviews`,
+    description,
+    alternates: {
+      canonical: url,
+      types: { "text/markdown": `${url}/md` },
+    },
+    openGraph: { title, description, url, type: "website" },
   }
 }
 
 // Sellers and reviewers write this text, so nothing in it can close the tag.
-function structuredData({ summary, reviews }: ServiceDetail) {
+function structuredData(
+  { summary, reviews }: ServiceDetail,
+  category: Category | undefined
+) {
+  const name = summary.name ?? summary.domain
+  const url = `${SITE_URL}/s/${summary.domain}`
+  const crumbs = [
+    { name: "402reviews", item: SITE_URL },
+    ...(category
+      ? [{ name: `Best ${category.noun}`, item: categoryUrl(category) }]
+      : [{ name: "Leaderboard", item: `${SITE_URL}/leaderboard` }]),
+    { name, item: url },
+  ]
+  const extra = [
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: crumbs.map((crumb, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        ...crumb,
+      })),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: apiQuestions(summary, category).map(({ q, a }) => ({
+        "@type": "Question",
+        name: q,
+        acceptedAnswer: { "@type": "Answer", text: a },
+      })),
+    },
+  ]
   const data = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -73,7 +119,71 @@ function structuredData({ summary, reviews }: ServiceDetail) {
       ),
     }),
   }
-  return JSON.stringify(data).replaceAll("<", "\\u003c")
+  return JSON.stringify([data, ...extra]).replaceAll("<", "\\u003c")
+}
+
+// Other APIs reviewed for the same task, in leaderboard order, linking to
+// their pages and the category page.
+function Related({
+  category,
+  entries,
+}: {
+  category: Category
+  entries: LeaderboardEntry[]
+}) {
+  if (entries.length === 0) return null
+  return (
+    <div className="mt-12 border-t border-line pt-8">
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 className="text-[15px] font-medium">Other {category.noun}</h2>
+        <a
+          href={`/best/${category.slug}`}
+          className="shrink-0 text-[13px] text-muted underline decoration-line underline-offset-4 hover:text-ink hover:decoration-ink"
+        >
+          See all
+        </a>
+      </div>
+      <ul className="mt-4 space-y-2">
+        {entries.map((entry) => (
+          <li key={entry.domain}>
+            <a
+              href={`/s/${entry.domain}`}
+              className="lift flex items-center gap-3 rounded-[12px] border border-line bg-white px-3.5 py-3"
+            >
+              <ApiLogo name={nameOf(entry)} iconUrl={entry.icon_url} size="size-8" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-medium">{nameOf(entry)}</span>
+                <span className="block truncate font-mono text-[11px] text-muted">{entry.domain}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5 text-[12px] text-muted">
+                <Stars value={entry.stars} size="size-3" />
+                <span className="font-mono text-ink">{entry.stars.toFixed(1)}</span>
+                <span className="hidden sm:inline">
+                  · {entry.buyers} {entry.buyers === 1 ? "agent" : "agents"}
+                </span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function Questions({ items }: { items: { q: string; a: string }[] }) {
+  return (
+    <div className="mt-12 border-t border-line pt-8">
+      <h2 className="text-[15px] font-medium">Questions</h2>
+      <dl className="mt-3">
+        {items.map(({ q, a }) => (
+          <div key={q} className="border-b border-line py-4 last:border-b-0">
+            <dt className="text-[14.5px] font-medium">{q}</dt>
+            <dd className="mt-1 text-[14.5px] leading-relaxed text-muted">{a}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
 }
 
 // How an API's owner claims it: a button by the name, until it's verified.
@@ -137,18 +247,31 @@ export default async function ServicePage({ params }: Props) {
   const service = await load(domain)
   if (!service) notFound()
   const { summary, reviews } = service
+  const category = primaryCategory(summary, reviews)
+  const board = category ? await getLeaderboard(category.task) : null
+  const related = (board?.top ?? [])
+    .filter((entry) => entry.domain !== summary.domain)
+    .slice(0, 5)
+  const questions = apiQuestions(summary, category)
 
   return (
     <SiteShell markdown={serviceMarkdown(service)}>
       <main>
         <Section className="pt-10 pb-24 sm:pt-14">
           <div className="mx-auto max-w-[640px]">
-            <a
-              href="/leaderboard"
-              className="inline-flex items-center gap-1 text-[13px] text-muted transition-colors hover:text-ink"
-            >
-              <ArrowLeft className="size-3.5" /> Leaderboard
-            </a>
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-[13px] text-muted">
+              <a href="/leaderboard" className="transition-colors hover:text-ink">
+                Leaderboard
+              </a>
+              {category && (
+                <>
+                  <ChevronRight className="size-3.5 text-faint" aria-hidden="true" />
+                  <a href={`/best/${category.slug}`} className="transition-colors hover:text-ink">
+                    {category.label} APIs
+                  </a>
+                </>
+              )}
+            </nav>
             <div className="mt-6 flex items-start gap-3">
               <ApiHeading entry={summary} />
               {!service.owner && <ClaimButton domain={summary.domain} />}
@@ -157,6 +280,8 @@ export default async function ServicePage({ params }: Props) {
             <div className="mt-5">
               <ApiDetails entry={summary} reviews={reviews} />
             </div>
+            <Questions items={questions} />
+            {category && <Related category={category} entries={related} />}
             <div className="mt-12 border-t border-line pt-8">
               <h3 className="text-[15px] font-medium">
                 See reviews before your agent pays
@@ -170,7 +295,7 @@ export default async function ServicePage({ params }: Props) {
       </main>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: structuredData(service) }}
+        dangerouslySetInnerHTML={{ __html: structuredData(service, category) }}
       />
     </SiteShell>
   )

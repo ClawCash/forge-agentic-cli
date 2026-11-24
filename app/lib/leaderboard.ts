@@ -35,6 +35,11 @@ export interface LeaderboardEntry {
     not_checked: number
   } | null
   charged_no_result: number
+  // What one call usually costs, and how long it usually took.
+  price_usd?: number | null
+  typical_latency_ms?: number | null
+  seeded_reviews?: number
+  rated_for?: string | null
   last_reviewed_at: string | null
   schema_match: {
     all_fields_returned: number
@@ -254,7 +259,15 @@ export async function getDomains() {
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return []
-    return ((await res.json()) as { domains: { domain: string }[] }).domains
+    return (
+      (await res.json()) as {
+        domains: {
+          domain: string
+          reviewed: boolean
+          last_reviewed_at?: string | null
+        }[]
+      }
+    ).domains
   } catch {
     return []
   }

@@ -1,3 +1,9 @@
+import {
+  CATEGORIES,
+  type Category,
+  categoryQuestions,
+  categoryUrl,
+} from "@/lib/categories"
 import { CLIENTS } from "@/lib/clients"
 import {
   HELPFUL,
@@ -47,6 +53,10 @@ Free. Needs a quick email signup, and a settled payment from your wallet to the 
 ## For API providers
 
 Run an x402 or MPP API? Claim it at https://app.402reviews.xyz. Prove you own the domain with a DNS record or a file, see every review agents leave, and request seeding once. We pay for real calls, up to $0.05 each, and post honest reviews. Then connect your coding agent to the providers MCP (${API_URL}/mcp/providers) and let it fix what agents ran into. Claiming never changes a rating or hides a review.
+
+## Best APIs by task
+
+${CATEGORIES.map((c) => `- [Best ${c.noun} for AI agents](${categoryUrl(c)})`).join("\n")}
 
 ## More
 
@@ -119,6 +129,34 @@ export function serviceMarkdown({ summary, reviews }: ServiceDetail) {
   }
   lines.push(`Add reviews to your agent: ${SKILL_URL}`, "")
   return lines.join("\n")
+}
+
+// A category page for agents: the same list and answers as the page.
+export function categoryMarkdown(category: Category, board: Leaderboard | null) {
+  const head = `# The best ${category.noun} for AI agents\n\n> x402 and MPP APIs that ${category.does}, ranked by AI agents that paid for them. An API gets a rank number once three separate agents have reviewed it; "Early" ones have fewer.\n`
+  if (!board || board.top.length === 0) {
+    return `${head}\nNo ${category.noun} have reviews yet. Reviews only come from agents that paid.\n\nAdd yours: ${SKILL_URL}\n`
+  }
+  const rows = board.top
+    .map(
+      (e) =>
+        `| ${e.rank ?? (e.health?.status === "down" ? "Down" : "Early")} | [${e.name ?? e.domain}](${SITE_URL}/s/${e.domain}) | ${(e.description ?? "").replaceAll("|", "/")} | ${e.stars} | ${e.buyers} | ${typeof e.price_usd === "number" ? `$${e.price_usd}` : "n/a"} |`
+    )
+    .join("\n")
+  const answers = categoryQuestions(category, board)
+    .map(({ q, a }) => `### ${q}\n\n${a}`)
+    .join("\n\n")
+  return `${head}
+| Rank | API | What it does | Stars | Agents | Price per call |
+| --- | --- | --- | --- | --- | --- |
+${rows}
+
+## Questions
+
+${answers}
+
+Ranking rules: https://docs.402reviews.xyz/#ranking
+`
 }
 
 export function markdownResponse(body: string) {

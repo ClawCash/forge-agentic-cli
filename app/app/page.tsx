@@ -6,6 +6,7 @@ import {
   Plug,
   Sprout,
 } from "lucide-react"
+import type { Metadata } from "next"
 import type { CSSProperties, ReactNode } from "react"
 import { ApiBoard } from "@/components/api-board"
 import { ApiLogo } from "@/components/api-card"
@@ -18,7 +19,7 @@ import { SiteShell } from "@/components/site-shell"
 import { StatsBand } from "@/components/stats-band"
 import { Section, SectionHead, Stars } from "@/components/ui"
 import { AGENTS, CLIENTS } from "@/lib/clients"
-import { APP_URL } from "@/lib/links"
+import { APP_URL, SITE_URL } from "@/lib/links"
 import {
   type FeaturedReview,
   getFeaturedReview,
@@ -30,6 +31,13 @@ import {
 import { homeMarkdown } from "@/lib/markdown"
 import { getScenes, type Scene } from "@/lib/search-scenes"
 import { getStats, type SiteStats } from "@/lib/stats"
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: SITE_URL,
+    types: { "text/markdown": `${SITE_URL}/index.md` },
+  },
+}
 
 const delay = (ms: number) => ({ "--d": `${ms}ms` }) as CSSProperties
 
@@ -69,7 +77,7 @@ function Hero({
               Google Reviews
             </span>
             <span className="fade-up block" style={delay(140)}>
-              for paid APIs
+              for Paid APIs
             </span>
           </h1>
           <p

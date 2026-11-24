@@ -58,7 +58,7 @@ export function proxy(request: NextRequest) {
       : request.nextUrl.pathname
   const target =
     MARKDOWN_PATHS[pathname] ??
-    (/^\/s\/[^/]+$/.test(pathname) ? `${pathname}/md` : undefined)
+    (/^\/(s|best)\/[^/]+$/.test(pathname) ? `${pathname}/md` : undefined)
   if (target && prefersMarkdown(request.headers.get("accept"))) {
     const url = request.nextUrl.clone()
     url.pathname = target
@@ -83,6 +83,7 @@ export const config = {
     "/docs",
     "/skill.md",
     "/s/:domain",
+    "/best/:slug",
     "/merchants",
   ],
 }

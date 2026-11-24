@@ -1424,11 +1424,16 @@ export function v1Routes(deps: V1Deps) {
       deps.store.listRecent(5000),
       deps.store.listHealthDomains(),
     ])
-    const reviewed = new Set(recent.map((row) => row.domain))
+    // Newest first, so the first row seen for a domain is its latest review.
+    const latest = new Map<string, Date>()
+    for (const row of recent) {
+      if (!latest.has(row.domain)) latest.set(row.domain, row.createdAt)
+    }
     return c.json({
-      domains: [...new Set([...reviewed, ...checked])].map((domain) => ({
+      domains: [...new Set([...latest.keys(), ...checked])].map((domain) => ({
         domain,
-        reviewed: reviewed.has(domain),
+        reviewed: latest.has(domain),
+        last_reviewed_at: latest.get(domain)?.toISOString() ?? null,
       })),
     })
   })

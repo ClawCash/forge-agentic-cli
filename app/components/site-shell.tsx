@@ -14,6 +14,7 @@ const FOOTER_LINKS: [string, [string, string][]][] = [
     "Product",
     [
       ["Leaderboard", "/leaderboard"],
+      ["Best APIs by task", "/best"],
       ["For API providers", "/#api-providers"],
       ["Claim your API", APP_URL],
       ["Works with", "/#works-with"],

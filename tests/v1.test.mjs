@@ -2039,7 +2039,16 @@ test("an unreviewed API that is being checked still has a page", async () => {
   const unknown = await (await app.request("/v1/services/nope.example")).json()
   assert.equal(unknown.known, false)
   const { domains } = await (await app.request("/v1/domains")).json()
-  assert.deepEqual(domains, [{ domain: "checked.example", reviewed: false }])
+  assert.deepEqual(domains, [
+    { domain: "checked.example", reviewed: false, last_reviewed_at: null },
+  ])
+  // A reviewed API says when its newest review came in, for the sitemap.
+  const before = Date.now()
+  const saved = await store.insert(row({ domain: "checked.example", path: "/run" }))
+  const after = await (await app.request("/v1/domains")).json()
+  assert.equal(after.domains[0].reviewed, true)
+  assert.equal(after.domains[0].last_reviewed_at, saved.createdAt.toISOString())
+  assert.ok(Date.parse(after.domains[0].last_reviewed_at) >= before - 1000)
 })
 
 test("the leaderboard shows whether an API is answering", async () => {
