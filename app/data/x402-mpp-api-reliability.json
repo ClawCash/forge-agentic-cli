@@ -1,0 +1,426 @@
+{
+  "slug": "x402-mpp-api-reliability",
+  "generated_at": "2026-11-24T13:20:32.200Z",
+  "period": {
+    "from": "2026-11-09T14:56:36.000Z",
+    "to": "2026-11-24T09:53:47.000Z"
+  },
+  "totals": {
+    "calls": 148,
+    "apis": 93,
+    "verified_payments": 148,
+    "our_calls": 93,
+    "our_apis": 79,
+    "outside_calls": 55,
+    "outside_apis": 33,
+    "spent_usd": 2.07
+  },
+  "outcomes": {
+    "worked": 108,
+    "partly": 23,
+    "kept_payment_nothing_usable": 15,
+    "refunded": 1,
+    "not_checked": 1
+  },
+  "failed_after_payment": {
+    "apis": 15,
+    "kinds": [
+      {
+        "kind": "Rejected the request after taking payment",
+        "calls": 8
+      },
+      {
+        "kind": "Answered with something unusable",
+        "calls": 3
+      },
+      {
+        "kind": "Came back empty",
+        "calls": 3
+      },
+      {
+        "kind": "Promised a result later, with no way to collect it",
+        "calls": 1
+      }
+    ],
+    "lost_usd": 0.3
+  },
+  "overpromised": {
+    "apis": 27,
+    "calls": 28
+  },
+  "api_marks": [
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "failed",
+    "short",
+    "short",
+    "short",
+    "short",
+    "short",
+    "short",
+    "short",
+    "short",
+    "short",
+    "short",
+    "short",
+    "short",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine",
+    "fine"
+  ],
+  "categories": [
+    {
+      "task": "enrichment",
+      "label": "Enrichment",
+      "calls": 16,
+      "fell_short": 9,
+      "share": 0.56
+    },
+    {
+      "task": "email",
+      "label": "Email",
+      "calls": 4,
+      "fell_short": 2,
+      "share": 0.5
+    },
+    {
+      "task": "document-extract",
+      "label": "Documents",
+      "calls": 5,
+      "fell_short": 2,
+      "share": 0.4
+    },
+    {
+      "task": "token-price",
+      "label": "Token prices",
+      "calls": 27,
+      "fell_short": 8,
+      "share": 0.3
+    },
+    {
+      "task": "web-scrape",
+      "label": "Scraping",
+      "calls": 20,
+      "fell_short": 6,
+      "share": 0.3
+    },
+    {
+      "task": "image-generation",
+      "label": "Images",
+      "calls": 11,
+      "fell_short": 3,
+      "share": 0.27
+    },
+    {
+      "task": "transcription",
+      "label": "Transcription",
+      "calls": 4,
+      "fell_short": 1,
+      "share": 0.25
+    },
+    {
+      "task": "web-search",
+      "label": "Web search",
+      "calls": 21,
+      "fell_short": 4,
+      "share": 0.19
+    },
+    {
+      "task": "news",
+      "label": "News",
+      "calls": 8,
+      "fell_short": 1,
+      "share": 0.13
+    },
+    {
+      "task": "weather",
+      "label": "Weather",
+      "calls": 6,
+      "fell_short": 0,
+      "share": 0
+    }
+  ],
+  "time": {
+    "working_median_s": 6.1,
+    "working_n": 52,
+    "failed_median_s": 8.6,
+    "failed_n": 7,
+    "timed_calls": 59
+  },
+  "cases": [
+    {
+      "api": "livecheck.fly.dev/v1/verify",
+      "task": "Other",
+      "kind": "Answered with something unusable",
+      "promised": "Is this listing, product, or job posting still live?",
+      "delivered": "Status unknown, calling a store product page a job board, at 35% confidence",
+      "price_usd": 0.01,
+      "paid_at": "2026-11-21T11:56:00.000Z",
+      "transaction_url": "https://basescan.org/tx/0x3386736154a5926cdbe6c0751dda0486d99fbbabfac965f7dda0354720adb8e6"
+    },
+    {
+      "api": "websearch.use.x402atlas.com/search",
+      "task": "Web search",
+      "kind": "Answered with something unusable",
+      "promised": "Ranked web results as clean JSON with title, URL, snippet and score, including news",
+      "delivered": "1 result, a company profile with no news headlines, when five news results were requested; charged 0.01 USDC",
+      "price_usd": 0.01,
+      "paid_at": "2026-11-18T19:26:04.000Z",
+      "transaction_url": "https://basescan.org/tx/0xc7abecdb17ec92e4314da5dd079902a1ce9308ad8183196f5cbaa88347e19020"
+    },
+    {
+      "api": "agent.pocket.network/v1/ocr-document-parsing",
+      "task": "Documents",
+      "kind": "Answered with something unusable",
+      "promised": "OCR that turns an image or PDF into extracted text",
+      "delivered": "Character, line and word counts only. Says OCR isn't available yet.",
+      "price_usd": 0.005,
+      "paid_at": "2026-11-09T21:00:39.000Z",
+      "transaction_url": "https://basescan.org/tx/0xbc30f255a9fd95918aaf14f6ea7ba14fbc199f45178ceb55fc1592dee8c670cd"
+    },
+    {
+      "api": "x402.openwebninja.com/email-search/search-emails",
+      "task": "Email",
+      "kind": "Came back empty",
+      "promised": "Search the web for email addresses by keyword query or domain, returning structured results per call.",
+      "delivered": "Charged, then returned an empty result with no addresses for a large company's domain",
+      "price_usd": 0.003,
+      "paid_at": "2026-11-18T20:37:25.000Z",
+      "transaction_url": "https://basescan.org/tx/0x363fac805fb895f3c51ce0e218fc1a261c6cba2f32ac59f23550f4315f9bebad"
+    },
+    {
+      "api": "x402.professorsausages.com/convert/pdf-to-text",
+      "task": "Documents",
+      "kind": "Came back empty",
+      "promised": "Converts any PDF file to a single clean plain-text string via a pay-per-call x402 API.",
+      "delivered": "Charged $0.03 and returned found: false with no text for a valid public PDF",
+      "price_usd": 0.03,
+      "paid_at": "2026-11-18T20:39:16.000Z",
+      "transaction_url": "https://basescan.org/tx/0xb682480b580b75f3a714725b5ad0a6785227ec449331dffccc9dc614766edbb8"
+    },
+    {
+      "api": "agentcash.minerva.io/api/minerva/enrich",
+      "task": "Enrichment",
+      "kind": "Came back empty",
+      "promised": "Person lookup by name or profile link",
+      "delivered": "No match for a very well-known executive, and charged in full",
+      "price_usd": 0.05,
+      "paid_at": "2026-11-09T21:03:27.000Z",
+      "transaction_url": "https://basescan.org/tx/0x98bb43c6bcb0f242c31dd2d5b0df4753c0887c8585e8dec9e452f9d91b1e4ccb"
+    },
+    {
+      "api": "win.oneshotagent.com/v1/tools/lookup/person-email",
+      "task": "Email",
+      "kind": "Promised a result later, with no way to collect it",
+      "promised": "Look up a professional email address for a person by name and company.",
+      "delivered": "HTTP 202 'processing' with a request id and no email; no documented way to fetch the result",
+      "price_usd": 0.005,
+      "paid_at": "2026-11-18T20:38:02.000Z",
+      "transaction_url": "https://basescan.org/tx/0x6ecf0786f7866d9bec6b15aec0fc78c11cb347eee6d196e9a4e05207149faf0c"
+    },
+    {
+      "api": "x402.forgemesh.io/transcribe",
+      "task": "Transcription",
+      "kind": "Rejected the request after taking payment",
+      "promised": "Transcribes any public audio URL (mp3, wav, m4a, ogg, up to 25MB/~20 min) to text using neural speech recognition, pay-per-call with USDC on",
+      "delivered": "Charged $0.03, then rejected the request after the payment was authorized; no transcript",
+      "price_usd": 0.03,
+      "paid_at": "2026-11-18T20:40:20.000Z",
+      "transaction_url": "https://basescan.org/tx/0x6f6b4fe98e2b03d16fb89676f9a754c7b7b760ce7b9311b1fbaf4c59795f77c6"
+    },
+    {
+      "api": "archtools.dev/v1/tools/image-generate",
+      "task": "Images",
+      "kind": "Rejected the request after taking payment",
+      "promised": "Generate images from text prompts using AI models via a simple API call.",
+      "delivered": "Charged $0.03, then rejected the request after the payment was authorized; no image",
+      "price_usd": 0.03,
+      "paid_at": "2026-11-18T20:38:57.000Z",
+      "transaction_url": "https://basescan.org/tx/0x5ce4b331242f46e2e0930d04bc03fc6c18875c2a367c0be543bf88d3ab42ac6e"
+    },
+    {
+      "api": "stable-deepline.dev/api/email/work",
+      "task": "Enrichment",
+      "kind": "Rejected the request after taking payment",
+      "promised": "A verified work email from a name and domain",
+      "delivered": "Charged on chain, then the request was rejected. No data returned.",
+      "price_usd": 0.04,
+      "paid_at": "2026-11-09T21:03:04.000Z",
+      "transaction_url": "https://basescan.org/tx/0xcc5bc502b65388992b430c3009f45c9745e984ba49d5476d1aac9583b2196dca"
+    },
+    {
+      "api": "payperwork.app/image/v1/generations",
+      "task": "Images",
+      "kind": "Rejected the request after taking payment",
+      "promised": "One generated image per prompt",
+      "delivered": "Charged on chain, then the request was rejected. No data returned.",
+      "price_usd": 0.0476,
+      "paid_at": "2026-11-09T21:03:33.000Z",
+      "transaction_url": "https://basescan.org/tx/0x4add50296a46ea0ab891b6f5db3eb3a3004e4a4e04560daaebf2159c95cd0985"
+    },
+    {
+      "api": "api.koinelix.com/v1/images/generations",
+      "task": "Images",
+      "kind": "Rejected the request after taking payment",
+      "promised": "An image generated from a text prompt",
+      "delivered": "Charged on chain, then the request was rejected. No data returned.",
+      "price_usd": 0.021,
+      "paid_at": "2026-11-09T21:01:56.000Z",
+      "transaction_url": "https://basescan.org/tx/0xe27b5f0c2aeee00e5d7156dab11cbe9d0c6af6ac59df8e02530fe7f83303cef2"
+    },
+    {
+      "api": "apexfaucet.xyz/api/x402/page-extract",
+      "task": "Scraping",
+      "kind": "Rejected the request after taking payment",
+      "promised": "Page text and links fetched in a real browser",
+      "delivered": "Charged on chain, then the request was rejected. No data returned.",
+      "price_usd": 0.009,
+      "paid_at": "2026-11-09T21:01:11.000Z",
+      "transaction_url": "https://basescan.org/tx/0x011024eee2237349ecd22e2a16f1b28f00744ca9549f8169589b0dbc7cd4e78a"
+    },
+    {
+      "api": "web.tollkit.dev/search/read",
+      "task": "Web search",
+      "kind": "Rejected the request after taking payment",
+      "promised": "Ranked web results plus the full text of each page",
+      "delivered": "Charged on chain, then the request was rejected. No data returned.",
+      "price_usd": 0.005,
+      "paid_at": "2026-11-09T21:00:21.000Z",
+      "transaction_url": "https://basescan.org/tx/0xbaff2732cc3ea993e3016f8d99b7a912a85a194da6ecae72da49b6fa9cbcfdc1"
+    },
+    {
+      "api": "api.agentstools.dev/search/news",
+      "task": "Web search",
+      "kind": "Rejected the request after taking payment",
+      "promised": "Keyword news search with dated headlines",
+      "delivered": "Charged on chain, then the request was rejected. No data returned.",
+      "price_usd": 0.003,
+      "paid_at": "2026-11-09T21:00:06.000Z",
+      "transaction_url": "https://basescan.org/tx/0x9367ca1f3f193843a0824b1e45dca81fe44108807dd978a1af0fdc331307fa36"
+    }
+  ],
+  "refunds": [
+    {
+      "api": "hunter.mpp.paywithlocus.com/hunter/email-finder",
+      "delivered": "An upstream error after payment. The payment was refunded in the same call.",
+      "transaction_url": "https://explore.tempo.xyz/tx/0xa884131acb36935d38213ca016c906bbe1a368d1760192ef2681b014943e2558"
+    }
+  ],
+  "overpromise_examples": [
+    {
+      "api": "socialintel.dev/v1/user/instagram",
+      "promised": "Look up one Instagram profile, $0.01 per profile",
+      "delivered": "Profile returned, but from a cache last refreshed 5 months earlier (cached: true); listing doesn't mention caching; charged $0.01"
+    },
+    {
+      "api": "stabletravel.dev/api/flightaware/airports/id/weather/forecast",
+      "promised": "TAF forecast with airport_code, timeframe, forecast and raw_forecast, $0.004",
+      "delivered": "Real TAF, but timeframe and forecast fields missing (got time, decoded_forecast); decoded SKC as scattered at 1,000,000 ft"
+    },
+    {
+      "api": "api.exa.ai/contents",
+      "promised": "Clean content from URLs or Exa document IDs, $0.001",
+      "delivered": "Page text returned, but most of it was raw WordPress page-builder shortcodes, not clean text; charged $0.001 as listed"
+    },
+    {
+      "api": "console.ax1.vc/api/dashboard/q-verdict/resource",
+      "promised": "Token verdict with pool, volume, market-cap and risk data, plus a shareable page",
+      "delivered": "Accurate PayAI pool data, page and card; no holder concentration; roast treated 2.02% 24h move as the 368-day change"
+    },
+    {
+      "api": "api.nansen.ai/api/v1/tgm/holders",
+      "promised": "Token holder list with address labels and flow trends",
+      "delivered": "Useful flow trends, but every address label came back blank and the list was incomplete"
+    },
+    {
+      "api": "crypto-asistent.com/api/x402/data/funding-by-venue",
+      "promised": "Funding rate and open interest broken down across four venues",
+      "delivered": "Promised four venues and returned only Hyperliquid, already covered more cheaply by another API"
+    },
+    {
+      "api": "derivs.duoleads.com/v1/liquidations",
+      "promised": "Liquidations of one coin's perpetual futures, long vs short, across major venues",
+      "delivered": "Only part of the period was covered and three major venues were missing, so the long vs short picture isn't reliable"
+    },
+    {
+      "api": "kronossignals.com/api/v1/forecast/near",
+      "promised": "1-hour directional forecast with a useful predictive edge",
+      "delivered": "No track record yet; calibration flipped a raw 72% up call to 45%, too noisy to use"
+    }
+  ]
+}

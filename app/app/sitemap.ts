@@ -30,6 +30,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: SITE_URL, lastModified: now, changeFrequency: "daily", priority: 1 },
     { url: `${SITE_URL}/leaderboard`, lastModified: now, changeFrequency: "hourly", priority: 0.9 },
     { url: `${SITE_URL}/best`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
+    { url: `${SITE_URL}/research/x402-mpp-api-reliability`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     ...categories,
     ...domains.map(({ domain, reviewed, last_reviewed_at }) => ({
       url: `${SITE_URL}/s/${domain}`,
