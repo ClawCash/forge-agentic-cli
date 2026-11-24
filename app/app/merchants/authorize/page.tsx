@@ -10,7 +10,7 @@ import { Consent, InvalidRequest } from "./consent"
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
-  title: "Connect an app to 402reviews",
+  title: "Connect an app to 402reviews for providers",
   robots: { index: false, follow: false },
 }
 
@@ -69,7 +69,7 @@ export default async function AuthorizePage({
       <SignIn
         google={google}
         title={`Sign in to connect ${app}`}
-        intro={`${app} wants to read the feedback on your APIs. Sign in with your 402reviews account to continue.`}
+        intro={`${app} wants to read the feedback on your APIs through 402reviews for providers. Sign in with your 402reviews account to continue.`}
         next={here}
         showcase={<SignInShowcase reviews={backdropReviews(board)} />}
       />

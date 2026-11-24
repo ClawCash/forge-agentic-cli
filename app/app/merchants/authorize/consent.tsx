@@ -130,7 +130,7 @@ export function Consent({
         ) : (
           <motion.div key="ask" className={styles.ask} exit={{ opacity: 0, transition: { duration: 0.12 } }}>
             <div className={styles.heading}>
-              <h1>Connect {app} to 402reviews</h1>
+              <h1>Connect {app} to 402reviews for providers</h1>
               <p>
                 {app} is asking to read the feedback on your APIs so it can help you fix what agents
                 ran into.

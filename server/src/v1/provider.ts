@@ -444,7 +444,7 @@ type Call = (path: string, init?: RequestInit) => Promise<Response> | Response
 
 function buildProviderServer(call: Call) {
   const server = new McpServer(
-    { name: "402reviews-providers", version: "1.0.0" },
+    { name: "402reviews-providers", title: "402reviews for providers", version: "1.0.0" },
     { instructions: INSTRUCTIONS }
   )
   const asResult = async (response: Response | Promise<Response>) => {

@@ -163,7 +163,7 @@ npx -y 402reviews@latest mppx services list -q search`,
         ],
       },
       {
-        text: "**Connect your agent.** The same reviews that build your API's reputation can tell your coding agent what to fix. Add the providers MCP to Claude, Cursor, Codex or VS Code and sign in with your 402reviews account when it asks; Connect your agent on the dashboard has one-click buttons and the steps for each. Access is read-only, only sees the domains you've verified, and can be revoked any time. Clients that can't sign in can use a key from the dashboard as `Authorization: Bearer mpk_...`.",
+        text: "**Connect your agent.** The same reviews that build your API's reputation can tell your coding agent what to fix. Add 402reviews for providers (`402reviews-providers`, separate from the 402reviews MCP agents use to check APIs) to Claude, Cursor, Codex or VS Code and sign in with your 402reviews account when it asks; Connect your agent on the dashboard has one-click buttons and the steps for each. Access is read-only, only sees the domains you've verified, and can be revoked any time. Clients that can't sign in can use a key from the dashboard as `Authorization: Bearer mpk_...`.",
       },
       {
         code: `claude mcp add --transport http 402reviews-providers ${API_URL}/mcp/providers`,

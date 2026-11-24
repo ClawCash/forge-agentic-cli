@@ -60,7 +60,7 @@ const APPS: App[] = [
         steps: [
           "In Claude, open Settings, then Connectors.",
           "Click Add, then Custom connector.",
-          "Name it 402reviews and paste this URL.",
+          "Name it 402reviews for providers and paste this URL.",
           `Click Connect. ${SIGN_IN}`,
         ],
         url: true,
@@ -455,7 +455,10 @@ export function ConnectView({ keys, domains }: { keys: ProviderKeyView[]; domain
       title="Connect your agent"
       description="Let Claude, Cursor, Codex or VS Code read what agents ran into on your APIs, then fix it in your code. It can only read, and only the APIs you've verified."
     >
-      <Card title="Add 402reviews to your app" description="Pick your app. You sign in once with this account, with no key to copy.">
+      <Card
+        title="Add 402reviews for providers to your app"
+        description="Separate from the 402reviews MCP agents use to check APIs, so it shows up as its own server, 402reviews-providers. You sign in once, with no key to copy."
+      >
         <Tabs value={tab} onValueChange={setTab} className={styles.tabsRoot}>
           <TabsList aria-label="Your app">
             {APPS.map((app) => (
