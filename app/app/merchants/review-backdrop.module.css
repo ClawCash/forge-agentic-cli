@@ -1,6 +1,20 @@
 /* Reviews drifting behind the sign-in card. The field is tilted a little and
    masked so the cards fade out toward the center and the edges. */
 
+/* Behind the sign-in's right side, the cards only drift along the edges, so
+   the story in the middle stays easy to read. */
+.backdrop.panel {
+  opacity: 0.5;
+  -webkit-mask-image:
+    linear-gradient(to right, black, transparent 24%, transparent 76%, black),
+    linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(to right, black, transparent 24%, transparent 76%, black),
+    linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+  mask-composite: intersect;
+}
+
 .backdrop {
   position: absolute;
   inset: 0;

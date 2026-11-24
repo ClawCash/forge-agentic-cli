@@ -39,11 +39,12 @@ function GoogleMark() {
 export function SignIn({
   google = false,
   googleFailed = false,
-  backdrop,
+  showcase,
 }: {
   google?: boolean
   googleFailed?: boolean
-  backdrop?: ReactNode
+  // The right side on wide screens: what a provider gets.
+  showcase?: ReactNode
 }) {
   const reduce = !!useReducedMotion()
   const [email, setEmail] = useState("")
@@ -116,27 +117,21 @@ export function SignIn({
 
   return (
     <main className={styles.screen}>
-      {backdrop}
-      <div className={styles.center}>
-      <motion.div
-        className={styles.card}
-        layout={!reduce}
-        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={reduce ? { duration: 0 } : motionTokens.spring.smooth}
-      >
-        <motion.a
-          layout={!reduce ? "position" : false}
-          href="https://402reviews.xyz"
-          className={styles.brand}
-          aria-label="402reviews home"
-        >
+      <section className={styles.formSide}>
+        <a href="https://402reviews.xyz" className={styles.brand} aria-label="402reviews home">
           <span className={styles.mark}>
             <ReviewsMark />
           </span>
           <span className={styles.wordmark}>402reviews</span>
           <span className={styles.tag}>for API providers</span>
-        </motion.a>
+        </a>
+      <div className={styles.center}>
+      <motion.div
+        className={styles.card}
+        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10, filter: "blur(4px)" }}
+        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+        transition={reduce ? { duration: 0 } : motionTokens.spring.smooth}
+      >
         <AnimatePresence mode="popLayout" initial={false}>
           {step === "email" ? (
             <motion.div
@@ -146,10 +141,10 @@ export function SignIn({
               transition={reduce ? { duration: 0 } : motionTokens.spring.smooth}
             >
               <div className={styles.heading}>
-                <h1>Welcome</h1>
+                <h1>Sign in to 402reviews</h1>
                 <p>
-                  Sign in, or create an account with your work email. Then
-                  claim your API and see every review agents leave.
+                  Claim your API and see every review agents leave. New here?
+                  This creates your account.
                 </p>
               </div>
               {google && (
@@ -237,6 +232,15 @@ export function SignIn({
         </AnimatePresence>
       </motion.div>
       </div>
+        <footer className={styles.foot}>
+          <span>&copy; 2026 Forge</span>
+          <span className={styles.footLinks}>
+            <a href="https://402reviews.xyz/docs#api-providers">How it works</a>
+            <a href="https://402reviews.xyz/docs#ranking">Ranking rules</a>
+          </span>
+        </footer>
+      </section>
+      {showcase && <aside className={styles.side}>{showcase}</aside>}
     </main>
   )
 }

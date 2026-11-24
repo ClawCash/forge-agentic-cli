@@ -54,7 +54,15 @@ function Card({ review }: { review: BackdropReview }) {
   )
 }
 
-export function ReviewBackdrop({ reviews }: { reviews: BackdropReview[] }) {
+// "panel" sits behind the sign-in's right side: fainter, and clear where the
+// story plays.
+export function ReviewBackdrop({
+  reviews,
+  variant = "screen",
+}: {
+  reviews: BackdropReview[]
+  variant?: "screen" | "panel"
+}) {
   if (reviews.length === 0) return null
   const COLUMNS = 5
   // Deal the cards into columns, then pad short columns by repeating.
@@ -66,7 +74,10 @@ export function ReviewBackdrop({ reviews }: { reviews: BackdropReview[] }) {
     return filled
   })
   return (
-    <div className={styles.backdrop} aria-hidden="true">
+    <div
+      className={[styles.backdrop, variant === "panel" && styles.panel].filter(Boolean).join(" ")}
+      aria-hidden="true"
+    >
       <div className={styles.field}>
         {columns.map((cards, c) => (
           <div key={c} className={styles.column}>

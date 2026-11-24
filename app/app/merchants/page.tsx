@@ -10,8 +10,9 @@ import { getLeaderboard } from "@/lib/leaderboard"
 import { SITE_URL } from "@/lib/links"
 import { googleEnabled, loadApi, loadMe, MERCHANT_COOKIE } from "@/lib/merchant"
 import { pointersFor } from "@/lib/merchant-pointers"
-import { backdropReviews, ReviewBackdrop } from "./review-backdrop"
+import { backdropReviews } from "./review-backdrop"
 import { SignIn } from "./sign-in"
+import { SignInShowcase } from "./sign-in-showcase"
 import { AddView, OverviewView, VerifyView } from "./views"
 
 export const dynamic = "force-dynamic"
@@ -46,7 +47,7 @@ export default async function MerchantsPage({
       <SignIn
         google={google}
         googleFailed={error === "google"}
-        backdrop={<ReviewBackdrop reviews={backdropReviews(board)} />}
+        showcase={<SignInShowcase reviews={backdropReviews(board)} />}
       />
     )
   }
