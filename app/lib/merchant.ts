@@ -6,6 +6,10 @@ import { SERVER_API_URL } from "@/lib/links"
 export const MERCHANT_COOKIE = "merchant_session"
 // Holds Google sign-in's state and PKCE verifier for a few minutes.
 export const GOOGLE_COOKIE = "merchant_google"
+// Where to return after Google sign-in. Only an app's approval page.
+export const GOOGLE_NEXT_COOKIE = "merchant_google_next"
+export const safeNext = (path: string) =>
+  path.startsWith("/merchants/authorize?") && !path.includes("\\") && path.length < 4000
 const BASE = SERVER_API_URL
 
 export interface SeedingRequest {
@@ -49,6 +53,8 @@ export interface Claim {
 export interface ProviderKeyView {
   id: string
   prefix: string
+  // The app that made it by signing in, or null for a key made by hand.
+  name: string | null
   created_at: string
   last_used_at: string | null
 }

@@ -18,6 +18,7 @@ import {
 } from "./accounts.ts"
 import { priceUsd } from "./chains.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
+import { approveGrant, clientFor, OauthError } from "./oauth.ts"
 import type {
   ApiReviewStore,
   MerchantClaim,
@@ -45,6 +46,8 @@ function providerKeyView(key: ProviderKey) {
   return {
     id: key.id,
     prefix: key.prefix,
+    // The app that made it by signing in, or null for a key made by hand.
+    name: key.name ?? null,
     created_at: key.createdAt.toISOString(),
     last_used_at: key.lastUsedAt?.toISOString() ?? null,
   }
@@ -183,6 +186,8 @@ export function merchantRoutes(deps: {
   assertPublic?: (url: string) => Promise<void>
   // "Continue with Google", when GOOGLE_CLIENT_ID and _SECRET are set.
   google?: { clientId: string; clientSecret: string } | null
+  // This API's public address, the issuer apps sign in against.
+  baseUrl?: string
   now?: () => Date
 }) {
   const app = new Hono()
@@ -435,7 +440,9 @@ export function merchantRoutes(deps: {
     if (limited(c, "keys", 10, email)) {
       return c.json({ error: "Too many tries. Wait a minute." }, 429)
     }
-    const existing = await deps.store.providerKeys(email)
+    const existing = (await deps.store.providerKeys(email)).filter(
+      (key) => !key.name
+    )
     if (existing.length >= MAX_PROVIDER_KEYS) {
       return c.json(
         { error: `You can have ${MAX_PROVIDER_KEYS} keys. Revoke one first.` },
@@ -448,6 +455,7 @@ export function merchantRoutes(deps: {
       email,
       keyHash: hashKey(key),
       prefix: key.slice(0, 12),
+      name: null,
     }
     await deps.store.insertProviderKey(row)
     const [saved] = (await deps.store.providerKeys(email)).filter(
@@ -462,6 +470,50 @@ export function merchantRoutes(deps: {
     const revoked = await deps.store.revokeProviderKey(c.req.param("id"), email)
     if (!revoked) return c.json({ error: "No such key" }, 404)
     return c.json({ revoked: true })
+  })
+
+  // Signing in to the providers MCP from an app: the approval page shows the
+  // app's name, then the signed-in merchant approves it.
+  app.get("/oauth/client", async (c) => {
+    const client = await clientFor(
+      deps.store,
+      c.req.query("client_id") ?? "",
+      c.req.query("redirect_uri") ?? ""
+    )
+    if (!client) return c.json({ error: "Unknown app or redirect" }, 404)
+    return c.json(client)
+  })
+
+  app.post("/oauth/approve", bodyLimit({ maxSize: 8192 }), async (c) => {
+    const email = await sessionEmail(c)
+    if (!email) return c.json({ error: "Sign in again" }, 401)
+    if (limited(c, "oauth", 20, email)) {
+      return c.json({ error: "Too many tries. Wait a minute." }, 429)
+    }
+    const body = ((await c.req.json().catch(() => null)) ?? {}) as Record<string, unknown>
+    const text = (value: unknown) => (typeof value === "string" ? value : "")
+    try {
+      const redirect = await approveGrant(
+        deps.store,
+        deps.baseUrl ?? "",
+        {
+          email,
+          clientId: text(body.client_id),
+          redirectUri: text(body.redirect_uri),
+          codeChallenge: text(body.code_challenge),
+          codeChallengeMethod: text(body.code_challenge_method) || "S256",
+          state: text(body.state) || null,
+          resource: text(body.resource) || null,
+        },
+        now()
+      )
+      return c.json({ redirect })
+    } catch (error) {
+      if (error instanceof OauthError) {
+        return c.json({ error: error.message, code: error.code }, error.status)
+      }
+      throw error
+    }
   })
 
   app.post("/claims", bodyLimit({ maxSize: 2048 }), async (c) => {

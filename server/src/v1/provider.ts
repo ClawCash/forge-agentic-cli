@@ -8,6 +8,7 @@ import { hashKey } from "./accounts.ts"
 import { healthView } from "./health.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import { claimDomain, seedingView } from "./merchants.ts"
+import { wwwAuthenticate } from "./oauth.ts"
 import type { Rating } from "./rating.ts"
 import type {
   ApiReview,
@@ -513,18 +514,46 @@ function buildProviderServer(call: Call) {
   return server
 }
 
-export function providerMcpRoutes(deps: { call: Call }) {
+export function providerMcpRoutes(deps: {
+  call: Call
+  // This API's public address. With it, a 401 tells apps where to sign in.
+  apiBase?: string
+  // Whether a key is live, so a revoked one gets a 401 the app can act on.
+  liveKey?: (key: string) => Promise<boolean>
+}) {
   const app = new Hono()
   const hit = rateLimiter()
-  const notAllowed = () =>
+  const KEY = /^Bearer (mpk_[\w-]{20,})$/
+  const signIn = () =>
     new Response(
       JSON.stringify({
         jsonrpc: "2.0",
-        error: { code: -32000, message: "Method not allowed" },
+        error: {
+          code: -32001,
+          message:
+            "Sign in with your 402reviews account, or pass a provider key as Authorization: Bearer mpk_... Create one at https://app.402reviews.xyz.",
+        },
         id: null,
       }),
-      { status: 405, headers: { "Content-Type": "application/json", Allow: "POST" } }
+      {
+        status: 401,
+        headers: {
+          "Content-Type": "application/json",
+          ...(deps.apiBase && { "WWW-Authenticate": wwwAuthenticate(deps.apiBase) }),
+        },
+      }
     )
+  const notAllowed = (c: Context) =>
+    KEY.test(c.req.header("authorization") ?? "")
+      ? new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32000, message: "Method not allowed" },
+            id: null,
+          }),
+          { status: 405, headers: { "Content-Type": "application/json", Allow: "POST" } }
+        )
+      : signIn()
   app.get("/", notAllowed)
   app.delete("/", notAllowed)
 
@@ -534,15 +563,8 @@ export function providerMcpRoutes(deps: { call: Call }) {
       return c.json({ error: "Too many requests. Try again shortly." }, 429)
     }
     const authorization = c.req.header("authorization")
-    if (!/^Bearer mpk_[\w-]{20,}$/.test(authorization ?? "")) {
-      return c.json(
-        {
-          error:
-            "Pass your provider key as Authorization: Bearer mpk_... Create one at https://app.402reviews.xyz.",
-        },
-        401
-      )
-    }
+    const key = KEY.exec(authorization ?? "")?.[1]
+    if (!key || (deps.liveKey && !(await deps.liveKey(key)))) return signIn()
     const inner: Call = (path, init = {}) =>
       deps.call(path, {
         ...init,

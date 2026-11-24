@@ -203,17 +203,43 @@ export const merchantSessions = pgTable("merchant_sessions", {
 })
 
 // A merchant's key for the providers MCP: read-only access to the feedback on
-// the domains that merchant has verified. Only its hash is stored.
+// the domains that merchant has verified. Only its hash is stored. A key made
+// by signing in from an app (Claude, Cursor and so on) carries that app's name;
+// one made by hand on the dashboard has none.
 export const providerKeys = pgTable("provider_keys", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),
   keyHash: text("key_hash").notNull().unique(),
   prefix: text("prefix").notNull(),
+  name: text("name"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+})
+
+// An app that registered itself to sign providers in to the providers MCP
+// (OAuth dynamic client registration), such as Claude, Cursor or Codex.
+export const oauthClients = pgTable("oauth_clients", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  redirectUris: jsonb("redirect_uris").$type<string[]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
+// A one-time code a signed-in provider approved for one of those apps. Only
+// its hash is stored, and it's used once, within minutes.
+export const oauthCodes = pgTable("oauth_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  clientId: text("client_id").notNull(),
+  email: text("email").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  codeChallenge: text("code_challenge").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
 })
 
 // A merchant's claim to an API's domain. It's verified once the domain shows

@@ -24,6 +24,8 @@ import {
   merchantClaims,
   merchantProfiles,
   merchantSessions,
+  oauthClients,
+  oauthCodes,
   paymentFailures,
   pendingReviews,
   providerKeys,
@@ -49,6 +51,8 @@ export type MerchantClaim = typeof merchantClaims.$inferSelect
 export type MerchantProfile = typeof merchantProfiles.$inferSelect
 export type SeedingRequest = typeof seedingRequests.$inferSelect
 export type ProviderKey = typeof providerKeys.$inferSelect
+export type OauthClient = typeof oauthClients.$inferSelect
+export type OauthCode = typeof oauthCodes.$inferSelect
 // Public totals for the site. `checks` counts agents looking APIs up before
 // paying (check, search and brief calls), never request content.
 export interface SiteStats {
@@ -126,6 +130,13 @@ export interface ApiReviewStore {
   providerKeys(email: string): Promise<ProviderKey[]>
   revokeProviderKey(id: string, email: string): Promise<boolean>
   touchProviderKey(id: string): Promise<void>
+  // Apps that sign providers in to the providers MCP, and the one-time codes
+  // they trade for a key. useOauthCode marks the code used and returns it
+  // only if it was unused and unexpired.
+  saveOauthClient(client: Omit<OauthClient, "createdAt">): Promise<void>
+  oauthClient(id: string): Promise<OauthClient | null>
+  saveOauthCode(code: Omit<OauthCode, "usedAt">): Promise<void>
+  useOauthCode(codeHash: string): Promise<OauthCode | null>
   claimsFor(filter: {
     email?: string
     domain?: string
@@ -512,6 +523,34 @@ export async function postgresApiReviewStore(
         .set({ lastUsedAt: new Date() })
         .where(eq(providerKeys.id, id))
     },
+    async saveOauthClient(client) {
+      await db.insert(oauthClients).values(client)
+    },
+    async oauthClient(id) {
+      const [row] = await db
+        .select()
+        .from(oauthClients)
+        .where(eq(oauthClients.id, id))
+      return row ?? null
+    },
+    async saveOauthCode(code) {
+      await db.delete(oauthCodes).where(lt(oauthCodes.expiresAt, sql`now()`))
+      await db.insert(oauthCodes).values(code)
+    },
+    async useOauthCode(codeHash) {
+      const [row] = await db
+        .update(oauthCodes)
+        .set({ usedAt: new Date() })
+        .where(
+          and(
+            eq(oauthCodes.codeHash, codeHash),
+            isNull(oauthCodes.usedAt),
+            gte(oauthCodes.expiresAt, sql`now()`)
+          )
+        )
+        .returning()
+      return row ?? null
+    },
     claimsFor: ({ email, domain }) =>
       db
         .select()
@@ -583,6 +622,8 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const sessions = new Map<string, AdminSession>()
   const merchantLogins = new Map<string, MerchantSession>()
   const providerKeyRows = new Map<string, ProviderKey>()
+  const oauthApps = new Map<string, OauthClient>()
+  const oauthGrants = new Map<string, OauthCode>()
   const claims = new Map<string, MerchantClaim>()
   const merchantPages = new Map<string, MerchantProfile>()
   const seeding: SeedingRequest[] = []
@@ -796,8 +837,10 @@ export function memoryApiReviewStore(): ApiReviewStore {
       [...providerKeyRows.values()].find(
         (key) => key.keyHash === keyHash && !key.revokedAt
       ) ?? null,
+    // Newest first; keys made in the same millisecond keep the later one first.
     providerKeys: async (email) =>
       [...providerKeyRows.values()]
+        .reverse()
         .filter((key) => key.email === email && !key.revokedAt)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
     async revokeProviderKey(id, email) {
@@ -809,6 +852,20 @@ export function memoryApiReviewStore(): ApiReviewStore {
     async touchProviderKey(id) {
       const key = providerKeyRows.get(id)
       if (key) providerKeyRows.set(id, { ...key, lastUsedAt: new Date() })
+    },
+    async saveOauthClient(client) {
+      oauthApps.set(client.id, { ...client, createdAt: new Date() })
+    },
+    oauthClient: async (id) => oauthApps.get(id) ?? null,
+    async saveOauthCode(code) {
+      oauthGrants.set(code.codeHash, { ...code, usedAt: null })
+    },
+    async useOauthCode(codeHash) {
+      const code = oauthGrants.get(codeHash)
+      if (!code || code.usedAt || code.expiresAt <= new Date()) return null
+      const used = { ...code, usedAt: new Date() }
+      oauthGrants.set(codeHash, used)
+      return used
     },
     claimsFor: async ({ email, domain }) =>
       [...claims.values()]

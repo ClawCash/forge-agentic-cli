@@ -12,6 +12,7 @@ import {
   Globe,
   LogOut,
   type LucideIcon,
+  Plug,
   Plus,
   X,
 } from "lucide-react"
@@ -55,7 +56,7 @@ export type NavEntry = {
   id: string
   label: string
   href: string
-  kind: "verified" | "pending" | "add" | "external"
+  kind: "verified" | "pending" | "add" | "external" | "connect"
   note?: string
 }
 
@@ -64,6 +65,7 @@ const ICONS: Record<NavEntry["kind"], LucideIcon> = {
   pending: CircleDashed,
   add: Plus,
   external: ExternalLink,
+  connect: Plug,
 }
 
 const curve = (points: readonly number[]) =>

@@ -4,6 +4,7 @@ import {
   CircleAlert,
   CircleCheck,
   CircleDashed,
+  ArrowRight,
   ExternalLink,
   Info,
   TriangleAlert,
@@ -23,17 +24,11 @@ import { TextShimmer } from "@/components/arc/text-shimmer/text-shimmer"
 import { Textarea } from "@/components/arc/textarea/textarea"
 import { LinkButton } from "@/components/merchant/link-button"
 import { Card, Grid, Page } from "@/components/merchant/page"
+import { PageTabs } from "@/components/merchant/page-tabs"
 import { PromptBox } from "@/components/merchant/prompt-box"
-import type {
-  ApiData,
-  ApiReview,
-  Claim,
-  ProviderKeyView,
-  SeedingRequest,
-} from "@/lib/merchant"
+import type { ApiData, ApiReview, Claim, SeedingRequest } from "@/lib/merchant"
 import type { Pointer } from "@/lib/merchant-pointers"
 import { verifyPrompt } from "@/lib/merchant-prompt"
-import { ConnectAgent } from "./connect-agent"
 import { act } from "./act"
 import styles from "./views.module.css"
 
@@ -476,7 +471,15 @@ const POINTER_ICON = {
 
 function Pointers({ pointers }: { pointers: Pointer[] }) {
   return (
-    <Card title="What agents ran into">
+    <Card
+      title="What agents ran into"
+      actions={
+        <LinkButton href="?connect" variant="ghost" size="sm">
+          Fix with your agent
+          <ArrowRight size={14} strokeWidth={1.75} aria-hidden="true" />
+        </LinkButton>
+      }
+    >
       <ul className={styles.pointers}>
         {pointers.map((pointer) => {
           const Icon = POINTER_ICON[pointer.tone]
@@ -567,12 +570,98 @@ function Seeding({
   )
 }
 
-function ProfileForm({ claim }: { claim: Claim }) {
+const PROFILE_FIELDS = ["name", "description", "docs_url", "spec_url", "pricing_url", "contact_email"] as const
+type ProfileValues = Record<(typeof PROFILE_FIELDS)[number], string>
+
+// The sections of one verified API, under its title.
+function apiTabs(claim: Claim, active: "overview" | "profile") {
+  const base = `?api=${encodeURIComponent(claim.domain)}`
+  return (
+    <PageTabs
+      label={`${claim.domain} sections`}
+      active={active}
+      items={[
+        { id: "overview", label: "Overview", href: base },
+        { id: "profile", label: "Profile", href: `${base}&tab=profile` },
+      ]}
+    />
+  )
+}
+
+function apiTitle(claim: Claim) {
+  return claim.profile?.name || claim.domain
+}
+
+function apiMeta(claim: Claim) {
+  return (
+    <span className={styles.titleMeta}>
+      <Badge tone="success" size="sm" dot>
+        Verified
+      </Badge>
+      <span>
+        {claim.profile?.name ? `${claim.domain}. ` : ""}
+        {claim.verified_at
+          ? `You've owned this listing since ${day(claim.verified_at)}.`
+          : "You own this listing."}
+      </span>
+    </span>
+  )
+}
+
+function publicLink(publicUrl: string) {
+  return (
+    <LinkButton href={publicUrl} target="_blank" rel="noreferrer" variant="secondary">
+      Public page
+      <ExternalLink size={14} strokeWidth={1.75} aria-hidden="true" />
+    </LinkButton>
+  )
+}
+
+// How the owner's words show on the API's public page, as they type.
+function ProfilePreview({ domain, values }: { domain: string; values: ProfileValues }) {
+  const links = (
+    [
+      ["Docs", values.docs_url],
+      ["API spec", values.spec_url],
+      ["Pricing", values.pricing_url],
+    ] as const
+  ).filter(([, url]) => url.trim())
+  const empty = !values.name.trim() && !values.description.trim() && links.length === 0
+  return (
+    <Card title="On 402reviews" description={`Shown on ${domain}'s page as "From the owner".`}>
+      {empty ? (
+        <p className={styles.previewEmpty}>Nothing yet. Fill in the form and it shows here.</p>
+      ) : (
+        <div className={styles.preview}>
+          <span className={styles.previewLabel}>From the owner</span>
+          {(values.name.trim() || values.description.trim()) && (
+            <p className={styles.previewText}>
+              {values.name.trim() && <strong>{values.name.trim()}. </strong>}
+              <span>{values.description.trim()}</span>
+            </p>
+          )}
+          {links.length > 0 && (
+            <div className={styles.previewLinks}>
+              {links.map(([label]) => (
+                <span key={label}>
+                  {label}
+                  <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
+                </span>
+              ))}
+            </div>
+          )}
+          <span className={styles.previewFoot}>Claiming never changes a rating or hides a review.</span>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+export function ProfileView({ claim, publicUrl }: { claim: Claim; publicUrl: string }) {
   const router = useRouter()
-  const [values, setValues] = useState({
-    name: claim.profile?.name ?? "",
-    description: claim.profile?.description ?? "",
-    docs_url: claim.profile?.docs_url ?? "",
+  const [values, setValues] = useState<ProfileValues>(() => {
+    const profile = (claim.profile ?? {}) as Partial<Record<keyof ProfileValues, string | null>>
+    return Object.fromEntries(PROFILE_FIELDS.map((key) => [key, profile[key] ?? ""])) as ProfileValues
   })
   const [state, setState] = useState<"idle" | "busy" | "saved">("idle")
   const [error, setError] = useState<string | null>(null)
@@ -581,12 +670,7 @@ function ProfileForm({ claim }: { claim: Claim }) {
     event.preventDefault()
     setState("busy")
     setError(null)
-    const { ok, data } = await act("profile", claim.domain, {
-      ...values,
-      spec_url: claim.profile?.spec_url ?? "",
-      pricing_url: claim.profile?.pricing_url ?? "",
-      contact_email: claim.profile?.contact_email ?? "",
-    })
+    const { ok, data } = await act("profile", claim.domain, values)
     if (!ok) {
       setState("idle")
       setError(String(data.error ?? "Couldn't save. Try again."))
@@ -597,50 +681,84 @@ function ProfileForm({ claim }: { claim: Claim }) {
   }
 
   const set =
-    (key: keyof typeof values) =>
+    (key: keyof ProfileValues) =>
     (event: { target: { value: string } }) => {
       setValues((old) => ({ ...old, [key]: event.target.value }))
       setState("idle")
     }
 
   return (
-    <Card
-      title="Your public page"
-      description="Shown on your API's page on 402reviews as your own words. It never changes a rating."
+    <Page
+      title={apiTitle(claim)}
+      description={apiMeta(claim)}
+      actions={publicLink(publicUrl)}
+      tabs={apiTabs(claim, "profile")}
     >
-      <form onSubmit={save} className={styles.profile}>
-        <div className={styles.profileRow}>
-          <Input
-            label="Name"
-            placeholder="Acme Data"
-            maxLength={60}
-            value={values.name}
-            onChange={set("name")}
-          />
-          <Input
-            label="Docs link"
-            placeholder="https://docs.yourcompany.com"
-            value={values.docs_url}
-            onChange={set("docs_url")}
-            inputMode="url"
-          />
-        </div>
-        <Textarea
-          label="What it does"
-          placeholder="Market data for trading agents."
-          maxLength={280}
-          rows={3}
-          value={values.description}
-          onChange={set("description")}
-        />
-        <div className={styles.profileActions}>
-          <Button type="submit" variant="secondary" loading={state === "busy"}>
-            {state === "saved" ? "Saved" : "Save"}
-          </Button>
-          {error && <ErrorText>{error}</ErrorText>}
-        </div>
-      </form>
-    </Card>
+      <Grid columns="2-1" align="start">
+        <Card
+          title="Profile"
+          description="How you describe your API on 402reviews, in your own words. It never changes a rating."
+        >
+          <form onSubmit={save} className={styles.profile}>
+            <Input
+              label="Name"
+              placeholder="Acme Data"
+              maxLength={60}
+              value={values.name}
+              onChange={set("name")}
+            />
+            <Textarea
+              label="What it does"
+              placeholder="Market data for trading agents."
+              maxLength={280}
+              rows={3}
+              value={values.description}
+              onChange={set("description")}
+            />
+            <div className={styles.profileRow}>
+              <Input
+                label="Docs"
+                placeholder="https://docs.yourcompany.com"
+                value={values.docs_url}
+                onChange={set("docs_url")}
+                inputMode="url"
+              />
+              <Input
+                label="API spec"
+                placeholder="https://yourcompany.com/openapi.json"
+                value={values.spec_url}
+                onChange={set("spec_url")}
+                inputMode="url"
+              />
+            </div>
+            <div className={styles.profileRow}>
+              <Input
+                label="Pricing"
+                placeholder="https://yourcompany.com/pricing"
+                value={values.pricing_url}
+                onChange={set("pricing_url")}
+                inputMode="url"
+              />
+              <Input
+                label="Contact email"
+                placeholder="api@yourcompany.com"
+                value={values.contact_email}
+                onChange={set("contact_email")}
+                inputMode="email"
+                description="Only 402reviews sees this."
+              />
+            </div>
+            <div className={styles.profileActions}>
+              <Button type="submit" loading={state === "busy"}>
+                {state === "saved" ? "Saved" : "Save profile"}
+              </Button>
+              {error && <ErrorText>{error}</ErrorText>}
+            </div>
+          </form>
+        </Card>
+        <ProfilePreview domain={claim.domain} values={values} />
+      </Grid>
+    </Page>
   )
 }
 
@@ -651,8 +769,6 @@ export function OverviewView({
   requests,
   publicUrl,
   maxPrice,
-  keys,
-  verifiedDomains,
 }: {
   claim: Claim
   data: ApiData | null
@@ -660,8 +776,6 @@ export function OverviewView({
   requests: SeedingRequest[]
   publicUrl: string
   maxPrice: number
-  keys: ProviderKeyView[]
-  verifiedDomains: string[]
 }) {
   const rating = data?.rating
   const reviews = data?.reviews ?? []
@@ -673,26 +787,10 @@ export function OverviewView({
       : null
   return (
     <Page
-      title={claim.profile?.name || claim.domain}
-      description={
-        <span className={styles.titleMeta}>
-          <Badge tone="success" size="sm" dot>
-            Verified
-          </Badge>
-          <span>
-            {claim.profile?.name ? `${claim.domain}. ` : ""}
-            {claim.verified_at
-              ? `You've owned this listing since ${day(claim.verified_at)}.`
-              : "You own this listing."}
-          </span>
-        </span>
-      }
-      actions={
-        <LinkButton href={publicUrl} target="_blank" rel="noreferrer" variant="secondary">
-          Public page
-          <ExternalLink size={14} strokeWidth={1.75} aria-hidden="true" />
-        </LinkButton>
-      }
+      title={apiTitle(claim)}
+      description={apiMeta(claim)}
+      actions={publicLink(publicUrl)}
+      tabs={apiTabs(claim, "overview")}
     >
       <div className={styles.stats}>
         <Stat
@@ -737,9 +835,6 @@ export function OverviewView({
         </div>
       </Grid>
 
-      <ConnectAgent keys={keys} domains={verifiedDomains} />
-
-      <ProfileForm claim={claim} />
     </Page>
   )
 }

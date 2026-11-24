@@ -208,6 +208,8 @@ export type ReviewInput = z.output<typeof ReviewBody>
 export interface V1Deps {
   store: ApiReviewStore
   baseUrl: string
+  // Where providers approve apps that sign in to the providers MCP.
+  appUrl?: string
   secret: string
   baseRpcUrl?: string
   findPayments: FindPayments
@@ -466,6 +468,7 @@ export function v1Routes(deps: V1Deps) {
       resolveTxt: deps.resolveTxt,
       fetch: deps.fetch,
       google: deps.google,
+      baseUrl: deps.baseUrl,
       ...(deps.resolveTxt && { assertPublic: async () => {} }),
     })
   )

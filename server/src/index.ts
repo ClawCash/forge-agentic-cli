@@ -8,10 +8,16 @@ import { HEDERA_TESTNET } from "../../shared/src/networks.ts"
 import { approvalRoutes } from "./approvals.ts"
 import { loadConfig, publicBaseUrl, type ServerConfig } from "./config.ts"
 import { memoryStore, postgresStore } from "./db/store.ts"
-import { resendMailer, resendNotifier, resendSender } from "./v1/accounts.ts"
+import {
+  hashKey,
+  resendMailer,
+  resendNotifier,
+  resendSender,
+} from "./v1/accounts.ts"
 import { chainFinder } from "./v1/chains.ts"
 import { parseAdminEmails } from "./v1/admin.ts"
 import { mcpRoutes } from "./v1/mcp.ts"
+import { DEFAULT_APP_URL, oauthRoutes } from "./v1/oauth.ts"
 import { providerMcpRoutes } from "./v1/provider.ts"
 import { type V1Deps, v1Routes } from "./v1/routes.ts"
 import { memoryApiReviewStore, postgresApiReviewStore } from "./v1/store.ts"
@@ -50,9 +56,23 @@ export function createApp(
 
   if (deps.v1) {
     app.route("/v1", v1Routes(deps.v1))
+    // Apps sign providers in to the providers MCP through these.
+    const store = deps.v1.store
+    app.route(
+      "/",
+      oauthRoutes({
+        store,
+        apiBase: deps.v1.baseUrl,
+        appBase: deps.v1.appUrl ?? DEFAULT_APP_URL,
+      })
+    )
     app.route(
       "/mcp/providers",
-      providerMcpRoutes({ call: (path, init) => app.request(path, init) })
+      providerMcpRoutes({
+        call: (path, init) => app.request(path, init),
+        apiBase: deps.v1.baseUrl,
+        liveKey: async (key) => !!(await store.providerKey(hashKey(key))),
+      })
     )
     app.route(
       "/mcp",
@@ -119,6 +139,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       ? await postgresApiReviewStore(env.DATABASE_URL)
       : memoryApiReviewStore(),
     baseUrl: publicBaseUrl(env),
+    appUrl: env.APP_URL,
     // Only signs short-lived challenges, so a restart costs at most a retry.
     secret: env.REVIEWS_SECRET ?? randomBytes(32).toString("base64"),
     baseRpcUrl: env.BASE_RPC_URL,

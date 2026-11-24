@@ -24,6 +24,8 @@ const ACTIONS: Record<
   key_create: () => ({ path: "keys", method: "POST" }),
   // For keys, "domain" carries the key's id.
   key_revoke: (id) => ({ path: `keys/${encodeURIComponent(id)}`, method: "DELETE" }),
+  // An app asking to sign in to the providers MCP, approved on its page.
+  oauth_approve: () => ({ path: "oauth/approve", method: "POST" }),
 }
 
 export async function POST(request: Request) {

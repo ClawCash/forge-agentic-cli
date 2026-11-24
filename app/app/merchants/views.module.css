@@ -420,6 +420,7 @@
 .profileRow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: var(--space-4);
 }
 
@@ -500,4 +501,51 @@
   .sticky {
     position: static;
   }
+}
+
+/* Profile preview: how the owner's words show on the public page. */
+
+.previewEmpty {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.preview {
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  padding: var(--space-4);
+  background: var(--surface-muted);
+}
+
+.previewLabel,
+.previewFoot {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.previewText {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.previewText strong {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.previewLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.previewLinks span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }

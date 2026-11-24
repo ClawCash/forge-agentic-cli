@@ -2,17 +2,20 @@ import type { ReactNode } from "react";
 import styles from "./page.module.css";
 
 /** The one page container for dashboard views: gutter, max width and header rhythm. */
-export function Page({ title, description, actions, back, children }: { title: string; description?: ReactNode; actions?: ReactNode; back?: ReactNode; children: ReactNode }) {
+export function Page({ title, description, actions, back, tabs, children }: { title: string; description?: ReactNode; actions?: ReactNode; back?: ReactNode; tabs?: ReactNode; children: ReactNode }) {
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.heading}>
-          {back}
-          <h1 className={styles.title}>{title}</h1>
-          {description && <p className={styles.description}>{description}</p>}
-        </div>
-        {actions && <div className={styles.actions}>{actions}</div>}
-      </header>
+      <div className={styles.top}>
+        <header className={styles.header}>
+          <div className={styles.heading}>
+            {back}
+            <h1 className={styles.title}>{title}</h1>
+            {description && <p className={styles.description}>{description}</p>}
+          </div>
+          {actions && <div className={styles.actions}>{actions}</div>}
+        </header>
+        {tabs}
+      </div>
       {children}
     </div>
   );

@@ -242,6 +242,32 @@ test(
       assert.equal(await store.revokeProviderKey("pk_1", "owner@example.com"), false)
       assert.equal(await store.providerKey("kh1"), null)
       assert.equal((await store.providerKeys("owner@example.com")).length, 0)
+
+      // A key made by signing in from an app carries its name.
+      await store.insertProviderKey({
+        id: "pk_2",
+        email: "owner@example.com",
+        keyHash: "kh2",
+        prefix: "mpk_ijklmnop",
+        name: "Claude",
+      })
+      assert.equal((await store.providerKey("kh2")).name, "Claude")
+
+      // Apps that register, and their one-time codes.
+      await store.saveOauthClient({ id: "oc_1", name: "Cursor", redirectUris: ["cursor://cb"] })
+      assert.deepEqual((await store.oauthClient("oc_1")).redirectUris, ["cursor://cb"])
+      assert.equal(await store.oauthClient("oc_missing"), null)
+      const grant = {
+        clientId: "oc_1",
+        email: "owner@example.com",
+        redirectUri: "cursor://cb",
+        codeChallenge: "c".repeat(43),
+      }
+      await store.saveOauthCode({ ...grant, codeHash: "code1", expiresAt: new Date(Date.now() + 60_000) })
+      assert.equal((await store.useOauthCode("code1")).email, "owner@example.com")
+      assert.equal(await store.useOauthCode("code1"), null)
+      await store.saveOauthCode({ ...grant, codeHash: "code2", expiresAt: new Date(Date.now() - 1000) })
+      assert.equal(await store.useOauthCode("code2"), null)
       const claim = {
         id: "mc_1",
         domain: "api.example.com",

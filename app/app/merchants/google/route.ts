@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { NextResponse } from "next/server"
-import { GOOGLE_COOKIE, merchantApi } from "@/lib/merchant"
+import { GOOGLE_COOKIE, GOOGLE_NEXT_COOKIE, merchantApi, safeNext } from "@/lib/merchant"
 
 export const dynamic = "force-dynamic"
 
@@ -42,5 +42,16 @@ export async function GET(request: Request) {
     path: "/merchants/google",
     maxAge: 600,
   })
+  // An app's approval page sends people here and wants them back after.
+  const next = new URL(request.url).searchParams.get("next")
+  if (next && safeNext(next)) {
+    res.cookies.set(GOOGLE_NEXT_COOKIE, next, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/merchants/google",
+      maxAge: 600,
+    })
+  }
   return res
 }

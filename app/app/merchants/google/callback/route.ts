@@ -1,6 +1,12 @@
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
-import { GOOGLE_COOKIE, MERCHANT_COOKIE, merchantApi } from "@/lib/merchant"
+import {
+  GOOGLE_COOKIE,
+  GOOGLE_NEXT_COOKIE,
+  MERCHANT_COOKIE,
+  merchantApi,
+  safeNext,
+} from "@/lib/merchant"
 
 export const dynamic = "force-dynamic"
 
@@ -33,7 +39,12 @@ export async function GET(request: Request) {
   })
   if (status !== 200 || typeof data.token !== "string")
     return back("/merchants?error=google")
-  const res = back("/merchants")
+  const next = (await cookies()).get(GOOGLE_NEXT_COOKIE)?.value
+  const res =
+    next && safeNext(next)
+      ? new NextResponse(null, { status: 303, headers: { Location: next } })
+      : back("/merchants")
+  res.cookies.set(GOOGLE_NEXT_COOKIE, "", { path: "/merchants/google", maxAge: 0 })
   res.cookies.set(MERCHANT_COOKIE, data.token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

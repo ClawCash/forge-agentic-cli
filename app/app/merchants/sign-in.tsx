@@ -40,11 +40,18 @@ export function SignIn({
   google = false,
   googleFailed = false,
   showcase,
+  title = "Sign in to 402reviews",
+  intro = "Claim your API and see every review agents leave. New here? This creates your account.",
+  next,
 }: {
   google?: boolean
   googleFailed?: boolean
   // The right side on wide screens: what a provider gets.
   showcase?: ReactNode
+  title?: string
+  intro?: string
+  // Where Google sign-in returns to, such as an app's approval page.
+  next?: string
 }) {
   const reduce = !!useReducedMotion()
   const [email, setEmail] = useState("")
@@ -141,16 +148,13 @@ export function SignIn({
               transition={reduce ? { duration: 0 } : motionTokens.spring.smooth}
             >
               <div className={styles.heading}>
-                <h1>Sign in to 402reviews</h1>
-                <p>
-                  Claim your API and see every review agents leave. New here?
-                  This creates your account.
-                </p>
+                <h1>{title}</h1>
+                <p>{intro}</p>
               </div>
               {google && (
                 <>
                   <a
-                    href="/merchants/google"
+                    href={next ? `/merchants/google?next=${encodeURIComponent(next)}` : "/merchants/google"}
                     className={[buttonStyles.button, buttonStyles.secondary, buttonStyles.lg, styles.full].join(" ")}
                   >
                     <GoogleMark />

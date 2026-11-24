@@ -7,6 +7,11 @@
   padding: var(--space-8) var(--space-8) var(--space-12);
 }
 
+.top {
+  display: grid;
+  gap: var(--space-5);
+}
+
 .header {
   display: flex;
   flex-wrap: wrap;

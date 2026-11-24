@@ -13,7 +13,8 @@ import { pointersFor } from "@/lib/merchant-pointers"
 import { backdropReviews } from "./review-backdrop"
 import { SignIn } from "./sign-in"
 import { SignInShowcase } from "./sign-in-showcase"
-import { AddView, OverviewView, VerifyView } from "./views"
+import { ConnectView } from "./connect-view"
+import { AddView, OverviewView, ProfileView, VerifyView } from "./views"
 
 export const dynamic = "force-dynamic"
 
@@ -24,6 +25,7 @@ export const metadata: Metadata = {
 }
 
 const ADD = "add"
+const CONNECT = "connect"
 
 export default async function MerchantsPage({
   searchParams,
@@ -31,11 +33,13 @@ export default async function MerchantsPage({
   searchParams: Promise<{
     api?: string
     add?: string
+    connect?: string
+    tab?: string
     domain?: string
     error?: string
   }>
 }) {
-  const { api, add, domain, error } = await searchParams
+  const { api, add, connect, tab, domain, error } = await searchParams
   const [result, google] = await Promise.all([
     loadMe((await cookies()).get(MERCHANT_COOKIE)?.value),
     googleEnabled(),
@@ -64,11 +68,13 @@ export default async function MerchantsPage({
   const { me } = result
   const claims = me.claims
   // A domain passed from an API's public page opens the add form with it.
+  const wantsConnect = connect !== undefined && claims.length > 0
   const wantsAdd =
-    add !== undefined ||
-    claims.length === 0 ||
-    (!!domain && !claims.some((claim) => claim.domain === domain))
-  const current = wantsAdd
+    !wantsConnect &&
+    (add !== undefined ||
+      claims.length === 0 ||
+      (!!domain && !claims.some((claim) => claim.domain === domain)))
+  const current = wantsAdd || wantsConnect
     ? null
     : (claims.find((claim) => claim.domain === (api ?? domain)) ?? claims[0])
   const requests = claims.flatMap((claim) => claim.seeding_requests ?? [])
@@ -88,7 +94,17 @@ export default async function MerchantsPage({
         { id: ADD, label: "Add an API", href: `?${ADD}`, kind: "add" },
       ],
     },
+    {
+      id: "agent",
+      heading: "Your agent",
+      items: [
+        { id: CONNECT, label: "Connect your agent", href: `?${CONNECT}`, kind: "connect" },
+      ],
+    },
   ]
+  const verifiedDomains = claims
+    .filter((claim) => claim.status === "verified")
+    .map((claim) => claim.domain)
   const footer: NavEntry[] = [
     {
       id: "leaderboard",
@@ -99,10 +115,20 @@ export default async function MerchantsPage({
   ]
 
   let view: React.ReactNode
-  if (!current) {
+  if (wantsConnect) {
+    view = <ConnectView keys={me.provider_keys ?? []} domains={verifiedDomains} />
+  } else if (!current) {
     view = <AddView initial={domain ?? ""} first={claims.length === 0} />
   } else if (current.status !== "verified") {
     view = <VerifyView key={current.domain} claim={current} />
+  } else if (tab === "profile") {
+    view = (
+      <ProfileView
+        key={current.domain}
+        claim={current}
+        publicUrl={`${SITE_URL}/s/${current.domain}`}
+      />
+    )
   } else {
     const data = await loadApi(current.domain)
     view = (
@@ -114,10 +140,6 @@ export default async function MerchantsPage({
         requests={requests}
         publicUrl={`${SITE_URL}/s/${current.domain}`}
         maxPrice={me.limits.seed_max_price_usd}
-        keys={me.provider_keys ?? []}
-        verifiedDomains={claims
-          .filter((claim) => claim.status === "verified")
-          .map((claim) => claim.domain)}
       />
     )
   }
@@ -127,8 +149,12 @@ export default async function MerchantsPage({
       email={me.email}
       sections={sections}
       footer={footer}
-      active={current?.domain ?? ADD}
-      crumb={current?.domain ?? (claims.length ? "Add an API" : "Claim your API")}
+      active={wantsConnect ? CONNECT : (current?.domain ?? ADD)}
+      crumb={
+        wantsConnect
+          ? "Connect your agent"
+          : (current?.domain ?? (claims.length ? "Add an API" : "Claim your API"))
+      }
     >
       {view}
     </MerchantShell>
