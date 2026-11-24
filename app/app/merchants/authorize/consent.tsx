@@ -48,7 +48,7 @@ export function InvalidRequest() {
           the steps on your dashboard.
         </p>
       </div>
-      <a href="/merchants?connect" className={styles.textLink}>
+      <a href="/merchants?view=connect" className={styles.textLink}>
         Open the setup steps
       </a>
     </Frame>

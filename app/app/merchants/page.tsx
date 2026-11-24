@@ -34,12 +34,16 @@ export default async function MerchantsPage({
     api?: string
     add?: string
     connect?: string
+    view?: string
     tab?: string
     domain?: string
     error?: string
   }>
 }) {
-  const { api, add, connect, tab, domain, error } = await searchParams
+  // Views go by ?view=add and ?view=connect: Vercel drops a query key with no
+  // value (?add) when it rewrites app.402reviews.xyz/ to this page. The bare
+  // forms still work on /merchants.
+  const { api, add, connect, view: asked, tab, domain, error } = await searchParams
   const [result, google] = await Promise.all([
     loadMe((await cookies()).get(MERCHANT_COOKIE)?.value),
     googleEnabled(),
@@ -68,10 +72,11 @@ export default async function MerchantsPage({
   const { me } = result
   const claims = me.claims
   // A domain passed from an API's public page opens the add form with it.
-  const wantsConnect = connect !== undefined && claims.length > 0
+  const wantsConnect = (asked === CONNECT || connect !== undefined) && claims.length > 0
   const wantsAdd =
     !wantsConnect &&
-    (add !== undefined ||
+    (asked === ADD ||
+      add !== undefined ||
       claims.length === 0 ||
       (!!domain && !claims.some((claim) => claim.domain === domain)))
   const current = wantsAdd || wantsConnect
@@ -91,14 +96,14 @@ export default async function MerchantsPage({
       heading: "APIs",
       items: [
         ...items,
-        { id: ADD, label: "Add an API", href: `?${ADD}`, kind: "add" },
+        { id: ADD, label: "Add an API", href: `?view=${ADD}`, kind: "add" },
       ],
     },
     {
       id: "agent",
       heading: "Your agent",
       items: [
-        { id: CONNECT, label: "Connect your agent", href: `?${CONNECT}`, kind: "connect" },
+        { id: CONNECT, label: "Connect your agent", href: `?view=${CONNECT}`, kind: "connect" },
       ],
     },
   ]

@@ -474,7 +474,7 @@ function Pointers({ pointers }: { pointers: Pointer[] }) {
     <Card
       title="What agents ran into"
       actions={
-        <LinkButton href="?connect" variant="ghost" size="sm">
+        <LinkButton href="?view=connect" variant="ghost" size="sm">
           Fix with your agent
           <ArrowRight size={14} strokeWidth={1.75} aria-hidden="true" />
         </LinkButton>
