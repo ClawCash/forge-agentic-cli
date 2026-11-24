@@ -16,7 +16,7 @@ import {
   listingSample,
 } from "../server/src/v1/health.ts"
 import { profileReader } from "../server/src/v1/profiles.ts"
-import { rate, screenNote, taskPrior } from "../server/src/v1/rating.ts"
+import { rate, screenNote, standing, taskPrior } from "../server/src/v1/rating.ts"
 import { locate } from "../server/src/v1/routes.ts"
 import { memoryApiReviewStore } from "../server/src/v1/store.ts"
 import { advertisedReader, termsReader } from "../server/src/v1/terms.ts"
@@ -816,8 +816,15 @@ test("the leaderboard ranks APIs and shows what agents say", async () => {
   await add("hidden.example", { note: "pay me", noteStatus: "held" }, 1)
   const board = await (await app.request("/v1/leaderboard")).json()
   assert.equal(board.total_apis, 4)
-  assert.equal(board.top.at(-1).domain, "poor.example")
   assert.equal(board.top[0].rank, 1)
+  assert.equal(board.ranked_apis, 3)
+  const ranked = board.top.filter((t) => t.tier === "ranked")
+  assert.equal(ranked.at(-1).domain, "poor.example")
+  // One agent so far: shown after the ranked APIs, with no rank number.
+  const hidden = board.top.at(-1)
+  assert.equal(hidden.domain, "hidden.example")
+  assert.equal(hidden.tier, "early")
+  assert.equal(hidden.rank, null)
   assert.ok(board.recent.some((r) => r.note === "Accurate and fast."))
   assert.ok(!board.recent.some((r) => r.note === "pay me"))
   const filtered = await (
@@ -827,6 +834,82 @@ test("the leaderboard ranks APIs and shows what agents say", async () => {
     filtered.top.map((t) => t.domain),
     ["search.example"]
   )
+})
+
+const SEED = "0x04d193a332f38980ec9a5ec87789009ab55b5dde"
+
+test("standing counts agents, not reviews, and is cautious", () => {
+  const agent = `0x${"a".repeat(40)}`
+  // One agent reviewing three endpoints is still one vote.
+  const oneAgent = ["/a", "/b", "/c"].map((path) => row({ wallet: agent, path }))
+  const twoAgents = [row({ path: "/a" }), row({ path: "/a" })]
+  assert.equal(standing(oneAgent, 0.6).agents, 1)
+  assert.ok(standing(twoAgents, 0.6).score > standing(oneAgent, 0.6).score)
+  // A long, slightly imperfect record beats a short perfect one.
+  const long = [
+    ...many(18),
+    ...many(2, { result: "partial", satisfaction: "partly" }),
+  ]
+  assert.ok(standing(long, 0.6).score > standing(twoAgents, 0.6).score)
+  // Our own seeding is one agent, whichever of our wallets paid.
+  const seeded = [
+    row({ wallet: SEED, path: "/a" }),
+    row({ wallet: "0x26eb3ad54c12fc7133a2b2b6eddc0692d94ebcea", path: "/b" }),
+    row({ wallet: SEED, path: "/c" }),
+  ]
+  assert.equal(standing(seeded, 0.6).agents, 1)
+})
+
+test("the leaderboard ranks only APIs with three agents, and puts silent ones last", async () => {
+  const { app, store } = await setup()
+  const add = (domain, wallets, overrides = {}) =>
+    Promise.all(
+      wallets.map((wallet, i) =>
+        store.insert(row({ domain, path: `/p${i}`, wallet, ...overrides }))
+      )
+    )
+  const w = (c) => `0x${c.repeat(40)}`
+  // Three reviews, all from our seeding: one agent, so early.
+  await add("seeded.example", [SEED, SEED, SEED])
+  await add("trio.example", [w("1"), w("2"), w("3")])
+  await add("trio-ok.example", [w("4"), w("5"), w("6")], {
+    result: "partial",
+    satisfaction: "partly",
+  })
+  await add("pair.example", [w("7"), w("8")])
+  await add("silent.example", [w("9"), w("b"), w("c")])
+  await saveHealth(store, "https://silent.example/p0", "down")
+  const board = await (await app.request("/v1/leaderboard")).json()
+  assert.deepEqual(
+    board.top.map((t) => `${t.rank ?? "-"} ${t.tier} ${t.domain}`),
+    [
+      "1 ranked trio.example",
+      "2 ranked trio-ok.example",
+      "- early pair.example",
+      "- early seeded.example",
+      "- down silent.example",
+    ]
+  )
+  assert.equal(board.ranked_apis, 2)
+  assert.equal(board.ranked_agents, 3)
+  assert.ok(board.top.every((t) => typeof t.rank_score === "number"))
+})
+
+test("an API's own payout wallet can't review it", async () => {
+  const account = newAccount()
+  const { appFetch } = await setup({
+    readTerms: async () => ({
+      live: true,
+      status: 402,
+      protocols: ["x402"],
+      accepts: [
+        { network: BASE, asset: USDC_BASE, payTo: account.address, amount: "10000" },
+      ],
+    }),
+  })
+  const res = await post(x402Fetch(appFetch, account, { signIn: true }))
+  assert.equal(res.status, 403)
+  assert.match((await res.json()).error, /pays out to/)
 })
 
 test("the leaderboard and an API's page show the same numbers", async () => {

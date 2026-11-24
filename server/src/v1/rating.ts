@@ -416,6 +416,42 @@ function typicalPrice(evidence: Scored[], onEndpoint: Scored[], path: string) {
 export const PARENT_TASK: Record<string, string> = { news: "web-search" }
 
 // `rows` is every review for the domain; `prior` is taskPrior for the task.
+// Where an API stands on the leaderboard, from its reviews for one task (or
+// all of them). Each agent gets one vote for the whole API, the average of its
+// reviews there, so reviewing more endpoints adds no influence; our own
+// seeding is one agent. The score is cautious: the low end of how likely the
+// API is to work, so a long good record beats a short perfect one, and two
+// agents beat one.
+export function standing(rows: ApiReview[], prior: number, now = Date.now()) {
+  const votes = new Map<string, Scored[]>()
+  for (const e of score(rows, { domain: "", path: "" }, now)) {
+    const key = agentOf(e.row)
+    votes.set(key, [...(votes.get(key) ?? []), e])
+  }
+  let weight = 0
+  let total = 0
+  for (const agent of votes.values()) {
+    const sum = agent.reduce((acc, e) => acc + e.weight, 0)
+    if (sum <= 0) continue
+    const vote = Math.max(...agent.map((e) => e.weight))
+    weight += vote
+    total += (vote * agent.reduce((acc, e) => acc + e.weight * e.value, 0)) / sum
+  }
+  // A Beta belief starting at the task's typical rate, worth TASK_PRIOR_WEIGHT
+  // reviews; the score sits about 1.28 standard deviations below its mean.
+  const a = total + prior * TASK_PRIOR_WEIGHT
+  const b = weight - total + (1 - prior) * TASK_PRIOR_WEIGHT
+  const mean = a / (a + b)
+  const spread = Math.sqrt((a * b) / ((a + b) ** 2 * (a + b + 1)))
+  return {
+    agents: votes.size,
+    score: round(Math.max(0, mean - 1.28 * spread), 3),
+  }
+}
+
+// An API needs this many separate agents before it gets a rank number.
+export const RANKED_AGENTS = MIN_BUYERS
+
 export function rate(
   rows: ApiReview[],
   query: RatingQuery,

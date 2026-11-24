@@ -48,8 +48,10 @@ import {
   PARENT_TASK,
   type Rating,
   rate,
+  RANKED_AGENTS,
   reviewScore,
   screenNote,
+  standing,
   taskPrior,
 } from "./rating.ts"
 import {
@@ -1073,6 +1075,19 @@ export function v1Routes(deps: V1Deps) {
         },
       }
     }
+    // Paying yourself proves nothing: an API's own payout wallet can't review it.
+    if (
+      terms.accepts.some(
+        (accept) => accept.payTo.toLowerCase() === wallet.toLowerCase()
+      )
+    ) {
+      return {
+        problem: {
+          status: 403 as const,
+          error: `${wallet} is the wallet ${url} pays out to, so it can't review this API. Reviews come from the agents that pay it.`,
+        },
+      }
+    }
     const since = new Date(Date.now() - REVIEW_WINDOW_DAYS * 86_400_000)
     const found: FoundPayment[] = []
     for (const accept of terms.accepts) {
@@ -1514,44 +1529,71 @@ export function v1Routes(deps: V1Deps) {
     for (const row of rows) {
       byDomain.set(row.domain, [...(byDomain.get(row.domain) ?? []), row])
     }
-    const top = [...byDomain]
-      .map(([domain, domainRows]) => ({
-        domain,
-        ...rate(domainRows, { domain, path: "", task }, prior),
-      }))
-      .filter((entry) => entry.works_for_task !== null)
+    // The ranking rules, published in the docs: ranked APIs have at least
+    // RANKED_AGENTS separate agents (our seeding counts as one) and answer
+    // their health checks; early ones have fewer agents and get no rank
+    // number; ones that stopped answering go last. Within a tier, the cautious
+    // standing score decides. Claiming, verifying or asking for seeding never
+    // moves an API.
+    const health = await deps.store.listHealthByDomains([...byDomain.keys()])
+    const TIER_ORDER = { ranked: 0, early: 1, down: 2 } as const
+    const entries = [...byDomain]
+      .map(([domain, domainRows]) => {
+        const rating = rate(domainRows, { domain, path: "", task }, prior)
+        const place = standing(domainRows, prior)
+        const status = domainHealth(health.filter((row) => row.domain === domain))
+        const tier: keyof typeof TIER_ORDER =
+          status?.status === "down"
+            ? "down"
+            : place.agents >= RANKED_AGENTS
+              ? "ranked"
+              : "early"
+        return { domain, rating, place, status, tier }
+      })
+      .filter(({ rating }) => rating.works_for_task !== null)
       .sort(
         (a, b) =>
-          (b.works_for_task as number) - (a.works_for_task as number) ||
-          b.buyers - a.buyers
+          TIER_ORDER[a.tier] - TIER_ORDER[b.tier] ||
+          b.place.score - a.place.score ||
+          b.place.agents - a.place.agents ||
+          (b.rating.last_reviewed_at ?? "").localeCompare(
+            a.rating.last_reviewed_at ?? ""
+          )
       )
+    let ranked = 0
+    const top = entries
       .slice(0, limit)
-      .map((entry, index) => {
+      .map(({ domain, rating, place, status, tier }) => {
         const {
           scope: _,
           domain_rating: __,
           cost_per_success_usd: ___,
           ...rest
-        } = entry
-        return { rank: index + 1, ...rest }
+        } = rating
+        return {
+          rank: tier === "ranked" ? ++ranked : null,
+          tier,
+          rank_score: place.score,
+          domain,
+          ...rest,
+          health: status,
+        }
       })
     const topDomains = top.map((entry) => entry.domain)
     const profiles = await profilesFor(topDomains)
-    const health = await deps.store.listHealthByDomains(topDomains)
     const verified = await verifiedDomains()
     return c.json({
       updated_at: new Date().toISOString(),
       task: task ?? null,
       total_reviews: rows.length,
       total_apis: byDomain.size,
+      ranked_apis: entries.filter((entry) => entry.tier === "ranked").length,
+      ranked_agents: RANKED_AGENTS,
       top: top.map((entry) => {
         return {
           ...entry,
           ...profileView(entry.domain, profiles.get(entry.domain)),
           verified: verified.has(entry.domain),
-          health: domainHealth(
-            health.filter((row) => row.domain === entry.domain)
-          ),
         }
       }),
       recent: rows

@@ -132,7 +132,7 @@ function buildServer(call: Call, baseUrl: string) {
     "top_apis",
     {
       description:
-        "The top-rated APIs, and what agents say about them. Every review comes from a wallet that paid.",
+        "The top-rated APIs, and what agents say about them. Every review comes from a wallet that paid. Ranked APIs (tier ranked, with a rank number) have at least 3 separate agents; early ones have fewer and no rank yet; down ones stopped answering health checks.",
       inputSchema: {
         task: Task.optional(),
         limit: z.number().int().min(1).max(100).optional(),
