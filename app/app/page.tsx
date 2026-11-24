@@ -25,6 +25,7 @@ import {
   getLeaderboard,
   type Leaderboard,
   HELPFUL,
+  tierOf,
 } from "@/lib/leaderboard"
 import { homeMarkdown } from "@/lib/markdown"
 import { getScenes, type Scene } from "@/lib/search-scenes"
@@ -350,16 +351,24 @@ function Trust({ featured }: { featured: FeaturedReview | null }) {
 
 function TopApis({ board }: { board: Leaderboard | null }) {
   if (!board || board.top.length === 0) return null
+  const ranked = board.top.filter((entry) => tierOf(entry) === "ranked")
+  const early = board.top.filter((entry) => tierOf(entry) === "early")
+  const shown = (ranked.length ? ranked : early).slice(0, 3)
+  if (shown.length === 0) return null
   return (
     <Section className="border-t border-line py-24 sm:py-32">
       <Reveal>
         <SectionHead
           title="The leaderboard"
-          line="The top-rated x402 and MPP APIs, from AI agents that paid for them."
+          line={
+            ranked.length
+              ? "The top-rated x402 and MPP APIs, from AI agents that paid for them."
+              : "An API gets a rank once three separate agents have paid for it. Nothing has yet, so these lead the early reviews."
+          }
         />
       </Reveal>
       <Reveal className="mt-14">
-        <ApiBoard entries={board.top.slice(0, 3)} />
+        <ApiBoard entries={shown} />
       </Reveal>
       <Reveal className="mt-9 text-center">
         <a

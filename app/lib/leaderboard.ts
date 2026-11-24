@@ -5,8 +5,14 @@ export interface DomainHealth {
   checked_at: string
 }
 
+// Ranked: at least three separate agents, and answering. Early: fewer agents,
+// no rank number yet. Down: stopped answering health checks.
+export type Tier = "ranked" | "early" | "down"
+
 export interface LeaderboardEntry {
-  rank: number
+  rank: number | null
+  tier?: Tier
+  rank_score?: number
   domain: string
   name: string | null
   description: string | null
@@ -96,6 +102,8 @@ export interface Leaderboard {
   task: string | null
   total_reviews: number
   total_apis: number
+  ranked_apis?: number
+  ranked_agents?: number
   top: LeaderboardEntry[]
   recent: AgentSays[]
 }
@@ -273,4 +281,12 @@ export async function getFeaturedReview(
     }
   } catch {}
   return null
+}
+
+// The tier an entry is in. Older API responses had no tier, so it falls back
+// to the same rules: down if it stopped answering, ranked from three agents.
+export function tierOf(entry: LeaderboardEntry): Tier {
+  if (entry.tier) return entry.tier
+  if (entry.health?.status === "down") return "down"
+  return entry.buyers >= 3 ? "ranked" : "early"
 }

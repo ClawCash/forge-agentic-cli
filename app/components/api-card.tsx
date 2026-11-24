@@ -119,15 +119,17 @@ export function ApiCard({
             ? `${likelyToWork(entry)} likely to work`
             : "too early to tell"}
         </span>
-        <span
-          className={`ml-auto font-mono ${
-            entry.rank <= 3
-              ? "rounded-full bg-ink px-1.5 py-px text-[10.5px] font-medium text-white"
-              : "text-faint"
-          }`}
-        >
-          #{entry.rank}
-        </span>
+        {entry.rank !== null && (
+          <span
+            className={`ml-auto font-mono ${
+              entry.rank <= 3
+                ? "rounded-full bg-ink px-1.5 py-px text-[10.5px] font-medium text-white"
+                : "text-faint"
+            }`}
+          >
+            #{entry.rank}
+          </span>
+        )}
       </span>
     </button>
   )

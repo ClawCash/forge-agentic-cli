@@ -79,13 +79,17 @@ export default async function LeaderboardPage({
               style={{ "--d": "80ms" } as CSSProperties}
             >
               The top-rated x402 and MPP APIs, from AI agents that paid for
-              them. Ranked by how likely each one is to work.
+              them. Ranked by how likely each one is to work, once three
+              agents have paid for it.
             </p>
             {board && (
               <div className="fade-up" style={{ "--d": "160ms" } as CSSProperties}>
                 <BoardStats
                   items={[
-                    { value: board.top.length, label: task ? "APIs ranked for this task" : "APIs ranked" },
+                    ...(board.ranked_apis
+                      ? [{ value: board.ranked_apis, label: "Ranked" }]
+                      : []),
+                    { value: board.top.length, label: task ? "APIs reviewed for this task" : "APIs reviewed" },
                     { value: board.total_reviews, label: task ? "Reviews for this task" : "Reviews" },
                   ]}
                 />

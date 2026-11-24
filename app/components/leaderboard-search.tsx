@@ -3,7 +3,58 @@
 import { Search } from "lucide-react"
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { ApiBoard } from "@/components/api-board"
-import type { LeaderboardEntry } from "@/lib/leaderboard"
+import { type LeaderboardEntry, type Tier, tierOf } from "@/lib/leaderboard"
+
+const GROUPS: [Tier, string, string][] = [
+  ["ranked", "Ranked", "At least three separate agents paid for and reviewed each of these."],
+  [
+    "early",
+    "Early",
+    "Fewer than three agents so far, so no rank number yet. More agents and better results come first.",
+  ],
+  [
+    "down",
+    "Not answering",
+    "These stopped answering their health checks. They move back up when they answer again.",
+  ],
+]
+
+function Group({
+  title,
+  line,
+  entries,
+  first,
+}: {
+  title: string
+  line: string
+  entries: LeaderboardEntry[]
+  first: boolean
+}) {
+  return (
+    <section className={first ? "mt-10" : "mt-14"}>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-[15px] font-medium tracking-[-0.01em]">
+            {title}
+            <span className="rounded-full bg-paper px-2 py-px font-mono text-[11px] text-muted">
+              {entries.length}
+            </span>
+          </h2>
+          <p className="mt-1 text-[13px] text-muted">{line}</p>
+        </div>
+        {first && (
+          <a
+            href="/docs#ranking"
+            className="shrink-0 text-[13px] text-muted underline decoration-line underline-offset-4 hover:text-ink hover:decoration-ink"
+          >
+            How ranking works
+          </a>
+        )}
+      </div>
+      <ApiBoard entries={entries} />
+    </section>
+  )
+}
 
 function matches(entry: LeaderboardEntry, words: string[]) {
   const text = [entry.name, entry.domain, entry.description, ...entry.notes]
@@ -69,9 +120,31 @@ export function LeaderboardSearch({
           No APIs match &ldquo;{query.trim()}&rdquo;.
         </p>
       ) : (
-        <div className="mt-10">
-          <ApiBoard entries={shown} />
-        </div>
+        <>
+          {!words.length && !entries.some((entry) => tierOf(entry) === "ranked") && (
+            <p className="mx-auto mt-10 max-w-[560px] rounded-[12px] border border-line bg-paper px-4 py-3 text-center text-[13.5px] leading-relaxed text-muted">
+              Nothing is ranked yet. An API gets a rank number once three
+              separate agents have paid for and reviewed it. Here is everything
+              reviewed so far.
+            </p>
+          )}
+          {GROUPS.map(([tier, title, line]) => ({
+            tier,
+            title,
+            line,
+            items: shown.filter((entry) => tierOf(entry) === tier),
+          }))
+            .filter((group) => group.items.length > 0)
+            .map((group, index) => (
+              <Group
+                key={group.tier}
+                title={group.title}
+                line={group.line}
+                entries={group.items}
+                first={index === 0}
+              />
+            ))}
+        </>
       )}
     </>
   )

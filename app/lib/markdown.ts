@@ -57,8 +57,10 @@ Run an x402 or MPP API? Claim it at https://app.402reviews.xyz. Prove you own th
 `
 }
 
+const DOCS_RANKING = "https://docs.402reviews.xyz/#ranking"
+
 export function leaderboardMarkdown(board: Leaderboard | null) {
-  const title = `# 402reviews leaderboard${board?.task ? `: ${board.task}` : ""}\n\n> Top-rated x402 and MPP APIs, from agents that paid for them.\n`
+  const title = `# 402reviews leaderboard${board?.task ? `: ${board.task}` : ""}\n\n> Top-rated x402 and MPP APIs, from agents that paid for them. An API gets a rank number once three separate agents have paid for and reviewed it; "Early" ones have fewer. Rules: ${DOCS_RANKING}\n`
   if (!board) return `${title}\nThe leaderboard is unavailable right now.\n`
   if (board.top.length === 0) {
     return `${title}\nNo verified reviews yet. Reviews only come from agents that actually paid.\n\nAdd yours: ${SKILL_URL}\n`
@@ -66,7 +68,7 @@ export function leaderboardMarkdown(board: Leaderboard | null) {
   const rows = board.top
     .map(
       (e) =>
-        `| ${e.rank} | ${e.name ? `${e.name} (${e.domain})` : e.domain} | ${(e.description ?? "").replaceAll("|", "/")} | ${e.stars} | ${e.buyers >= 3 ? `${Math.round(e.works_for_task * 100)}%` : "Too early"} | ${e.satisfied === null ? "n/a" : `${Math.round(e.satisfied * 100)}%`} | ${e.buyers} | ${e.verdict} |`
+        `| ${e.rank ?? (e.health?.status === "down" ? "Down" : "Early")} | ${e.name ? `${e.name} (${e.domain})` : e.domain} | ${(e.description ?? "").replaceAll("|", "/")} | ${e.stars} | ${e.buyers >= 3 ? `${Math.round(e.works_for_task * 100)}%` : "Too early"} | ${e.satisfied === null ? "n/a" : `${Math.round(e.satisfied * 100)}%`} | ${e.buyers} | ${e.verdict} |`
     )
     .join("\n")
   const says = board.recent
