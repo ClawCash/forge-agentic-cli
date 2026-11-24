@@ -1475,6 +1475,29 @@ export function v1Routes(deps: V1Deps) {
     return profiles
   }
 
+  // Public totals for the site, cached for a minute so the home page can't
+  // turn into a counting load on the database.
+  let statsCache: { at: number; body: Record<string, unknown> } | null = null
+  app.get("/stats", async (c) => {
+    if (!statsCache || Date.now() - statsCache.at > 60_000) {
+      const stats = await deps.store.stats()
+      statsCache = {
+        at: Date.now(),
+        body: {
+          updated_at: new Date().toISOString(),
+          reviews: stats.reviews,
+          apis_reviewed: stats.apisReviewed,
+          buyers: stats.buyers,
+          paid_usd: Math.round(stats.paidUsd * 100) / 100,
+          checks: stats.checks,
+          apis_tracked: stats.apisTracked,
+        },
+      }
+    }
+    c.header("Cache-Control", "public, max-age=60")
+    return c.json(statsCache.body)
+  })
+
   app.get("/leaderboard", async (c) => {
     const parsed = z
       .object({

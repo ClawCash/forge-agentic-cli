@@ -48,6 +48,17 @@ export type MerchantClaim = typeof merchantClaims.$inferSelect
 export type MerchantProfile = typeof merchantProfiles.$inferSelect
 export type SeedingRequest = typeof seedingRequests.$inferSelect
 export type ProviderKey = typeof providerKeys.$inferSelect
+// Public totals for the site. `checks` counts agents looking APIs up before
+// paying (check, search and brief calls), never request content.
+export interface SiteStats {
+  reviews: number
+  apisReviewed: number
+  buyers: number
+  paidUsd: number
+  checks: number
+  apisTracked: number
+}
+
 // Requests per UTC day ("YYYY-MM-DD"), account and kind.
 export interface UsageDay {
   day: string
@@ -136,12 +147,15 @@ export interface ApiReviewStore {
   getHealth(urls: string[]): Promise<Map<string, EndpointHealth>>
   listHealthByDomains(domains: string[]): Promise<EndpointHealth[]>
   listHealthDomains(): Promise<string[]>
+  stats(): Promise<SiteStats>
   insertPaymentFailure(
     report: Omit<PaymentFailure, "createdAt">
   ): Promise<PaymentFailure>
   listPaymentFailures(domains?: string[]): Promise<PaymentFailure[]>
   close(): Promise<void>
 }
+
+const CHECK_KINDS = ["check", "search", "brief"]
 
 export async function postgresApiReviewStore(
   databaseUrl: string
@@ -261,6 +275,31 @@ export async function postgresApiReviewStore(
         .selectDistinct({ domain: endpointHealth.domain })
         .from(endpointHealth)
       return rows.map((row) => row.domain)
+    },
+    async stats() {
+      const [[reviewRow], [usageRow], [healthRow]] = await Promise.all([
+        db
+          .select({
+            reviews: sql<number>`count(*)::int`,
+            apisReviewed: sql<number>`count(distinct ${apiReviews.domain})::int`,
+            buyers: sql<number>`count(distinct ${apiReviews.wallet})::int`,
+            paidUsd: sql<number>`coalesce(sum(${apiReviews.priceUsd}), 0)::float8`,
+          })
+          .from(apiReviews),
+        db
+          .select({ checks: sql<number>`count(*)::int` })
+          .from(usageEvents)
+          .where(inArray(usageEvents.kind, CHECK_KINDS)),
+        db
+          .select({ apisTracked: sql<number>`count(distinct ${endpointHealth.domain})::int` })
+          .from(endpointHealth),
+      ])
+      return {
+        ...reviewRow,
+        paidUsd: Number(reviewRow.paidUsd),
+        checks: usageRow.checks,
+        apisTracked: Math.max(healthRow.apisTracked, reviewRow.apisReviewed),
+      }
     },
     async insertPaymentFailure(report) {
       const [row] = await db.insert(paymentFailures).values(report).returning()
@@ -610,6 +649,17 @@ export function memoryApiReviewStore(): ApiReviewStore {
     listHealthDomains: async () => [
       ...new Set([...health.values()].map((row) => row.domain)),
     ],
+    async stats() {
+      const apisReviewed = new Set(rows.map((row) => row.domain)).size
+      return {
+        reviews: rows.length,
+        apisReviewed,
+        buyers: new Set(rows.map((row) => row.wallet)).size,
+        paidUsd: rows.reduce((sum, row) => sum + (row.priceUsd ?? 0), 0),
+        checks: usage.filter((event) => CHECK_KINDS.includes(event.kind)).length,
+        apisTracked: Math.max(new Set([...health.values()].map((row) => row.domain)).size, apisReviewed),
+      }
+    },
     async insertPaymentFailure(report) {
       const row = { ...report, createdAt: new Date() }
       failures.push(row)

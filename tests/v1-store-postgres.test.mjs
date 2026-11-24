@@ -183,6 +183,11 @@ test(
           .sort(),
         [`${today}|-|check|1`, `${today}|${user.id}|check|1`].sort()
       )
+      const stats = await store.stats()
+      assert.equal(stats.checks, 2)
+      assert.ok(stats.reviews >= 1 && stats.apisReviewed >= 1 && stats.buyers >= 1)
+      assert.ok(stats.paidUsd >= 0.01 && typeof stats.paidUsd === "number")
+      assert.ok(stats.apisTracked >= stats.apisReviewed)
       const [byUser] = await store.usageByUser()
       assert.equal(byUser.userId, user.id)
       assert.equal(byUser.requests, 1)
