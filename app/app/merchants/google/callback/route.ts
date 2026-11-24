@@ -5,6 +5,7 @@ import {
   GOOGLE_NEXT_COOKIE,
   MERCHANT_COOKIE,
   merchantApi,
+  onProviderHost,
   safeNext,
 } from "@/lib/merchant"
 
@@ -14,8 +15,8 @@ export const dynamic = "force-dynamic"
 // cookie set on the way out, so a stranger can't sign someone in.
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  // On app.402reviews.xyz the app lives at the root.
-  const home = (request.headers.get("host") ?? "").startsWith("app.")
+  // On providers.402reviews.xyz the app lives at the root.
+  const home = onProviderHost(request.headers.get("host"))
     ? "/"
     : "/merchants"
   const back = (path: string) =>

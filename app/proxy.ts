@@ -36,20 +36,21 @@ export function proxy(request: NextRequest) {
   }
   // docs.402reviews.xyz and admin.402reviews.xyz are pages of the same site.
   const host = request.headers.get("host") ?? ""
-  // The merchant app lives on app.402reviews.xyz; its old address on the
-  // main site sends people there.
+  // The provider app lives on providers.402reviews.xyz; its old address on
+  // the main site sends people there. app.402reviews.xyz redirects there too,
+  // in next.config.ts.
   if (
     request.nextUrl.pathname === "/merchants" &&
     /^(www\.)?402reviews\.xyz$/.test(host)
   ) {
-    const url = new URL(`https://app.402reviews.xyz/${request.nextUrl.search}`)
+    const url = new URL(`https://providers.402reviews.xyz/${request.nextUrl.search}`)
     return NextResponse.redirect(url, 308)
   }
   const hostPage = host.startsWith("docs.")
     ? "/docs"
     : host.startsWith("admin.")
       ? "/admin"
-      : host.startsWith("app.")
+      : host.startsWith("providers.") || host.startsWith("app.")
         ? "/merchants"
         : null
   const pathname =

@@ -290,7 +290,7 @@ export function providerRoutes(deps: {
       return c.json(
         {
           error:
-            "Pass a provider key as Authorization: Bearer mpk_... Create one at https://app.402reviews.xyz.",
+            "Pass a provider key as Authorization: Bearer mpk_... Create one at https://providers.402reviews.xyz.",
         },
         401
       )
@@ -321,7 +321,7 @@ export function providerRoutes(deps: {
     c.json(
       {
         error:
-          "This key can only read APIs its owner has verified on app.402reviews.xyz.",
+          "This key can only read APIs its owner has verified on providers.402reviews.xyz.",
       },
       403
     )
@@ -531,7 +531,7 @@ export function providerMcpRoutes(deps: {
         error: {
           code: -32001,
           message:
-            "Sign in with your 402reviews account, or pass a provider key as Authorization: Bearer mpk_... Create one at https://app.402reviews.xyz.",
+            "Sign in with your 402reviews account, or pass a provider key as Authorization: Bearer mpk_... Create one at https://providers.402reviews.xyz.",
         },
         id: null,
       }),

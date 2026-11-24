@@ -8,13 +8,13 @@ import type { ApiReviewStore } from "./store.ts"
 
 // Signing in to the providers MCP from an app. Claude, Cursor, Codex and VS
 // Code find these endpoints on their own when the MCP answers 401: the app
-// registers itself, sends the provider to app.402reviews.xyz to approve, and
+// registers itself, sends the provider to providers.402reviews.xyz to approve, and
 // trades the one-time code for a provider key. The key carries the app's name,
 // shows on the dashboard and can be revoked like any other.
 
 export const PROVIDER_MCP_PATH = "/mcp/providers"
 export const PROVIDER_SCOPE = "providers:read"
-export const DEFAULT_APP_URL = "https://app.402reviews.xyz"
+export const DEFAULT_APP_URL = "https://providers.402reviews.xyz"
 const CODE_MS = 10 * 60_000
 // Signing in again from another app or machine adds a key; past this many,
 // the oldest one made by signing in is revoked.

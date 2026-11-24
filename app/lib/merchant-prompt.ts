@@ -21,5 +21,5 @@ Then check it is live:
   dig +short TXT ${v.dns.name}
   curl -s ${v.file.url}
 
-Don't change anything else. When one of them shows the value, tell me, and I'll press Check now on app.402reviews.xyz.`
+Don't change anything else. When one of them shows the value, tell me, and I'll press Check now on providers.402reviews.xyz.`
 }

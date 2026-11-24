@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 import { Alert } from "@/components/arc/alert/alert"
 import { MerchantShell, type NavEntry, type NavSection } from "@/components/merchant/shell"
 import { ADMIN_COOKIE, loadStats } from "@/lib/admin"
-import { SITE_URL } from "@/lib/links"
+import { APP_URL, SITE_URL } from "@/lib/links"
 import { SignIn } from "../merchants/sign-in"
 import { ActivityView, AgentsView, OverviewView, ProvidersView } from "./views"
 
@@ -64,7 +64,7 @@ export default async function AdminPage({
   ]
   const footer: NavEntry[] = [
     { id: "site", label: "402reviews.xyz", href: SITE_URL, kind: "external" },
-    { id: "app", label: "Provider app", href: "https://app.402reviews.xyz", kind: "external" },
+    { id: "app", label: "Provider app", href: APP_URL, kind: "external" },
   ]
 
   return (

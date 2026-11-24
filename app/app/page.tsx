@@ -437,7 +437,7 @@ function Providers() {
                 <span key={dot} className="size-2.5 rounded-full bg-line" />
               ))}
               <span className="mx-auto rounded-[6px] border border-line bg-white px-3 py-0.5 font-mono text-[11px] text-muted">
-                app.402reviews.xyz
+                providers.402reviews.xyz
               </span>
               <span className="w-[42px]" />
             </div>

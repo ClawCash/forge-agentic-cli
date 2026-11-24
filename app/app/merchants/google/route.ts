@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto"
 import { NextResponse } from "next/server"
-import { GOOGLE_COOKIE, GOOGLE_NEXT_COOKIE, merchantApi, safeNext } from "@/lib/merchant"
+import { GOOGLE_COOKIE, GOOGLE_NEXT_COOKIE, merchantApi, onProviderHost, safeNext } from "@/lib/merchant"
 
 export const dynamic = "force-dynamic"
 
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     return new NextResponse(null, {
       status: 303,
       headers: {
-        Location: (request.headers.get("host") ?? "").startsWith("app.")
+        Location: onProviderHost(request.headers.get("host"))
           ? "/?error=google"
           : "/merchants?error=google",
       },

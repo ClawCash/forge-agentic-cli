@@ -9,7 +9,7 @@ import { memoryApiReviewStore } from "../server/src/v1/store.ts"
 
 // Signing in to the providers MCP from an app, the way Claude, Cursor, Codex
 // and VS Code do it: the MCP answers 401, the app finds the sign-in endpoints,
-// registers, the provider approves on app.402reviews.xyz, and the app trades
+// registers, the provider approves on providers.402reviews.xyz, and the app trades
 // the code for a key named after it.
 
 const BASE = "https://reviews.test"

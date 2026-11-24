@@ -1,6 +1,6 @@
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
-import { MERCHANT_COOKIE, merchantApi } from "@/lib/merchant"
+import { MERCHANT_COOKIE, merchantApi, onProviderHost } from "@/lib/merchant"
 
 export const dynamic = "force-dynamic"
 
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const host = request.headers.get("host") ?? ""
   const res = new NextResponse(null, {
     status: 303,
-    headers: { Location: host.startsWith("app.") ? "/" : "/merchants" },
+    headers: { Location: onProviderHost(host) ? "/" : "/merchants" },
   })
   res.cookies.delete(MERCHANT_COOKIE)
   return res

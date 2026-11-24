@@ -8,6 +8,18 @@ const repoRoot = path.join(import.meta.dirname, "..")
 const nextConfig: NextConfig = {
   turbopack: { root: repoRoot },
   outputFileTracingRoot: repoRoot,
+  // The provider app moved from app.402reviews.xyz; every old link and an
+  // app's cached sign-in address keep working.
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "app.402reviews.xyz" }],
+        destination: "https://providers.402reviews.xyz/:path*",
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       { source: "/", headers: [{ key: "Vary", value: "Accept" }] },

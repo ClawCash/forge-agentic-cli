@@ -41,7 +41,7 @@ export default async function MerchantsPage({
   }>
 }) {
   // Views go by ?view=add and ?view=connect: Vercel drops a query key with no
-  // value (?add) when it rewrites app.402reviews.xyz/ to this page. The bare
+  // value (?add) when it rewrites providers.402reviews.xyz/ to this page. The bare
   // forms still work on /merchants.
   const { api, add, connect, view: asked, tab, domain, error } = await searchParams
   const [result, google] = await Promise.all([

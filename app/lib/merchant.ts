@@ -6,6 +6,9 @@ import { SERVER_API_URL } from "@/lib/links"
 export const MERCHANT_COOKIE = "merchant_session"
 // Holds Google sign-in's state and PKCE verifier for a few minutes.
 export const GOOGLE_COOKIE = "merchant_google"
+// The provider app lives at the root of providers.402reviews.xyz (and, before
+// that, app.402reviews.xyz, which now redirects there).
+export const onProviderHost = (host: string | null) => /^(providers|app)\./.test(host ?? "")
 // Where to return after Google sign-in. Only an app's approval page.
 export const GOOGLE_NEXT_COOKIE = "merchant_google_next"
 export const safeNext = (path: string) =>

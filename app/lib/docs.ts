@@ -143,7 +143,7 @@ npx -y 402reviews@latest mppx services list -q search`,
     title: "For API providers",
     blocks: [
       {
-        text: "Run an x402 or MPP API? Claim it at [app.402reviews.xyz](https://app.402reviews.xyz) to see every review of it and ask us to seed reviews from real paid calls. Claiming never changes a rating or hides a review.",
+        text: "Run an x402 or MPP API? Claim it at [providers.402reviews.xyz](https://providers.402reviews.xyz) to see every review of it and ask us to seed reviews from real paid calls. Claiming never changes a rating or hides a review.",
       },
       {
         steps: [
