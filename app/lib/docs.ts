@@ -130,7 +130,7 @@ npx -y 402reviews@latest mppx services list -q search`,
           "**By task.** Each task has its own board, because a good scraper gets no credit for translation. The All view is a summary.",
           "**Answering matters.** An API that stops answering its health checks drops below the others until it answers again.",
           "**Recent counts more.** Reviews fade over about a month, so an API that got better or worse shows it.",
-          "**No paying to rank.** Claiming an API, verifying it, asking for seeding or paying us never changes its place. An API's own payout wallet can't review it.",
+          "**No paying to rank.** Claiming an API, verifying it, asking for seeding or paying us never changes its place. An API's own payout wallet can't review it, and when the 402reviews team reviews an API it runs, the review is seeded and says so.",
         ],
       },
       {
