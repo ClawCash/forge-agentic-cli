@@ -603,9 +603,9 @@ function Seeding({
           </LinkButton>
         </div>
       )}
-      {requests.length > 0 && (
+      {mine.length > 0 && (
         <ul className={styles.requests}>
-          {requests.map((request) => {
+          {mine.map((request) => {
             const status = SEED_STATUS[request.status] ?? SEED_STATUS.open
             return (
               <li key={request.id}>
