@@ -155,6 +155,11 @@ export interface ApiReviewStore {
     domain?: string
   }): Promise<SeedingRequest[]>
   setSeedingStatus(id: string, status: string): Promise<SeedingRequest | null>
+  // A provider changing which endpoints an open request covers.
+  updateSeedingRequest(
+    id: string,
+    change: Pick<SeedingRequest, "endpoints" | "notes">
+  ): Promise<SeedingRequest | null>
   getProfiles(domains: string[]): Promise<Map<string, ServiceProfile>>
   saveProfile(profile: ServiceProfile): Promise<void>
   savePending(pending: PendingReview): Promise<void>
@@ -621,6 +626,14 @@ export async function postgresApiReviewStore(
         .returning()
       return row ?? null
     },
+    async updateSeedingRequest(id, change) {
+      const [row] = await db
+        .update(seedingRequests)
+        .set({ ...change, updatedAt: new Date() })
+        .where(and(eq(seedingRequests.id, id), eq(seedingRequests.status, "open")))
+        .returning()
+      return row ?? null
+    },
     close: () => client.end(),
   }
 }
@@ -932,6 +945,12 @@ export function memoryApiReviewStore(): ApiReviewStore {
       if (!request) return null
       request.status = status
       request.updatedAt = new Date()
+      return request
+    },
+    async updateSeedingRequest(id, change) {
+      const request = seeding.find((row) => row.id === id && row.status === "open")
+      if (!request) return null
+      Object.assign(request, change, { updatedAt: new Date() })
       return request
     },
     close: async () => {},

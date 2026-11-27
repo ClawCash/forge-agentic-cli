@@ -283,7 +283,7 @@ test("the leaderboard marks APIs their owner has verified", async () => {
   })
 })
 
-test("seeding is one click, sent once, and emails the merchant and the team", async () => {
+test("seeding is one click, done once, and emails the merchant and the team", async () => {
   const ctx = setup()
   const token = await signIn(ctx)
   await claimAndVerify(ctx, token)
@@ -303,7 +303,8 @@ test("seeding is one click, sent once, and emails the merchant and the team", as
   assert.equal(ctx.mails.length, 1)
   assert.equal(ctx.mails[0].to, "owner@example.com")
   assert.match(ctx.mails[0].subject, /seeding request for api.example.com/)
-  assert.equal((await seed()).status, 409)
+  // While it's open, sending again only changes the endpoints, so it needs some.
+  assert.equal((await seed()).status, 400)
 
   const me = await (
     await ctx.app.request("/v1/merchant/me", auth(token))
@@ -357,7 +358,11 @@ test("listed endpoints must be cheap, paid and on the claimed domain", async () 
       .problem,
     /payment terms/
   )
-  assert.equal((await seed(["a", "b", "c", "d"])).status, 400)
+  const tooMany = await seed(
+    Array.from({ length: 11 }, (_, i) => `https://api.example.com/e${i}`)
+  )
+  assert.equal(tooMany.status, 400)
+  assert.match((await tooMany.json()).error, /up to 10/)
 
   const ok = await seed(
     ["https://api.example.com/cheap", "https://api.example.com/also-cheap"],
@@ -494,4 +499,69 @@ test("the admin dashboard sees who signed up as a merchant and what they did", a
   assert.equal(owner.keys, 1)
   assert.equal(owner.seeding_requests, 1)
   assert.equal(owner.actions, 6)
+})
+
+test("a verified API's paid endpoints are found from its spec, and an open request can change them", async () => {
+  const ctx = setup()
+  const token = await signIn(ctx)
+  await claimAndVerify(ctx, token)
+  ctx.files.set(
+    "https://api.example.com/openapi.json",
+    JSON.stringify({
+      openapi: "3.1.0",
+      paths: {
+        "/cheap": {
+          post: {
+            summary: "Search the web",
+            "x-payment-info": { price: { mode: "fixed", currency: "USDC", amount: "0.010000" }, protocols: [{ x402: {} }] },
+          },
+          get: { "x-payment-info": { price: { currency: "USDC", amount: "0.010000" } } },
+        },
+        "/pricey": { post: { "x-price-usd": 1.25 } },
+        "/items/{id}": { get: { "x-price-usd": 0.01 } },
+        "/health": { get: { summary: "Free" } },
+      },
+    })
+  )
+  ctx.files.set(
+    "https://api.example.com/.well-known/x402",
+    JSON.stringify({ version: 1, resources: ["https://api.example.com/also-cheap", "https://elsewhere.example/x"] })
+  )
+
+  const res = await ctx.app.request("/v1/merchant/claims/api.example.com/endpoints", auth(token))
+  assert.equal(res.status, 200)
+  const found = await res.json()
+  assert.deepEqual(found.sources, ["openapi.json", ".well-known/x402"])
+  assert.equal(found.skipped_templated, 1)
+  assert.equal(found.max_endpoints, 10)
+  assert.deepEqual(
+    found.endpoints.map((e) => [e.path, e.price_usd, e.price_source, e.problem]),
+    [
+      ["/also-cheap", 0.0025, "live", null],
+      ["/cheap", 0.01, "listed", null],
+      ["/pricey", 1.25, "listed", "Over $0.05"],
+    ]
+  )
+  const cheap = found.endpoints.find((e) => e.path === "/cheap")
+  assert.deepEqual(cheap.methods, ["GET", "POST"])
+  assert.deepEqual(cheap.protocols, ["x402"])
+  assert.equal(cheap.summary, "Search the web")
+
+  // Only the verified owner can look.
+  const other = await signIn(ctx, "someone@example.com")
+  assert.equal((await ctx.app.request("/v1/merchant/claims/api.example.com/endpoints", auth(other))).status, 403)
+
+  const seed = (endpoints) =>
+    ctx.app.request("/v1/merchant/claims/api.example.com/seeding", json({ endpoints }, token))
+  const first = await seed(["https://api.example.com/cheap"])
+  assert.equal(first.status, 201)
+  const changed = await seed(["https://api.example.com/cheap", "https://api.example.com/also-cheap"])
+  assert.equal(changed.status, 200)
+  const updated = await changed.json()
+  assert.equal(updated.id, (await first.json()).id)
+  assert.equal(updated.endpoints.length, 2)
+  assert.match(ctx.notices.at(-1).subject, /Seeding request updated: api.example.com/)
+  assert.match(ctx.notices.at(-1).text, /Total: \$0.013/)
+  const events = await ctx.store.merchantEvents(10)
+  assert.equal(events.filter((e) => e.kind === "seeding_updated").length, 1)
 })

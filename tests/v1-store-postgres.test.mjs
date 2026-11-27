@@ -341,9 +341,23 @@ test(
           .endpoints[0].priceUsd,
         0.01
       )
+      const moved = await store.updateSeedingRequest("sr_1", {
+        endpoints: [
+          { url: "https://api.example.com/x", priceUsd: 0.01 },
+          { url: "https://api.example.com/y", priceUsd: 0.02 },
+        ],
+        notes: "Both, please",
+      })
+      assert.equal(moved.endpoints.length, 2)
+      assert.equal(moved.notes, "Both, please")
       assert.equal(
         (await store.setSeedingStatus("sr_1", "seeded")).status,
         "seeded"
+      )
+      // A handled request can't be changed.
+      assert.equal(
+        await store.updateSeedingRequest("sr_1", { endpoints: [], notes: null }),
+        null
       )
       assert.equal(await store.setSeedingStatus("nope", "seeded"), null)
       assert.equal((await store.listBySubdomains(["enrich.dev"])).length, 0)

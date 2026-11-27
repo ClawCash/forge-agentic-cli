@@ -17,6 +17,7 @@ import {
   type SendEmail,
 } from "./accounts.ts"
 import { priceUsd } from "./chains.ts"
+import { type DiscoverEndpoints, endpointDiscoverer } from "./discover.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import { approveGrant, clientFor, OauthError } from "./oauth.ts"
 import type {
@@ -53,9 +54,10 @@ function providerKeyView(key: ProviderKey) {
   }
 }
 
-// 402reviews pays for seeding, so it covers only cheap calls, and a few of them.
+// 402reviews pays for seeding, so it covers only cheap calls: at most
+// $0.50 for an API, one call to each endpoint picked.
 export const SEED_MAX_PRICE_USD = 0.05
-export const SEED_MAX_ENDPOINTS = 3
+export const SEED_MAX_ENDPOINTS = 10
 
 // Where a domain can show a claim's code. Names are about the job, not the
 // brand, and more can be added later without breaking verified claims.
@@ -181,6 +183,8 @@ export function merchantRoutes(deps: {
   // Emails one merchant, such as a seeding confirmation.
   sendEmail?: SendEmail | null
   readTerms: ReadTerms
+  // Finds a domain's paid endpoints for the seeding picker.
+  discover?: DiscoverEndpoints
   resolveTxt?: ResolveTxt
   fetch?: typeof fetch
   assertPublic?: (url: string) => Promise<void>
@@ -192,6 +196,14 @@ export function merchantRoutes(deps: {
 }) {
   const app = new Hono()
   const now = deps.now ?? (() => new Date())
+  const discover =
+    deps.discover ??
+    endpointDiscoverer({
+      readTerms: deps.readTerms,
+      priceUsd,
+      fetcher: deps.fetch ?? fetch,
+      assertPublic: deps.assertPublic ?? assertPublicHttps,
+    })
   const hit = rateLimiter()
   const Email = z.email().max(254).toLowerCase()
   const codeKey = (email: string) => `merchant:${email}`
@@ -521,6 +533,13 @@ export function merchantRoutes(deps: {
       return c.json({ redirect })
     } catch (error) {
       if (error instanceof OauthError) {
+        // Kept so a sign-in that fails for an app can be traced in admin.
+        const client = await deps.store.oauthClient(text(body.client_id)).catch(() => null)
+        const detail = `${client?.name ?? "unknown app"}: ${error.code}${
+          error.code === "invalid_target" ? ` (${text(body.resource).slice(0, 200)})` : ""
+        }`
+        console.warn(`oauth approve refused for ${detail}`)
+        await record(email, "app_refused", null, detail)
         return c.json({ error: error.message, code: error.code }, error.status)
       }
       throw error
@@ -675,6 +694,35 @@ export function merchantRoutes(deps: {
     }
   )
 
+  // The paid endpoints a verified API publishes, for picking what to seed.
+  app.get("/claims/:domain/endpoints", async (c) => {
+    const found = await verifiedClaim(c)
+    if ("error" in found) return found.error
+    if (limited(c, "endpoints", 10, found.email)) {
+      return c.json({ error: "Too many tries. Wait a minute." }, 429)
+    }
+    const result = await discover(found.domain).catch(() => null)
+    if (!result) {
+      return c.json({ error: `Couldn't reach ${found.domain}. Try again.` }, 502)
+    }
+    return c.json({
+      domain: found.domain,
+      sources: result.sources,
+      skipped_templated: result.skipped_templated,
+      max_price_usd: SEED_MAX_PRICE_USD,
+      max_endpoints: SEED_MAX_ENDPOINTS,
+      endpoints: result.endpoints.map((endpoint) => ({
+        ...endpoint,
+        problem:
+          endpoint.price_usd === null
+            ? "No price found"
+            : endpoint.price_usd > SEED_MAX_PRICE_USD
+              ? `Over $${SEED_MAX_PRICE_USD.toFixed(2)}`
+              : null,
+      })),
+    })
+  })
+
   app.post(
     "/claims/:domain/seeding",
     bodyLimit({ maxSize: 8192 }),
@@ -698,13 +746,18 @@ export function merchantRoutes(deps: {
           400
         )
       }
-      // Sent once per API.
+      // One request per API. While it's open, sending again changes which
+      // endpoints it covers.
       const earlier = await deps.store.seedingRequests({ domain: found.domain })
-      if (earlier.length > 0) {
+      const open = earlier.find((request) => request.status === "open") ?? null
+      if (earlier.length > 0 && !open) {
         return c.json(
-          { error: "Seeding has already been requested for this API." },
+          { error: "Seeding has already been done for this API." },
           409
         )
+      }
+      if (open && body.data.endpoints.length === 0) {
+        return c.json({ error: "Pick at least one endpoint." }, 400)
       }
       if (limited(c, "seeding", 5, found.email)) {
         return c.json({ error: "Too many tries. Wait a minute." }, 429)
@@ -764,14 +817,46 @@ export function merchantRoutes(deps: {
           400
         )
       }
+      const endpoints = checked.map((endpoint) => ({
+        url: endpoint.url,
+        priceUsd: endpoint.price_usd as number,
+      }))
+      if (open) {
+        const updated = await deps.store.updateSeedingRequest(open.id, {
+          endpoints,
+          notes: body.data.notes || open.notes,
+        })
+        if (!updated) {
+          return c.json({ error: "This request was just handled. Refresh the page." }, 409)
+        }
+        await record(
+          found.email,
+          "seeding_updated",
+          found.domain,
+          `${endpoints.length} endpoint${endpoints.length === 1 ? "" : "s"}`
+        )
+        await deps
+          .notify?.(
+            `Seeding request updated: ${found.domain}`,
+            [
+              `${found.email} changed the endpoints to seed on ${found.domain}.`,
+              "",
+              ...endpoints.map((e) => `- ${e.url} ($${e.priceUsd} a call)`),
+              "",
+              `Total: $${endpoints.reduce((sum, e) => sum + e.priceUsd, 0).toFixed(3)}`,
+              ...(updated.notes ? ["", `Notes: ${updated.notes}`] : []),
+            ].join("\n")
+          )
+          .catch((error: Error) =>
+            console.error(`seeding notice failed: ${error.message}`)
+          )
+        return c.json(seedingView(updated))
+      }
       const request: SeedingRequest = {
         id: `sr_${randomUUID()}`,
         domain: found.domain,
         email: found.email,
-        endpoints: checked.map((endpoint) => ({
-          url: endpoint.url,
-          priceUsd: endpoint.price_usd as number,
-        })),
+        endpoints,
         notes: body.data.notes || null,
         status: "open",
         createdAt: now(),

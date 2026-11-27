@@ -21,6 +21,10 @@ const ACTIONS: Record<
     path: `claims/${encodeURIComponent(domain)}/seeding`,
     method: "POST",
   }),
+  endpoints: (domain) => ({
+    path: `claims/${encodeURIComponent(domain)}/endpoints`,
+    method: "GET",
+  }),
   key_create: () => ({ path: "keys", method: "POST" }),
   // For keys, "domain" carries the key's id.
   key_revoke: (id) => ({ path: `keys/${encodeURIComponent(id)}`, method: "DELETE" }),
@@ -43,7 +47,7 @@ export async function POST(request: Request) {
   const { status, data } = await merchantApi(path, {
     method,
     token,
-    body: input?.body ?? {},
+    ...(method !== "GET" && { body: input?.body ?? {} }),
   })
   return Response.json(data, { status })
 }

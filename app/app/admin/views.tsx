@@ -322,6 +322,10 @@ function providerEvent(event: NonNullable<Merchants["events"]>[number], i: numbe
       return { ...base, title: "revoked a key or app", icon: <KeyRound size={14} /> }
     case "app_connected":
       return { ...base, title: `connected ${event.detail ?? "an app"} to the providers MCP`, icon: <Plug size={14} />, tone: "success" }
+    case "app_refused":
+      return { ...base, title: "couldn't connect an app to the providers MCP", meta: event.detail ?? undefined, icon: <Plug size={14} />, tone: "danger" }
+    case "seeding_updated":
+      return { ...base, title: `changed the endpoints to seed on ${domain}`, meta: event.detail ?? undefined, icon: <Sprout size={14} /> }
     default:
       return { ...base, title: event.kind.replaceAll("_", " "), icon: <Globe size={14} /> }
   }

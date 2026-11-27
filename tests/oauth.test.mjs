@@ -252,3 +252,33 @@ test("OAuth endpoints answer browsers but stay out of the rest of the API", asyn
   assert.equal(validRedirectUri("vscode://vscode.github-authentication/did-authenticate"), true)
   assert.equal(verifyPkce("short", "x"), false)
 })
+
+test("an app may name any URL on this API as the resource, but not another server", async () => {
+  const ctx = setup()
+  const session = await signIn(ctx)
+  const register = await ctx.appFetch(
+    `${BASE}/oauth/register`,
+    json({ client_name: "Claude Code", redirect_uris: ["http://localhost:4000/callback"] })
+  )
+  const { client_id } = await register.json()
+  const { createHash } = await import("node:crypto")
+  const params = {
+    client_id,
+    redirect_uri: "http://localhost:4000/callback",
+    code_challenge: createHash("sha256").update("v".repeat(43)).digest("base64url"),
+    code_challenge_method: "S256",
+  }
+  const approveWith = (resource) =>
+    ctx.app.request("/v1/merchant/oauth/approve", json({ ...params, resource }, session))
+  for (const resource of [`${BASE}/mcp/providers`, `${BASE}/mcp/providers/`, `${BASE}/`, `${BASE}:443/mcp/providers`, BASE.toUpperCase()]) {
+    assert.equal((await approveWith(resource)).status, 200, resource)
+  }
+  const refused = await approveWith("https://evil.example/mcp/providers")
+  assert.equal(refused.status, 400)
+  const body = await refused.json()
+  assert.equal(body.code, "invalid_target")
+  assert.match(body.error, /different server/)
+  const events = await ctx.store.merchantEvents(20)
+  const failed = events.find((e) => e.kind === "app_refused")
+  assert.match(failed.detail, /Claude Code: invalid_target \(https:\/\/evil.example\/mcp\/providers\)/)
+})

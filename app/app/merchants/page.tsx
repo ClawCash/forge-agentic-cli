@@ -14,7 +14,7 @@ import { backdropReviews } from "./review-backdrop"
 import { SignIn } from "./sign-in"
 import { SignInShowcase } from "./sign-in-showcase"
 import { ConnectView } from "./connect-view"
-import { AddView, OverviewView, ProfileView, VerifyView } from "./views"
+import { AddView, OverviewView, ProfileView, SeedingView, VerifyView } from "./views"
 
 export const dynamic = "force-dynamic"
 
@@ -126,6 +126,15 @@ export default async function MerchantsPage({
     view = <AddView initial={domain ?? ""} first={claims.length === 0} />
   } else if (current.status !== "verified") {
     view = <VerifyView key={current.domain} claim={current} />
+  } else if (tab === "seeding") {
+    view = (
+      <SeedingView
+        key={current.domain}
+        claim={current}
+        request={(current.seeding_requests ?? [])[0] ?? null}
+        publicUrl={`${SITE_URL}/s/${current.domain}`}
+      />
+    )
   } else if (tab === "profile") {
     view = (
       <ProfileView

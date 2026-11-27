@@ -87,11 +87,23 @@ export function verifyPkce(verifier: string, challenge: string) {
   return computed.length === expected.length && timingSafeEqual(computed, expected)
 }
 
-// A resource the app may name: this MCP's URL, with or without a trailing slash.
-function rightResource(apiBase: string, resource: string | null | undefined) {
+// A resource the app may name. Codes and keys only ever work on this API, so
+// any URL on its origin is fine (apps differ on the path, a trailing slash or
+// the default port); another origin is refused, so a key meant for this MCP
+// is never handed to a different server.
+export function rightResource(apiBase: string, resource: string | null | undefined) {
   if (!resource) return true
-  return resource.replace(/\/$/, "") === resourceUrl(apiBase)
+  try {
+    const asked = new URL(resource)
+    const ours = new URL(apiBase)
+    return asked.protocol === ours.protocol && asked.host === ours.host
+  } catch {
+    return false
+  }
 }
+
+const WRONG_RESOURCE = (apiBase: string) =>
+  `This sign-in was started for a different server. Add ${resourceUrl(apiBase)} to your app and sign in again.`
 
 // The app's name and whether this redirect is one it registered, for the
 // approval page. Null when either is wrong, so nobody is sent anywhere.
@@ -130,7 +142,7 @@ export async function approveGrant(
     throw new OauthError(400, "invalid_request", "The app must use PKCE with S256.")
   }
   if (!rightResource(apiBase, input.resource)) {
-    throw new OauthError(400, "invalid_target", "That isn't this MCP.")
+    throw new OauthError(400, "invalid_target", WRONG_RESOURCE(apiBase))
   }
   const code = randomBytes(32).toString("base64url")
   await store.saveOauthCode({
@@ -168,7 +180,8 @@ export async function exchangeCode(
     throw new OauthError(400, "invalid_grant", "This code is invalid, used or expired.")
   }
   if (!rightResource(apiBase, body.get("resource"))) {
-    throw new OauthError(400, "invalid_target", "That isn't this MCP.")
+    console.warn(`oauth token refused for resource ${JSON.stringify(body.get("resource")?.slice(0, 300))}`)
+    throw new OauthError(400, "invalid_target", WRONG_RESOURCE(apiBase))
   }
   const client = await store.oauthClient(row.clientId)
   const connected = (await store.providerKeys(row.email)).filter((key) => key.name)

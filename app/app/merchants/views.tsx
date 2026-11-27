@@ -15,6 +15,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { AnimatedCounter } from "@/components/arc/animated-counter/animated-counter"
 import { Badge, type BadgeTone } from "@/components/arc/badge/badge"
 import { Button } from "@/components/arc/button/button"
+import { Checkbox } from "@/components/arc/checkbox/checkbox"
 import { CopyButton } from "@/components/arc/copy-button/copy-button"
 import { EmptyState } from "@/components/arc/empty-state/empty-state"
 import { Input } from "@/components/arc/input/input"
@@ -26,7 +27,7 @@ import { LinkButton } from "@/components/merchant/link-button"
 import { Card, Grid, Page } from "@/components/merchant/page"
 import { PageTabs } from "@/components/merchant/page-tabs"
 import { PromptBox } from "@/components/merchant/prompt-box"
-import type { ApiData, ApiReview, Claim, SeedingRequest } from "@/lib/merchant"
+import type { ApiData, ApiReview, Claim, EndpointScan, FoundEndpoint, SeedingRequest } from "@/lib/merchant"
 import type { Pointer } from "@/lib/merchant-pointers"
 import { verifyPrompt } from "@/lib/merchant-prompt"
 import { act } from "./act"
@@ -127,7 +128,7 @@ export function AddView({ initial, first }: { initial: string; first: boolean })
               <span className={styles.stepNumber}>3</span>
               <span>
                 <strong>See every review</strong>
-                <span>And ask us once to seed reviews from real paid calls.</span>
+                <span>And pick endpoints for us to seed with real paid calls.</span>
               </span>
             </li>
           </ol>
@@ -510,38 +511,26 @@ function Seeding({
   requests: SeedingRequest[]
   maxPrice: number
 }) {
-  const router = useRouter()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const canAsk = !requests.some((request) => request.domain === claim.domain)
-
-  async function ask() {
-    setBusy(true)
-    setError(null)
-    const { ok, data } = await act("seeding", claim.domain, {})
-    setBusy(false)
-    if (!ok) {
-      setError(String(data.error ?? "Couldn't send the request. Try again."))
-      return
-    }
-    router.refresh()
-  }
+  const mine = requests.filter((request) => request.domain === claim.domain)
+  const open = mine.find((request) => request.status === "open")
+  const picker = `?api=${encodeURIComponent(claim.domain)}&tab=seeding`
 
   return (
     <Card
       title="Seeding"
       description={
-        canAsk
-          ? `We pay for a few real calls to ${claim.domain}, up to $${maxPrice.toFixed(2)} each, and post honest reviews. You can ask once.`
-          : "Requests you've sent, newest first."
+        mine.length === 0
+          ? `Pick the endpoints you want reviewed. We pay for a real call to each, up to $${maxPrice.toFixed(2)} a call, and post honest reviews.`
+          : open
+            ? "You can change the endpoints until we've seeded them."
+            : "Requests you've sent, newest first."
       }
     >
-      {canAsk && (
+      {(mine.length === 0 || open) && (
         <div className={styles.seedAsk}>
-          <Button onClick={ask} loading={busy}>
-            Request seeding
-          </Button>
-          {error && <ErrorText>{error}</ErrorText>}
+          <LinkButton href={picker} variant={open ? "secondary" : "primary"}>
+            {open ? "Change endpoints" : "Choose endpoints"}
+          </LinkButton>
         </div>
       )}
       {requests.length > 0 && (
@@ -556,6 +545,8 @@ function Seeding({
                     {request.status === "seeded"
                       ? `Seeded ${day(request.updated_at)}`
                       : `Sent ${day(request.created_at)}`}
+                    {request.endpoints.length > 0 &&
+                      ` · ${request.endpoints.length} ${request.endpoints.length === 1 ? "endpoint" : "endpoints"}`}
                   </small>
                 </span>
                 <Badge tone={status.tone} size="sm">
@@ -574,7 +565,7 @@ const PROFILE_FIELDS = ["name", "description", "docs_url", "spec_url", "pricing_
 type ProfileValues = Record<(typeof PROFILE_FIELDS)[number], string>
 
 // The sections of one verified API, under its title.
-function apiTabs(claim: Claim, active: "overview" | "profile") {
+function apiTabs(claim: Claim, active: "overview" | "profile" | "seeding") {
   const base = `?api=${encodeURIComponent(claim.domain)}`
   return (
     <PageTabs
@@ -583,6 +574,7 @@ function apiTabs(claim: Claim, active: "overview" | "profile") {
       items={[
         { id: "overview", label: "Overview", href: base },
         { id: "profile", label: "Profile", href: `${base}&tab=profile` },
+        { id: "seeding", label: "Seeding", href: `${base}&tab=seeding` },
       ]}
     />
   )
@@ -835,6 +827,312 @@ export function OverviewView({
         </div>
       </Grid>
 
+    </Page>
+  )
+}
+
+// ---------------------------------------------------------------- Seeding
+
+// $5.00, $0.05, $0.018, $0.0025: cents always, more digits only when they matter.
+const money = (usd: number) => {
+  if (usd >= 1) return `$${usd.toFixed(2)}`
+  const [whole, cents = ""] = usd.toFixed(4).replace(/0+$/, "").split(".")
+  return `$${whole}.${cents.padEnd(2, "0")}`
+}
+
+type Problem = { url: string; problem: string | null }
+
+// Picking what to seed: the paid endpoints the API publishes, read from its
+// openapi.json and /.well-known/x402, with a box beside each cheap enough one.
+export function SeedingView({
+  claim,
+  request,
+  publicUrl,
+}: {
+  claim: Claim
+  request: SeedingRequest | null
+  publicUrl: string
+}) {
+  const router = useRouter()
+  const [scan, setScan] = useState<EndpointScan | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [extra, setExtra] = useState<FoundEndpoint[]>([])
+  const [picked, setPicked] = useState<Set<string>>(
+    () => new Set(request?.endpoints.map((endpoint) => endpoint.url) ?? [])
+  )
+  const [adding, setAdding] = useState("")
+  const [notes, setNotes] = useState(request?.notes ?? "")
+  const [state, setState] = useState<"idle" | "busy" | "sent">("idle")
+  // Said once a send works; the request exists after it either way.
+  const [sentLabel, setSentLabel] = useState("Request sent")
+  const [error, setError] = useState<string | null>(null)
+  const [problems, setProblems] = useState<Problem[]>([])
+  const [showBlocked, setShowBlocked] = useState(false)
+  const locked = !!request && request.status !== "open"
+
+  async function load() {
+    setLoadError(null)
+    setScan(null)
+    const { ok, data } = await act("endpoints", claim.domain, {})
+    if (!ok) {
+      setLoadError(String(data.error ?? "Couldn't read your API. Try again."))
+      return
+    }
+    setScan(data as unknown as EndpointScan)
+  }
+
+  useEffect(() => {
+    void load()
+    // Loads once per API; the page is keyed by domain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const max = scan?.max_endpoints ?? 10
+  const maxPrice = scan?.max_price_usd ?? 0.05
+  // Endpoints from the last request that the scan no longer finds stay listed.
+  const known = new Set([...(scan?.endpoints ?? []), ...extra].map((endpoint) => endpoint.url))
+  const leftover: FoundEndpoint[] = (request?.endpoints ?? [])
+    .filter((endpoint) => !known.has(endpoint.url))
+    .map((endpoint) => ({
+      url: endpoint.url,
+      path: new URL(endpoint.url).pathname,
+      methods: [],
+      summary: "From your request",
+      price_usd: endpoint.price_usd,
+      price_source: "live",
+      protocols: [],
+      problem: null,
+    }))
+  const all = [...(scan?.endpoints ?? []), ...leftover, ...extra]
+  const seedable = all.filter((endpoint) => !endpoint.problem)
+  const blocked = all.filter((endpoint) => endpoint.problem)
+  const chosen = all.filter((endpoint) => picked.has(endpoint.url))
+  const total = chosen.reduce((sum, endpoint) => sum + (endpoint.price_usd ?? 0), 0)
+  const firstMax = seedable.slice(0, max)
+  const allPicked = firstMax.length > 0 && firstMax.every((endpoint) => picked.has(endpoint.url))
+  const somePicked = chosen.length > 0
+
+  function toggle(url: string, on: boolean) {
+    setPicked((old) => {
+      const next = new Set(old)
+      if (on && next.size < max) next.add(url)
+      if (!on) next.delete(url)
+      return next
+    })
+    setState("idle")
+  }
+
+  function toggleAll() {
+    setPicked(allPicked ? new Set() : new Set(firstMax.map((endpoint) => endpoint.url)))
+    setState("idle")
+  }
+
+  function addByUrl(event: FormEvent) {
+    event.preventDefault()
+    let url: URL
+    try {
+      url = new URL(/^https?:\/\//i.test(adding) ? adding : `https://${adding}`)
+    } catch {
+      setError("That isn't a URL.")
+      return
+    }
+    const host = url.hostname.toLowerCase().replace(/^www\./, "")
+    if (host !== claim.domain) {
+      setError(`Only endpoints on ${claim.domain} can be seeded.`)
+      return
+    }
+    const clean = `https://${url.host.toLowerCase()}${url.pathname.replace(/\/+$/, "")}`
+    setError(null)
+    setAdding("")
+    if (!all.some((endpoint) => endpoint.url === clean)) {
+      setExtra((old) => [
+        ...old,
+        { url: clean, path: url.pathname, methods: [], summary: "Added by you. Its price is checked when you send.", price_usd: null, price_source: null, protocols: [], problem: null },
+      ])
+    }
+    toggle(clean, true)
+  }
+
+  async function send() {
+    const updating = !!request
+    setState("busy")
+    setError(null)
+    setProblems([])
+    const { ok, data } = await act("seeding", claim.domain, {
+      endpoints: chosen.map((endpoint) => endpoint.url),
+      notes: notes.trim() || undefined,
+    })
+    if (!ok) {
+      setState("idle")
+      setError(String(data.error ?? "Couldn't send the request. Try again."))
+      if (Array.isArray(data.endpoints)) setProblems((data.endpoints as Problem[]).filter((row) => row.problem))
+      return
+    }
+    setSentLabel(updating ? "Request updated" : "Request sent")
+    setState("sent")
+    router.refresh()
+  }
+
+  const status = request ? (SEED_STATUS[request.status] ?? SEED_STATUS.open) : null
+  const sources = scan?.sources.length
+    ? scan.sources.map((source) => `${claim.domain}/${source}`).join(" and ")
+    : null
+
+  return (
+    <Page
+      title={apiTitle(claim)}
+      description={apiMeta(claim)}
+      actions={publicLink(publicUrl)}
+      tabs={apiTabs(claim, "seeding")}
+    >
+      <Grid columns="2-1" align="start">
+        <Card
+          title="Endpoints to seed"
+          description={
+            sources
+              ? `Found in ${sources}. Pick up to ${max} that cost ${money(maxPrice)} or less a call.`
+              : `Pick up to ${max} endpoints that cost ${money(maxPrice)} or less a call.`
+          }
+          actions={
+            seedable.length > 0 && !locked ? (
+              <Checkbox
+                label={seedable.length > max ? `First ${max}` : "Select all"}
+                checked={allPicked ? true : somePicked ? "indeterminate" : false}
+                onCheckedChange={toggleAll}
+              />
+            ) : undefined
+          }
+        >
+          {loadError ? (
+            <div className={styles.seedAsk}>
+              <ErrorText>{loadError}</ErrorText>
+              <Button variant="secondary" onClick={load}>
+                Try again
+              </Button>
+            </div>
+          ) : !scan ? (
+            <p className={styles.scanning}>
+              <TextShimmer>Reading your API&apos;s paid endpoints</TextShimmer>
+            </p>
+          ) : all.length === 0 ? (
+            <EmptyState
+              title="No paid endpoints found"
+              description={`We look for x-payment-info in ${claim.domain}/openapi.json and for ${claim.domain}/.well-known/x402. Add an endpoint by its URL below instead.`}
+            />
+          ) : (
+            <ul className={styles.endpoints}>
+              {[...seedable, ...(showBlocked || seedable.length === 0 ? blocked : [])].map((endpoint) => {
+                const off = !!endpoint.problem || locked
+                const on = picked.has(endpoint.url)
+                return (
+                  <li key={endpoint.url} data-off={off || undefined}>
+                    <Checkbox
+                      aria-label={`Seed ${endpoint.path}`}
+                      checked={on}
+                      disabled={off || (!on && picked.size >= max)}
+                      onCheckedChange={(next) => toggle(endpoint.url, next === true)}
+                    />
+                    <span className={styles.endpointText}>
+                      <code>{endpoint.path}</code>
+                      {(endpoint.summary || endpoint.methods.length > 0) && (
+                        <small>
+                          {[endpoint.methods.join(", "), endpoint.summary].filter(Boolean).join(" · ")}
+                        </small>
+                      )}
+                    </span>
+                    <span className={styles.endpointPrice}>
+                      {endpoint.price_usd === null ? "?" : money(endpoint.price_usd)}
+                      {endpoint.problem && <small>{endpoint.problem}</small>}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {blocked.length > 0 && seedable.length > 0 && (
+            <button type="button" className={styles.moreEndpoints} onClick={() => setShowBlocked((open) => !open)} aria-expanded={showBlocked}>
+              {showBlocked
+                ? "Hide the ones seeding can't cover"
+                : `${blocked.length} more ${blocked.length === 1 ? "endpoint costs" : "endpoints cost"} over ${money(maxPrice)} or ${blocked.length === 1 ? "has" : "have"} no price`}
+            </button>
+          )}
+          {scan && scan.skipped_templated > 0 && (
+            <p className={styles.scanNote}>
+              {scan.skipped_templated} {scan.skipped_templated === 1 ? "endpoint needs" : "endpoints need"} a value in the path, like /items/&#123;id&#125;. Add one by its full URL to seed it.
+            </p>
+          )}
+          {!locked && scan && (
+            <form className={styles.addEndpoint} onSubmit={addByUrl}>
+              <Input
+                label="Add an endpoint by URL"
+                placeholder={`https://${claim.domain}/v1/search`}
+                value={adding}
+                onChange={(event) => setAdding(event.target.value)}
+                inputMode="url"
+              />
+              <Button type="submit" variant="secondary" disabled={!adding.trim()}>
+                Add
+              </Button>
+            </form>
+          )}
+        </Card>
+
+        <Card
+          className={styles.stickyCard}
+          title="Your request"
+          description={
+            locked
+              ? request?.status === "seeded"
+                ? `Seeded ${day(request.updated_at)}. The reviews are on your API's page.`
+                : "We couldn't seed this one. Reply to our email if you'd like us to look again."
+              : "We pay for one real call to each endpoint and review what comes back. Seeded reviews say so, and claiming your API never changes a rating."
+          }
+          actions={status ? <Badge tone={status.tone} size="sm">{status.label}</Badge> : undefined}
+        >
+          <div className={styles.requestSummary}>
+            <dl className={styles.summary}>
+              <div>
+                <dt>Endpoints</dt>
+                <dd>
+                  {chosen.length} of {max}
+                </dd>
+              </div>
+              <div>
+                <dt>We pay</dt>
+                <dd>{money(total)}</dd>
+              </div>
+            </dl>
+            {!locked && (
+              <>
+                <Textarea
+                  label="Notes for us"
+                  placeholder="Which task to try each endpoint on, or an input that shows it off."
+                  maxLength={1000}
+                  rows={3}
+                  value={notes}
+                  onChange={(event) => {
+                    setNotes(event.target.value)
+                    setState("idle")
+                  }}
+                />
+                <Button onClick={send} loading={state === "busy"} disabled={chosen.length === 0 || state === "sent"}>
+                  {state === "sent" ? sentLabel : request ? "Update request" : "Request seeding"}
+                </Button>
+              </>
+            )}
+            {error && <ErrorText>{error}</ErrorText>}
+            {problems.length > 0 && (
+              <ul className={styles.problems}>
+                {problems.map((row) => (
+                  <li key={row.url}>
+                    <code>{row.url.replace(/^https:\/\/[^/]+/, "")}</code> {row.problem}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Card>
+      </Grid>
     </Page>
   )
 }

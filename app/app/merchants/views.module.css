@@ -549,3 +549,142 @@
   align-items: center;
   gap: 2px;
 }
+
+/* Seeding: the endpoint picker. */
+.scanning {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.endpoints {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.endpoints li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+.endpoints li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.endpoints li[data-off] .endpointText code {
+  color: var(--text-secondary);
+}
+
+.endpointText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding-top: 7px;
+}
+
+.endpointText code {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.endpointText small,
+.endpointPrice small {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.endpointPrice {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding-top: 7px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.scanNote {
+  margin: var(--space-3) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.addEndpoint {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.requestSummary {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.summary dt {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.summary dd {
+  margin: 2px 0 0;
+  font-size: var(--text-lg);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.problems {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.problems code {
+  overflow-wrap: anywhere;
+}
+
+.moreEndpoints {
+  justify-self: start;
+  margin-top: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.moreEndpoints:hover {
+  color: var(--foreground);
+}
+
+/* The request stays in view while a long list of endpoints scrolls. */
+@media (min-width: 1024px) {
+  .stickyCard {
+    position: sticky;
+    top: var(--space-6);
+  }
+}

@@ -25,6 +25,27 @@ export interface SeedingRequest {
   updated_at: string
 }
 
+// A paid endpoint found in the API's openapi.json or /.well-known/x402.
+export interface FoundEndpoint {
+  url: string
+  path: string
+  methods: string[]
+  summary: string | null
+  price_usd: number | null
+  price_source: "listed" | "live" | null
+  protocols: string[]
+  problem: string | null
+}
+
+export interface EndpointScan {
+  domain: string
+  sources: string[]
+  skipped_templated: number
+  max_price_usd: number
+  max_endpoints: number
+  endpoints: FoundEndpoint[]
+}
+
 export interface MerchantProfile {
   name: string | null
   description: string | null
