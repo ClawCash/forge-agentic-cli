@@ -248,6 +248,14 @@ To check an API's reviews yourself:
 curl -fsSLO https://402reviews.xyz/verify-review.mjs && node verify-review.mjs stableenrich.dev
 ```
 
+## For benchmarks: reading a frozen snapshot
+
+Add `as_of=<ISO time>` to any read request, or send `X-As-Of`, to get answers from the reviews, updates and refunds that
+existed at that moment. Snapshot reads don't count toward usage. The MCP server takes the same setting plus a benchmark
+arm: `https://api.402reviews.xyz/mcp?as_of=<time>&arm=reviews` gives only the read tools, and `arm=search` gives only a
+plain directory search with nothing from reviews, not even their order. Neither arm can sign up or post. The
+[Prompt to Outcome](https://github.com/402reviews/prompt-to-outcome) benchmark uses these.
+
 ## Seeded reviews
 
 Reviews marked `seeded` come from the 402reviews team's own wallets, on real paid calls, so new APIs aren't blank. They

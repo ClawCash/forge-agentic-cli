@@ -34,6 +34,7 @@ import {
 } from "./brief.ts"
 import { fingerprintOf } from "./fingerprint.ts"
 import { attachRefund, refundView } from "./refunds.ts"
+import { asOfAware, asOfScope, parseAsOf } from "./snapshot.ts"
 import { isSeeded } from "./seed.ts"
 import { adminRoutes } from "./admin.ts"
 import {
@@ -439,7 +440,9 @@ const EMPTY_PROFILE_FRESH_MS = 3_600_000
 const PROFILE_WAIT_MS = 2500
 const PROFILES_PER_REQUEST = 6
 
-export function v1Routes(deps: V1Deps) {
+export function v1Routes(given: V1Deps) {
+  // Reviews as of ?as_of= when a request asks for a past moment (benchmarks).
+  const deps: V1Deps = { ...given, store: asOfAware(given.store) }
   const app = new Hono<{ Variables: { user: ApiUser | null } }>()
   const findRefund = deps.findRefund ?? chainRefunds()
 
@@ -472,6 +475,15 @@ export function v1Routes(deps: V1Deps) {
     )
   })
 
+  // ?as_of=<ISO time> or X-As-Of: answer from the reviews as they stood then.
+  app.use("*", async (c, next) => {
+    const asked = c.req.query("as_of") ?? c.req.header("x-as-of")
+    if (!asked) return next()
+    const at = parseAsOf(asked)
+    if (!at) return c.json({ error: "as_of must be a past ISO time, like 2026-11-28T00:00:00Z" }, 400)
+    return asOfScope.run(at, () => next())
+  })
+
   app.use("*", async (c, next) => {
     const kind = USAGE_KINDS.find(([path]) => path.test(c.req.path))?.[1]
     if (!kind) return next()
@@ -489,6 +501,8 @@ export function v1Routes(deps: V1Deps) {
     const user = key ? await deps.store.userForKey(hashKey(key)) : null
     c.set("user", user)
     await next()
+    // Snapshot reads come from benchmarks, not agents choosing an API.
+    if (asOfScope.getStore()) return
     const kind = USAGE_KINDS.find(([path]) => path.test(c.req.path))?.[1]
     if (!kind) return
     void deps.store
@@ -982,11 +996,12 @@ export function v1Routes(deps: V1Deps) {
         q: z.string().trim().min(2).max(200),
         task: Task.optional(),
         limit: z.coerce.number().int().min(1).max(20).default(10),
+        plain: z.enum(["1", "true"]).optional(),
       })
       .safeParse(c.req.query())
     if (!parsed.success)
       return c.json({ error: "Pass ?q=<what you need>" }, 400)
-    const { q, task, limit } = parsed.data
+    const { q, task, limit, plain } = parsed.data
     let resources: any[]
     try {
       const res = await fetcher(
@@ -999,6 +1014,28 @@ export function v1Routes(deps: V1Deps) {
       return c.json({ error: "Directory search is unavailable" }, 503)
     }
     const urls = resources.map((r) => r.resource as string).filter(parseableUrl)
+    const priceOf = (listing: any) => {
+      const accept = listing?.accepts?.[0]
+      return accept?.amount && /^\d+$/.test(accept.amount)
+        ? priceUsd(accept.asset ?? "", BigInt(accept.amount))
+        : null
+    }
+    // ?plain=1: the directory's own order and listing, with nothing from
+    // reviews, not even the order. The search-only arm of Prompt to Outcome.
+    if (plain) {
+      return c.json({
+        query: q,
+        results: urls.slice(0, limit).map((url) => {
+          const listing = resources.find((r) => r.resource === url)
+          return {
+            url,
+            description: listing?.description ?? null,
+            service: listing?.serviceName ?? null,
+            price_usd: priceOf(listing),
+          }
+        }),
+      })
+    }
     const ratings = urls.length ? await check(urls, { task }) : []
     // Within a verdict, most likely to work first. An unreviewed API ranks as
     // a typical one for the task: above a bad review, below a good one.
