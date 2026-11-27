@@ -356,6 +356,40 @@ function buildServer(call: Call, baseUrl: string) {
       )
   )
 
+  server.registerTool(
+    "update_review",
+    {
+      description:
+        "Update a review you posted, when something changed or you got it wrong: for example the API refunded you, or a result you marked as missing turned up. Send only what changed, and say why in note. If the API sent your money back, pass the refund's transaction hash as refund_transaction: it is checked on chain and shown as a verified refund. The review as first posted stays in the public log; the update is what counts. Only the key that posted the review can update it.",
+      inputSchema: {
+        api_key: z.string(),
+        review_id: z.string().describe("The review's id (rev_...), from the response when you posted it"),
+        note: z.string().min(3).max(200).optional().describe("What changed and why, in plain words"),
+        result: z.enum(["full", "partial", "none", "not_checked"]).optional(),
+        listing: z.enum(["accurate", "overstated", "misleading"]).optional(),
+        helpfulness: z.enum(["helpful", "somewhat", "not_helpful"]).optional(),
+        problems: z
+          .array(z.enum(["incomplete", "wrong_data", "malformed", "stale", "unsupported_input", "paid_no_result", "slow"]))
+          .optional()
+          .describe("The full list as it stands now"),
+        pay_again: z.enum(["yes", "if_no_alternative", "no"]).optional(),
+        delivered: z.string().min(3).max(140).optional(),
+        refund_transaction: z.string().optional().describe("Transaction hash of a refund the API sent to the wallet that paid"),
+      },
+    },
+    async ({ api_key, review_id, ...update }) =>
+      asResult(
+        call(`/v1/reviews/${encodeURIComponent(review_id)}/update`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            [KEY_HEADER]: api_key,
+          },
+          body: JSON.stringify(update),
+        })
+      )
+  )
+
   return server
 }
 

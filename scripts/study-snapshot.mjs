@@ -30,7 +30,10 @@ const reviews = services.flatMap((s) =>
   (s.reviews ?? []).map((r) => ({ ...r, latency_ms: latency.get(`${s.domain}${r.endpoint}`) ?? null }))
 )
 
-const refunded = (r) => /refund/i.test(`${r.delivered ?? ""} ${r.note ?? ""}`)
+// A refund verified on chain, or one the reviewer described before that existed.
+const refunded = (r) =>
+  Boolean(r.refund?.verified) ||
+  /\brefund(ed)?\b/i.test(`${r.delivered ?? ""} ${r.note ?? ""}`.replace(/no refund|refund_status none/gi, ""))
 const keptNothing = (r) => r.result === "none" && !refunded(r)
 const fellShort = (r) => (r.result === "none" || r.result === "partial") && !refunded(r)
 const overpromised = (r) => r.listing === "overstated" || r.listing === "misleading"

@@ -174,6 +174,31 @@ export interface ServiceReview {
     latency_ms: number | null
   } | null
   created_at: string
+  // Set when the author updated the review or a refund was verified: the
+  // fields above are as it stands now, `original` as first posted.
+  original?: {
+    result: string
+    listing: string
+    satisfaction: string
+    problems: string[]
+    pay_again: string | null
+    delivered: string | null
+    note: string | null
+  } | null
+  updates?: number
+  updated_at?: string | null
+  refund?: ReviewRefund | null
+}
+
+// Money the API sent back to the wallet that paid, checked on chain.
+export interface ReviewRefund {
+  verified: true
+  amount_usd: number | null
+  refunded_at: string
+  minutes_after_payment: number
+  added_by: "reviewer" | "provider"
+  transaction: string
+  transaction_url: string | null
 }
 
 export const HELPFUL: Record<string, string> = {

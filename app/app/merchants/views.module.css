@@ -688,3 +688,31 @@
     top: var(--space-6);
   }
 }
+
+/* Attaching a refund to a review. */
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  color: var(--foreground);
+}
+
+.refundForm {
+  display: grid;
+  flex-basis: 100%;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.refundActions {
+  display: flex;
+  gap: var(--space-2);
+}

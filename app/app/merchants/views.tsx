@@ -362,8 +362,65 @@ const FILTERS = [
   { value: "none", label: "Failed" },
 ]
 
-function ReviewRow({ review, reduce }: { review: ApiReview; reduce: boolean }) {
+// "35 min", "5 h", "3 days" after the payment.
+const laterBy = (minutes: number) =>
+  minutes < 90 ? `${minutes} min` : minutes < 48 * 60 ? `${Math.round(minutes / 60)} h` : `${Math.round(minutes / 1440)} days`
+
+// For a review whose payment the owner sent back: paste the transaction and
+// it's checked on chain. The agent's words stay as written.
+function AddRefund({ domain, review }: { domain: string; review: ApiReview }) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [transaction, setTransaction] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function attach(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    const { ok, data } = await act("refund", domain, { review_id: review.id, transaction: transaction.trim() })
+    setBusy(false)
+    if (!ok) {
+      setError(String(data.error ?? "Couldn't check that refund. Try again."))
+      return
+    }
+    setOpen(false)
+    router.refresh()
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className={styles.linkButton} onClick={() => setOpen(true)}>
+        Refunded this one?
+      </button>
+    )
+  }
+  return (
+    <form className={styles.refundForm} onSubmit={attach}>
+      <Input
+        label="Refund transaction"
+        placeholder="0x…"
+        value={transaction}
+        onChange={(event) => setTransaction(event.target.value)}
+        description={`We check that the chain shows${review.price_usd != null ? ` $${review.price_usd}` : " the full price"} going back to the agent's wallet after it paid. The review's words stay as the agent wrote them.`}
+      />
+      <div className={styles.refundActions}>
+        <Button type="submit" size="sm" loading={busy} disabled={!transaction.trim()}>
+          Check and attach
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </form>
+  )
+}
+
+function ReviewRow({ review, reduce, domain }: { review: ApiReview; reduce: boolean; domain: string }) {
   const result = RESULT[review.result] ?? RESULT.not_checked
+  const refundable = !review.refund && (review.result === "none" || review.result === "partial")
   return (
     <motion.li
       layout={!reduce}
@@ -377,6 +434,11 @@ function ReviewRow({ review, reduce }: { review: ApiReview; reduce: boolean }) {
         <Badge tone={result.tone} size="sm" dot>
           {result.label}
         </Badge>
+        {review.refund && (
+          <Badge tone="success" size="sm">
+            Refunded
+          </Badge>
+        )}
         <span className={styles.reviewTask}>{review.task}</span>
         <code className={styles.reviewEndpoint}>{review.endpoint}</code>
         <span className={styles.reviewDate}>{day(review.created_at)}</span>
@@ -406,12 +468,20 @@ function ReviewRow({ review, reduce }: { review: ApiReview; reduce: boolean }) {
             Payment <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
           </a>
         )}
+        {review.refund?.transaction_url && (
+          <a href={review.refund.transaction_url} target="_blank" rel="noreferrer">
+            Refund, {laterBy(review.refund.minutes_after_payment)} later{" "}
+            <ExternalLink size={12} strokeWidth={1.75} aria-hidden="true" />
+          </a>
+        )}
+        {(review.updates ?? 0) > 0 && <span>Updated by the agent</span>}
+        {refundable && <AddRefund domain={domain} review={review} />}
       </div>
     </motion.li>
   )
 }
 
-function Reviews({ reviews }: { reviews: ApiReview[] }) {
+function Reviews({ reviews, domain }: { reviews: ApiReview[]; domain: string }) {
   const reduce = !!useReducedMotion()
   const [filter, setFilter] = useState("all")
   const shown =
@@ -454,7 +524,7 @@ function Reviews({ reviews }: { reviews: ApiReview[] }) {
         <ul className={styles.reviews}>
           <AnimatePresence initial={false} mode="popLayout">
             {shown.map((review) => (
-              <ReviewRow key={review.id} review={review} reduce={reduce} />
+              <ReviewRow key={review.id} review={review} reduce={reduce} domain={domain} />
             ))}
           </AnimatePresence>
         </ul>
@@ -820,7 +890,7 @@ export function OverviewView({
       </div>
 
       <Grid columns="2-1">
-        <Reviews reviews={reviews} />
+        <Reviews reviews={reviews} domain={claim.domain} />
         <div className={styles.column}>
           <Pointers pointers={pointers} />
           <Seeding claim={claim} requests={requests} maxPrice={maxPrice} />

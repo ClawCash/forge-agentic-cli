@@ -100,6 +100,7 @@ test("an agent is told when to act, and sees the tools", async () => {
     "set_auto_review",
     "sign_up",
     "top_apis",
+    "update_review",
     "verify_code",
   ])
 })

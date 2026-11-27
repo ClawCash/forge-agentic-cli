@@ -68,6 +68,21 @@ export interface FindPayments {
 
 export class ChainUnavailableError extends Error {}
 
+// Money sent back to the wallet that paid, read from one transaction.
+export type RefundLookup =
+  | { status: "found"; amount: bigint; refundedAt: Date }
+  | { status: "not_found" }
+  | { status: "unsupported" }
+
+export interface FindRefund {
+  (args: {
+    network: string
+    transaction: string
+    asset: string
+    to: string
+  }): Promise<RefundLookup>
+}
+
 const TRANSFER = parseAbiItem(
   "event Transfer(address indexed from, address indexed to, uint256 value)"
 )
@@ -261,6 +276,59 @@ function solanaFinder(rpcUrl: string, fetcher: typeof fetch) {
     }
   }
   return find
+}
+
+function evmRefunds(rpcUrl: string): FindRefund {
+  const client = createPublicClient({ transport: http(rpcUrl) })
+  return async ({ transaction, asset, to }) => {
+    if (!isHash(transaction) || !isEvm(asset) || !isEvm(to)) {
+      return { status: "not_found" }
+    }
+    let receipt
+    try {
+      receipt = await client.getTransactionReceipt({ hash: transaction })
+    } catch (error) {
+      if ((error as Error).name === "TransactionReceiptNotFoundError") {
+        return { status: "not_found" }
+      }
+      throw new ChainUnavailableError((error as Error).message)
+    }
+    if (receipt.status !== "success") return { status: "not_found" }
+    const recipient = `0x000000000000000000000000${to.slice(2).toLowerCase()}`
+    const amount = receipt.logs
+      .filter(
+        (log) =>
+          isAddressEqual(log.address, asset as Hex) &&
+          log.topics[0] ===
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" &&
+          log.topics[2]?.toLowerCase() === recipient &&
+          log.topics[1]?.toLowerCase() !== recipient
+      )
+      .reduce((sum, log) => sum + BigInt(log.data), 0n)
+    if (amount === 0n) return { status: "not_found" }
+    const block = await client
+      .getBlock({ blockNumber: receipt.blockNumber })
+      .catch((error: Error) => {
+        throw new ChainUnavailableError(error.message)
+      })
+    return {
+      status: "found",
+      amount,
+      refundedAt: new Date(Number(block.timestamp) * 1000),
+    }
+  }
+}
+
+// Refunds are checked on the EVM chains reviews are paid on.
+export function chainRefunds(
+  env: Record<string, string | undefined> = process.env
+): FindRefund {
+  const checkers: Record<string, FindRefund> = {
+    [BASE]: evmRefunds(env.BASE_RPC_URL ?? "https://base-rpc.publicnode.com"),
+    [TEMPO]: evmRefunds(env.TEMPO_RPC_URL ?? "https://rpc.tempo.xyz"),
+  }
+  return async (args) =>
+    checkers[args.network]?.(args) ?? { status: "unsupported" }
 }
 
 export function chainFinder(

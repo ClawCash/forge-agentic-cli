@@ -58,9 +58,13 @@ function canonical(value) {
   return value ?? null
 }
 
+// A review its author updated, or that has a verified refund, shows its
+// current fields at the top and the ones first published under `original`.
+// The fingerprint covers the first ones.
 export function fingerprintOf(review) {
+  const first = review.original ? { ...review, ...review.original } : review
   const record = Object.fromEntries(
-    AUDITED_FIELDS.map((field) => [field, review[field]])
+    AUDITED_FIELDS.map((field) => [field, first[field]])
   )
   if (review.seeded) record.seeded = true
   const hash = createHash("sha256").update(JSON.stringify(canonical(record)))

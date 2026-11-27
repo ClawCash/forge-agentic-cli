@@ -136,11 +136,74 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
+// "35 minutes", "2 hours", "3 days" after the payment.
+function after(minutes: number) {
+  if (minutes < 90) return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `${hours} hours`
+  return `${Math.round(hours / 24)} days`
+}
+
+// What changed since the review was posted: the author's update and a refund
+// the chain confirmed. The first version stays readable.
+function ReviewChanges({ review }: { review: ServiceReview }) {
+  const { refund, original } = review
+  const updated = (review.updates ?? 0) > 0 && original
+  if (!refund && !updated) return null
+  const changed = (field: keyof NonNullable<ServiceReview["original"]>) =>
+    updated && JSON.stringify(original[field]) !== JSON.stringify(review[field])
+  return (
+    <Group title="Changes since it was posted">
+      {refund && (
+        <>
+          <Line label="Refund">
+            {refund.amount_usd !== null ? `$${refund.amount_usd}` : "The full price"} went back to the paying wallet{" "}
+            {after(refund.minutes_after_payment)} after payment. Verified on chain.
+          </Line>
+          <Line label="Refund transaction">
+            {refund.transaction_url ? (
+              <a
+                href={refund.transaction_url}
+                target="_blank"
+                rel="noreferrer nofollow"
+                className="inline-flex items-center gap-0.5 font-mono text-[12px] underline-offset-4 hover:underline"
+              >
+                {shorten(refund.transaction)}
+                <ArrowUpRight className="size-3" />
+              </a>
+            ) : (
+              <span className="font-mono text-[12px]">{shorten(refund.transaction)}</span>
+            )}
+          </Line>
+          <Line label="Added by">{refund.added_by === "provider" ? "The API's verified owner" : "The agent that wrote the review"}</Line>
+        </>
+      )}
+      {updated && (
+        <>
+          <Line label="Updated by its author">
+            {review.updated_at ? shortDate(review.updated_at) : "Yes"}
+            {(review.updates ?? 0) > 1 && `, ${review.updates} times`}
+          </Line>
+          {changed("note") && original.note && <Line label="First note">{original.note}</Line>}
+          {changed("delivered") && original.delivered && (
+            <Line label="First said it delivered">{original.delivered}</Line>
+          )}
+          {changed("result") && <Line label="First result">{RESULT[original.result] ?? original.result}</Line>}
+          {changed("problems") && original.problems.length > 0 && (
+            <Line label="First problems">{original.problems.map(humanize).join(", ")}</Line>
+          )}
+        </>
+      )}
+    </Group>
+  )
+}
+
 function ReviewDetails({ review }: { review: ServiceReview }) {
   const { score, output } = review
   const resultShare = score.result === null ? 0 : 1 - score.helpfulness_share
   return (
     <div className="caption mb-4 space-y-4 rounded-[10px] bg-paper p-4">
+      <ReviewChanges review={review} />
       <Group title="What the agent reported">
         <Line label="What it was doing">
           {review.task_description ?? taskLabel(review.task)}
@@ -297,8 +360,17 @@ function ReviewRow({ review }: { review: ServiceReview }) {
                 Seeded by 402reviews
               </span>
             )}
+            {review.refund && (
+              <span
+                title="The API sent the payment back to the agent's wallet. Checked on chain."
+                className="rounded-full bg-paper px-2 py-0.5 text-[11px] whitespace-nowrap text-ok"
+              >
+                Refunded
+              </span>
+            )}
             <span className="ml-auto text-[12px] whitespace-nowrap text-muted">
               {shortDate(review.created_at)}
+              {review.updated_at && (review.updates ?? 0) > 0 && " · Updated"}
             </span>
           </span>
           {review.task_description && (

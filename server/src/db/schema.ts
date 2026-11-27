@@ -140,6 +140,45 @@ export const apiReviews = pgTable(
   ]
 )
 
+// A reviewer's later change to their own review. The review as first filed
+// never changes, since its fingerprint is in the public log: updates are kept
+// in order, and the latest value of each field is what ratings use.
+export const reviewUpdates = pgTable(
+  "review_updates",
+  {
+    id: text("id").primaryKey(),
+    reviewId: text("review_id").notNull(),
+    userId: text("user_id").notNull(),
+    result: text("result"),
+    listing: text("listing"),
+    satisfaction: text("satisfaction"),
+    problems: jsonb("problems").$type<string[]>(),
+    payAgain: text("pay_again"),
+    delivered: text("delivered"),
+    note: text("note"),
+    noteStatus: text("note_status"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("review_updates_review_idx").on(table.reviewId)]
+)
+
+// A refund of a reviewed payment, checked on chain: the asset went back to
+// the wallet that paid, after it paid. Added by the reviewer or by the API's
+// verified owner; one refund per review, and one review per refund.
+export const reviewRefunds = pgTable("review_refunds", {
+  id: text("id").primaryKey(),
+  reviewId: text("review_id").notNull().unique(),
+  reference: text("reference").notNull().unique(),
+  amountAtomic: text("amount_atomic").notNull(),
+  refundedAt: timestamp("refunded_at", { withTimezone: true }).notNull(),
+  addedBy: text("added_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+})
+
 // Wallet proofs already spent, so a captured proof can't be replayed.
 export const usedProofs = pgTable("used_proofs", {
   key: text("key").primaryKey(),

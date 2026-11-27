@@ -30,6 +30,8 @@ import {
   paymentFailures,
   pendingReviews,
   providerKeys,
+  reviewRefunds,
+  reviewUpdates,
   seedingRequests,
   serviceProfiles,
   usageEvents,
@@ -41,8 +43,88 @@ export type ServiceProfile = typeof serviceProfiles.$inferSelect
 export type PendingReview = typeof pendingReviews.$inferSelect
 export type EndpointHealth = typeof endpointHealth.$inferSelect
 export type PaymentFailure = typeof paymentFailures.$inferSelect
-export type ApiReview = typeof apiReviews.$inferSelect
-export type NewApiReview = Omit<ApiReview, "createdAt">
+type ApiReviewRow = typeof apiReviews.$inferSelect
+export type NewApiReview = Omit<ApiReviewRow, "createdAt">
+export type ReviewUpdate = typeof reviewUpdates.$inferSelect
+export type ReviewRefund = typeof reviewRefunds.$inferSelect
+
+// The fields a reviewer may change later.
+export const AMENDABLE = [
+  "result",
+  "listing",
+  "satisfaction",
+  "problems",
+  "payAgain",
+  "delivered",
+  "note",
+  "noteStatus",
+] as const
+export type AmendableFields = Pick<ApiReviewRow, (typeof AMENDABLE)[number]>
+
+// A review as it stands now. When it was updated or refunded, `amended` keeps
+// the fields as first filed, which the public fingerprint covers.
+export type ApiReview = ApiReviewRow & {
+  amended?: {
+    original: AmendableFields
+    updatedAt: Date | null
+    updates: number
+    refund: ReviewRefund | null
+  }
+}
+
+// Latest update wins, field by field. A verified refund means the API didn't
+// keep the money, so "charged with no result" no longer applies.
+export function applyAmendments(
+  rows: ApiReview[],
+  updates: ReviewUpdate[],
+  refunds: ReviewRefund[]
+): ApiReview[] {
+  if (updates.length === 0 && refunds.length === 0) return rows
+  const updatesOf = new Map<string, ReviewUpdate[]>()
+  for (const update of [...updates].sort(
+    (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+  )) {
+    updatesOf.set(update.reviewId, [...(updatesOf.get(update.reviewId) ?? []), update])
+  }
+  const refundOf = new Map(refunds.map((refund) => [refund.reviewId, refund]))
+  return rows.map((row) => {
+    const mine = updatesOf.get(row.id) ?? []
+    const refund = refundOf.get(row.id) ?? null
+    if (mine.length === 0 && !refund) return row
+    const original = Object.fromEntries(
+      AMENDABLE.map((field) => [field, row[field]])
+    ) as AmendableFields
+    const current: ApiReview = { ...row }
+    for (const update of mine) {
+      if (update.result) current.result = update.result
+      if (update.listing) current.listing = update.listing
+      if (update.satisfaction) current.satisfaction = update.satisfaction
+      if (update.problems) current.problems = update.problems
+      if (update.payAgain) current.payAgain = update.payAgain
+      if (update.delivered) current.delivered = update.delivered
+      if (update.note !== null && update.noteStatus) {
+        current.note = update.note
+        current.noteStatus = update.noteStatus
+      }
+    }
+    if (refund) {
+      current.problems = current.problems.filter((p) => p !== "paid_no_result")
+    }
+    current.amended = {
+      original,
+      updatedAt: mine.at(-1)?.createdAt ?? null,
+      updates: mine.length,
+      refund,
+    }
+    return current
+  })
+}
+
+export class RefundAlreadyUsedError extends Error {
+  constructor() {
+    super("This refund is already attached to a review")
+  }
+}
 export type ApiUser = typeof users.$inferSelect
 export type AuthCode = typeof authCodes.$inferSelect
 export type UsageEvent = Omit<typeof usageEvents.$inferSelect, "createdAt">
@@ -91,6 +173,12 @@ export class PaymentAlreadyReviewedError extends Error {
 
 export interface ApiReviewStore {
   insert(review: NewApiReview): Promise<ApiReview>
+  getReview(id: string): Promise<ApiReview | null>
+  insertReviewUpdate(update: ReviewUpdate): Promise<void>
+  // Throws RefundAlreadyUsedError when the review or the refund is taken.
+  insertReviewRefund(refund: Omit<ReviewRefund, "createdAt">): Promise<ReviewRefund>
+  // Updates and refunds for these reviews, so lists can show them as they stand.
+  amendmentsFor(ids: string[]): Promise<{ updates: ReviewUpdate[]; refunds: ReviewRefund[] }>
   listByDomains(domains: string[]): Promise<ApiReview[]>
   listBySubdomains(domains: string[]): Promise<ApiReview[]>
   listByTask(task: string): Promise<ApiReview[]>
@@ -192,7 +280,34 @@ export async function postgresApiReviewStore(
   await migrate(db, {
     migrationsFolder: new URL("../../../drizzle", import.meta.url).pathname,
   })
-  return {
+  return withAmendments({
+    async getReview(id) {
+      const [row] = await db.select().from(apiReviews).where(eq(apiReviews.id, id))
+      return row ?? null
+    },
+    async insertReviewUpdate(update) {
+      await db.insert(reviewUpdates).values(update)
+    },
+    async insertReviewRefund(refund) {
+      try {
+        const [row] = await db.insert(reviewRefunds).values(refund).returning()
+        return row
+      } catch (error) {
+        const pg =
+          (error as { cause?: Record<string, string> }).cause ??
+          (error as Record<string, string>)
+        if (pg?.code === "23505") throw new RefundAlreadyUsedError()
+        throw error
+      }
+    },
+    async amendmentsFor(ids) {
+      if (ids.length === 0) return { updates: [], refunds: [] }
+      const [updates, refunds] = await Promise.all([
+        db.select().from(reviewUpdates).where(inArray(reviewUpdates.reviewId, ids)),
+        db.select().from(reviewRefunds).where(inArray(reviewRefunds.reviewId, ids)),
+      ])
+      return { updates, refunds }
+    },
     async insert(review) {
       try {
         const [row] = await db.insert(apiReviews).values(review).returning()
@@ -635,6 +750,26 @@ export async function postgresApiReviewStore(
       return row ?? null
     },
     close: () => client.end(),
+  })
+}
+
+// Lists hand back reviews as they stand: with their updates and refunds.
+function withAmendments(store: ApiReviewStore): ApiReviewStore {
+  const amend = async (rows: ApiReview[]) => {
+    if (rows.length === 0) return rows
+    const { updates, refunds } = await store.amendmentsFor(rows.map((row) => row.id))
+    return applyAmendments(rows, updates, refunds)
+  }
+  return {
+    ...store,
+    listByDomains: async (domains) => amend(await store.listByDomains(domains)),
+    listBySubdomains: async (domains) => amend(await store.listBySubdomains(domains)),
+    listByTask: async (task) => amend(await store.listByTask(task)),
+    listRecent: async (limit) => amend(await store.listRecent(limit)),
+    async getReview(id) {
+      const row = await store.getReview(id)
+      return row ? ((await amend([row]))[0] ?? null) : null
+    },
   }
 }
 
@@ -659,9 +794,27 @@ export function memoryApiReviewStore(): ApiReviewStore {
   const pending = new Map<string, PendingReview>()
   const health = new Map<string, EndpointHealth>()
   const failures: PaymentFailure[] = []
+  const updateRows: ReviewUpdate[] = []
+  const refundRows: ReviewRefund[] = []
   const newestFirst = (list: ApiReview[]) =>
     [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-  return {
+  return withAmendments({
+    getReview: async (id) => rows.find((row) => row.id === id) ?? null,
+    async insertReviewUpdate(update) {
+      updateRows.push({ ...update })
+    },
+    async insertReviewRefund(refund) {
+      if (refundRows.some((r) => r.reviewId === refund.reviewId || r.reference === refund.reference)) {
+        throw new RefundAlreadyUsedError()
+      }
+      const row = { ...refund, createdAt: new Date() }
+      refundRows.push(row)
+      return row
+    },
+    amendmentsFor: async (ids) => ({
+      updates: updateRows.filter((u) => ids.includes(u.reviewId)),
+      refunds: refundRows.filter((r) => ids.includes(r.reviewId)),
+    }),
     async insert(review) {
       if (rows.some((r) => r.paymentReference === review.paymentReference)) {
         throw new PaymentAlreadyReviewedError()
@@ -954,5 +1107,5 @@ export function memoryApiReviewStore(): ApiReviewStore {
       return request
     },
     close: async () => {},
-  }
+  })
 }

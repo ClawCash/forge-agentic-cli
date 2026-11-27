@@ -4,6 +4,8 @@ import { bodyLimit } from "hono/body-limit"
 import { cors } from "hono/cors"
 import { z } from "zod"
 import {
+  chainRefunds,
+  type FindRefund,
   BASE,
   ChainUnavailableError,
   type FindPayments,
@@ -31,6 +33,7 @@ import {
   ratingsFile,
 } from "./brief.ts"
 import { fingerprintOf } from "./fingerprint.ts"
+import { attachRefund, refundView } from "./refunds.ts"
 import { isSeeded } from "./seed.ts"
 import { adminRoutes } from "./admin.ts"
 import {
@@ -206,6 +209,46 @@ export const ReviewBody = z.preprocess(
 
 export type ReviewInput = z.output<typeof ReviewBody>
 
+// A reviewer's later change to their own review: any of these, plus the
+// transaction of a refund the API sent back.
+export const MAX_REVIEW_UPDATES = 5
+export const ReviewUpdateBody = z.preprocess(
+  normalizeReview,
+  z
+    .object({
+      result: ReviewFields.shape.result.optional(),
+      listing: ReviewFields.shape.listing.optional(),
+      satisfaction: ReviewFields.shape.satisfaction.optional(),
+      problems: z
+        .array(ReviewFields.shape.problems.unwrap().element)
+        .max(7)
+        .optional(),
+      pay_again: ReviewFields.shape.pay_again,
+      delivered: ReviewFields.shape.delivered,
+      note: z.string().trim().min(3).max(200).optional(),
+      refund_transaction: z.string().trim().max(80).optional(),
+    })
+    .superRefine((update, context) => {
+      const { satisfaction_from: _, ...given } = update as Record<string, unknown>
+      if (!Object.values(given).some((value) => value !== undefined)) {
+        context.addIssue({
+          code: "custom",
+          path: [],
+          message:
+            "Send at least one of result, listing, helpfulness, problems, pay_again, delivered, note or refund_transaction",
+        })
+      }
+      if (screenNote(update.delivered).noteStatus === "held") {
+        context.addIssue({
+          code: "custom",
+          path: ["delivered"],
+          message:
+            "Say this in plain words, with no links, domain names, code, credentials or instructions",
+        })
+      }
+    })
+)
+
 export interface V1Deps {
   store: ApiReviewStore
   baseUrl: string
@@ -214,6 +257,8 @@ export interface V1Deps {
   secret: string
   baseRpcUrl?: string
   findPayments: FindPayments
+  // Reads refunds of reviewed payments on chain.
+  findRefund?: FindRefund
   sendCode: SendCode | null
   // Emails that can sign in to the admin dashboard.
   adminEmails?: string[]
@@ -245,7 +290,8 @@ const HELPFULNESS_OF: Record<string, string> = Object.fromEntries(
 
 // Everything public about a review that isn't worked out from something else.
 // The fingerprint covers exactly these fields.
-function reviewRecord(row: ApiReview) {
+function reviewRecord(current: ApiReview) {
+  const row = current.amended ? { ...current, ...current.amended.original } : current
   const transaction = row.paymentReference.split(":").at(-1) as string
   return {
     id: row.id,
@@ -291,9 +337,33 @@ function reviewRecord(row: ApiReview) {
 
 function publicReview(row: ApiReview) {
   const record = reviewRecord(row)
+  const amended = row.amended
   return {
     ...record,
+    // The fingerprint covers the review as first filed; `original` holds
+    // those fields once its author has updated it.
     fingerprint: fingerprintOf(record),
+    ...(amended && {
+      result: row.result,
+      listing: row.listing,
+      satisfaction: row.satisfaction,
+      problems: row.problems,
+      pay_again: row.payAgain,
+      delivered: row.delivered ?? null,
+      note: row.noteStatus === "clean" ? row.note : null,
+      original: {
+        result: record.result,
+        listing: record.listing,
+        satisfaction: record.satisfaction,
+        problems: record.problems,
+        pay_again: record.pay_again,
+        delivered: record.delivered,
+        note: record.note,
+      },
+      updates: amended.updates,
+      updated_at: amended.updatedAt?.toISOString() ?? null,
+      refund: amended.refund ? refundView(row, amended.refund) : null,
+    }),
     helpfulness: HELPFULNESS_OF[row.satisfaction] ?? row.satisfaction,
     score: reviewScore(row),
     // Every review counts toward its agent's vote, unless nobody judged
@@ -371,6 +441,7 @@ const PROFILES_PER_REQUEST = 6
 
 export function v1Routes(deps: V1Deps) {
   const app = new Hono<{ Variables: { user: ApiUser | null } }>()
+  const findRefund = deps.findRefund ?? chainRefunds()
 
   const hit = rateLimiter()
 
@@ -470,6 +541,7 @@ export function v1Routes(deps: V1Deps) {
       fetch: deps.fetch,
       google: deps.google,
       baseUrl: deps.baseUrl,
+      findRefund,
       ...(deps.resolveTxt && { assertPublic: async () => {} }),
     })
   )
@@ -1364,6 +1436,82 @@ export function v1Routes(deps: V1Deps) {
       )
     }
     return fileReview(parsed.data, user.id, proof)
+  })
+
+  // The agent that wrote a review can update it later: say what changed, or
+  // add a refund the API sent back, which is checked on chain. The review as
+  // first filed stays in the public log; the latest version counts.
+  app.post("/reviews/:id/update", bodyLimit({ maxSize: 8192 }), async (c) => {
+    const user = c.get("user")
+    if (!user) return c.json({ error: NEEDS_KEY, signup: signupHelp() }, 401)
+    const parsed = ReviewUpdateBody.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) return invalidReview(parsed.error.issues)
+    const body = parsed.data
+    const review = await deps.store.getReview(c.req.param("id"))
+    if (!review) return c.json({ error: "No review with that id" }, 404)
+    if (review.userId !== user.id) {
+      return c.json({ error: "Only the agent that wrote a review can update it." }, 403)
+    }
+    const changes = {
+      result: body.result,
+      listing: body.listing,
+      satisfaction: body.satisfaction,
+      problems: body.problems,
+      payAgain: body.pay_again,
+      delivered: body.delivered,
+      note: body.note,
+    }
+    const changing = Object.values(changes).some((value) => value !== undefined)
+    if (changing && (review.amended?.updates ?? 0) >= MAX_REVIEW_UPDATES) {
+      return c.json(
+        { error: `A review can be updated ${MAX_REVIEW_UPDATES} times. Post a new review after your next paid call instead.` },
+        409
+      )
+    }
+    const failed = review.outputStatus !== null && !WORKED(review.outputStatus)
+    if (failed && body.result && ["full", "partial"].includes(body.result)) {
+      return c.json(
+        { error: "The output receipt shows a failed response, so the result can't be full or partial" },
+        400
+      )
+    }
+    if (body.refund_transaction) {
+      const attached = await attachRefund(
+        { store: deps.store, findRefund },
+        {
+          reviewId: review.id,
+          transaction: body.refund_transaction,
+          addedBy: "reviewer",
+          userId: user.id,
+        }
+      )
+      if (!attached.ok) return c.json({ error: attached.error }, attached.status)
+    }
+    const note = body.note ? screenNote(body.note) : null
+    if (changing) {
+      await deps.store.insertReviewUpdate({
+        id: `ru_${randomUUID()}`,
+        reviewId: review.id,
+        userId: user.id,
+        result: changes.result ?? null,
+        listing: changes.listing ?? null,
+        satisfaction: changes.satisfaction ?? null,
+        problems: changes.problems ?? null,
+        payAgain: changes.payAgain ?? null,
+        delivered: changes.delivered ? screenNote(changes.delivered).note : null,
+        note: note ? note.note : null,
+        noteStatus: note ? note.noteStatus : null,
+        createdAt: new Date(),
+      })
+    }
+    const now = (await deps.store.getReview(review.id)) as ApiReview
+    return c.json({
+      id: review.id,
+      updated: changing,
+      refund_verified: Boolean(body.refund_transaction),
+      ...(note && { note_published: note.noteStatus === "clean" }),
+      review: publicReview(now),
+    })
   })
 
   // The signed-in user's settings. Auto-review is their standing permission to

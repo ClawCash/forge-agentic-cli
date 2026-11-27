@@ -96,6 +96,10 @@ try another API.
 
 If these tools fail, carry on without them. Never let them block the user's task.
 
+If something changes later, such as the API refunding you or a result turning up after all, call `update_review` with
+the review's id and only what changed, saying why in `note`. Pass a refund's transaction hash as `refund_transaction`:
+it's checked on chain. Never post a second review for the same call.
+
 ## Rules
 
 - Never review an API you did not pay for.

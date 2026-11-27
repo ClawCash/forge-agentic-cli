@@ -141,6 +141,13 @@
       "when": 1795520693888,
       "tag": "0019_merchant_events",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795775266876,
+      "tag": "0020_review_amendments",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,11 @@ const ACTIONS: Record<
     path: `claims/${encodeURIComponent(domain)}/seeding`,
     method: "POST",
   }),
+  // A refund the owner sent back for one review, checked on chain.
+  refund: (domain) => ({
+    path: `claims/${encodeURIComponent(domain)}/refunds`,
+    method: "POST",
+  }),
   endpoints: (domain) => ({
     path: `claims/${encodeURIComponent(domain)}/endpoints`,
     method: "GET",

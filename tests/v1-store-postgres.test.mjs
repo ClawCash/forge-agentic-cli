@@ -5,6 +5,7 @@ import postgres from "postgres"
 import {
   PaymentAlreadyReviewedError,
   postgresApiReviewStore,
+  RefundAlreadyUsedError,
 } from "../server/src/v1/store.ts"
 
 // Runs against a real database only when one is provided, like
@@ -66,6 +67,50 @@ test(
       assert.equal((await store.listByDomains(["stableenrich.dev"])).length, 1)
       assert.equal((await store.listByTask("enrichment")).length, 1)
       assert.equal((await store.listRecent(10)).length, 1)
+
+      // Updates and refunds leave the review row alone and show in lists.
+      await store.insertReviewUpdate({
+        id: "ru_1",
+        reviewId: "rev_1",
+        userId: "u_1",
+        result: null,
+        listing: null,
+        satisfaction: "partly",
+        problems: ["paid_no_result", "slow"],
+        payAgain: null,
+        delivered: null,
+        note: "Charged, then refunded",
+        noteStatus: "clean",
+        createdAt: new Date(),
+      })
+      await store.insertReviewRefund({
+        id: "rf_1",
+        reviewId: "rev_1",
+        reference: "eip155:8453:0xrefund",
+        amountAtomic: "10000",
+        refundedAt: new Date(),
+        addedBy: "provider",
+      })
+      await assert.rejects(
+        store.insertReviewRefund({
+          id: "rf_2",
+          reviewId: "rev_9",
+          reference: "eip155:8453:0xrefund",
+          amountAtomic: "10000",
+          refundedAt: new Date(),
+          addedBy: "reviewer",
+        }),
+        RefundAlreadyUsedError
+      )
+      const [amended] = await store.listByDomains(["stableenrich.dev"])
+      assert.equal(amended.satisfaction, "partly")
+      assert.deepEqual(amended.problems, ["slow"])
+      assert.equal(amended.note, "Charged, then refunded")
+      assert.deepEqual(amended.amended.original.problems, ["stale"])
+      assert.equal(amended.amended.updates, 1)
+      assert.equal(amended.amended.refund.addedBy, "provider")
+      assert.equal((await store.getReview("rev_1")).amended.refund.reference, "eip155:8453:0xrefund")
+      assert.equal(await store.getReview("rev_nope"), null)
       const profile = {
         domain: "stableenrich.dev",
         name: "StableEnrich",

@@ -162,6 +162,15 @@ export interface ApiReview {
   price_usd: number | null
   transaction_url: string | null
   tries: number | null
+  // Set once the author updated it, or a refund was verified on chain.
+  updates?: number
+  updated_at?: string | null
+  refund?: {
+    amount_usd: number | null
+    minutes_after_payment: number
+    added_by: "reviewer" | "provider"
+    transaction_url: string | null
+  } | null
 }
 
 export interface ApiRating {

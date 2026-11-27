@@ -18,6 +18,8 @@ import {
 } from "./accounts.ts"
 import { priceUsd } from "./chains.ts"
 import { type DiscoverEndpoints, endpointDiscoverer } from "./discover.ts"
+import { chainRefunds, type FindRefund } from "./chains.ts"
+import { attachRefund, refundView } from "./refunds.ts"
 import { clientIp, rateLimiter } from "./limits.ts"
 import { approveGrant, clientFor, OauthError } from "./oauth.ts"
 import type {
@@ -185,6 +187,8 @@ export function merchantRoutes(deps: {
   readTerms: ReadTerms
   // Finds a domain's paid endpoints for the seeding picker.
   discover?: DiscoverEndpoints
+  // Reads refunds on chain, when an owner attaches one to a review.
+  findRefund?: FindRefund
   resolveTxt?: ResolveTxt
   fetch?: typeof fetch
   assertPublic?: (url: string) => Promise<void>
@@ -693,6 +697,41 @@ export function merchantRoutes(deps: {
       return c.json(await claimView(found.claim))
     }
   )
+
+  // An owner shows a review's payment was refunded: the chain must show the
+  // full price going back to the wallet that paid. The review's words stay
+  // as the agent wrote them; it stops counting as charged with no result.
+  app.post("/claims/:domain/refunds", bodyLimit({ maxSize: 2048 }), async (c) => {
+    const found = await verifiedClaim(c)
+    if ("error" in found) return found.error
+    const body = z
+      .object({ review_id: z.string().trim().min(1).max(80), transaction: z.string().trim().max(80) })
+      .safeParse(await c.req.json().catch(() => null))
+    if (!body.success) {
+      return c.json({ error: 'Send {"review_id": "rev_...", "transaction": "0x..."}' }, 400)
+    }
+    if (limited(c, "refund", 10, found.email)) {
+      return c.json({ error: "Too many tries. Wait a minute." }, 429)
+    }
+    const attached = await attachRefund(
+      { store: deps.store, findRefund: deps.findRefund ?? chainRefunds() },
+      {
+        reviewId: body.data.review_id,
+        transaction: body.data.transaction,
+        addedBy: "provider",
+        domain: found.domain,
+      }
+    )
+    if (!attached.ok) return c.json({ error: attached.error }, attached.status)
+    const refund = refundView(attached.review, attached.review.amended?.refund as NonNullable<NonNullable<typeof attached.review.amended>["refund"]>)
+    await record(
+      found.email,
+      "refund_attached",
+      found.domain,
+      `${attached.review.path || "/"}${refund.amount_usd !== null ? ` · $${refund.amount_usd}` : ""}`
+    )
+    return c.json({ review_id: attached.review.id, refund }, 201)
+  })
 
   // The paid endpoints a verified API publishes, for picking what to seed.
   app.get("/claims/:domain/endpoints", async (c) => {

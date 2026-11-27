@@ -14,7 +14,7 @@ import {
   resendNotifier,
   resendSender,
 } from "./v1/accounts.ts"
-import { chainFinder } from "./v1/chains.ts"
+import { chainFinder, chainRefunds } from "./v1/chains.ts"
 import { parseAdminEmails } from "./v1/admin.ts"
 import { mcpRoutes } from "./v1/mcp.ts"
 import { DEFAULT_APP_URL, oauthRoutes } from "./v1/oauth.ts"
@@ -144,6 +144,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     secret: env.REVIEWS_SECRET ?? randomBytes(32).toString("base64"),
     baseRpcUrl: env.BASE_RPC_URL,
     findPayments: chainFinder(env),
+    findRefund: chainRefunds(env),
     sendCode: resendSender(env),
     adminEmails: parseAdminEmails(env.ADMIN_EMAILS),
     notify: resendNotifier(env, parseAdminEmails(env.ADMIN_EMAILS)),
